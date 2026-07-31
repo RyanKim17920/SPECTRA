@@ -1,0 +1,123 @@
+#!/usr/bin/env python
+"""Full contrastive fine-tune entrypoint (PLAN.md 3, phase 7).
+
+LoRA-all-blocks + masked InfoNCE over PLISM registered pairs, holding out 2 scanners and
+3 stains. Retention/robustness evaluation hangs off ``on_checkpoint`` -- PLAN.md 3 phase 8
+requires it at *every* checkpoint, and PLAN.md 6 requires it reported alongside every
+robustness claim.
+
+    python scripts/train_lora.py --out-dir runs/lora_r16_t007 --lora-rank 16 --temperature 0.07
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+
+import torch
+
+from waivphaet.data.conditions import all_conditions, available_conditions, make_split
+from waivphaet.data.pairs import build_pair_loader
+from waivphaet.models.encoder import build_encoder
+from waivphaet.train.contrastive import TrainConfig, train
+
+
+def parse_args():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism_packed"))
+    ap.add_argument("--out-dir", type=Path, required=True)
+    # split (PLAN.md 3 phase 7): 2 of 7 scanners, 3 of 13 stains
+    ap.add_argument("--heldout-scanners", nargs="*", default=["GT450", "S210"])
+    ap.add_argument("--heldout-stains", nargs="*", default=["HRH", "KR", "MY"])
+    # the unknown hyperparameters (PLAN.md 3 risk 4) -- these are what phase 8 sweeps
+    ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--temperature", type=float, default=0.07)
+    ap.add_argument("--lora-rank", type=int, default=16)
+    ap.add_argument("--lora-alpha", type=int, default=32)
+    ap.add_argument("--max-steps", type=int, default=5000)
+    ap.add_argument("--warmup-steps", type=int, default=200)
+    # batching: negatives per anchor == group_size - 1, so prefer few large groups
+    ap.add_argument("--n-groups", type=int, default=4)
+    ap.add_argument("--group-size", type=int, default=64)
+    ap.add_argument("--grad-accum", type=int, default=1)
+    ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--amp", default="bfloat16", choices=["bfloat16", "float16", "none"])
+    ap.add_argument("--ckpt-every", type=int, default=500)
+    ap.add_argument("--eval-every", type=int, default=500)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--proj-out-dim", type=int, default=512)
+    ap.add_argument("--pooling", default="clsmean", choices=["cls", "mean", "clsmean"])
+    ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    return ap.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+    torch.manual_seed(args.seed)
+
+    split = make_split(args.heldout_scanners, args.heldout_stains)
+    present = [p.name for p in Path(args.packed_dir).glob("*.npy")]
+    present = [n.replace(".npy", ".tif.h5") for n in present]
+    train_conds = available_conditions(split.train, present)
+    heldout_conds = available_conditions(split.heldout, present)
+    print(f"[train] {split.summary()}")
+    print(f"[train] repacked & usable: {len(train_conds)} train / {len(heldout_conds)} heldout")
+    if len(train_conds) < 2:
+        raise SystemExit("need >=2 repacked training conditions; run `waiv-repack` first")
+
+    train_loader = build_pair_loader(
+        args.packed_dir, conditions=train_conds, n_groups=args.n_groups,
+        group_size=args.group_size, batches_per_epoch=args.max_steps,
+        num_workers=args.workers, seed=args.seed,
+    )
+    heldout_loader = (
+        build_pair_loader(
+            args.packed_dir, conditions=heldout_conds, n_groups=args.n_groups,
+            group_size=args.group_size, batches_per_epoch=1000,
+            num_workers=max(args.workers // 4, 1), seed=args.seed + 1,
+        )
+        if len(heldout_conds) >= 2
+        else None
+    )
+    if heldout_loader is None:
+        print("[train] WARNING: <2 held-out conditions repacked -- no held-out-condition eval. "
+              "PLAN.md 3 risk 3 says this is the only in-training check against tile memorisation.")
+
+    model = build_encoder(
+        lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
+        proj_out_dim=args.proj_out_dim, pooling=args.pooling,
+    )
+    print("[train] params:", model.trainable_parameter_summary())
+
+    cfg = TrainConfig(
+        packed_dir=str(args.packed_dir), out_dir=str(args.out_dir),
+        lr=args.lr, temperature=args.temperature, max_steps=args.max_steps,
+        warmup_steps=args.warmup_steps, n_groups=args.n_groups, group_size=args.group_size,
+        grad_accum=args.grad_accum, num_workers=args.workers, amp_dtype=args.amp,
+        ckpt_every=args.ckpt_every, eval_every=args.eval_every, seed=args.seed,
+        encoder={"lora_rank": args.lora_rank, "pooling": args.pooling,
+                 "proj_out_dim": args.proj_out_dim},
+    )
+
+    def on_checkpoint(model, step, metrics, ckpt_dir):
+        """Hook for PathoROB (primary) + HEST/THUNDER/Patho-Bench retention.
+
+        Deliberately left as a stub with a loud reminder rather than silently doing
+        nothing: PLAN.md 3 risk 1 says forgetting is the *default* outcome, and a
+        robustness win that costs retention is a failed reproduction.
+        """
+        print(f"[ckpt] step {step} -> {ckpt_dir}  {json.dumps(metrics)}")
+        print("[ckpt] TODO: run waivphaet.eval.pathorob_adapter + retention suites here "
+              "(PLAN.md 3 phase 8 / PLAN.md 6).")
+
+    train(model, train_loader, cfg, heldout_loader=heldout_loader,
+          device=args.device, on_checkpoint=on_checkpoint)
+    print(f"[train] done -> {args.out_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
