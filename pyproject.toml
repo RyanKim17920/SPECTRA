@@ -12,8 +12,11 @@ license = { text = "MIT" }
 authors = [{ name = "Ryan Kim" }]
 
 dependencies = [
-    "torch>=2.6",
-    "torchvision>=0.21",
+    # cu128 wheels: this cluster's driver reports CUDA 12.8, and the default cu130
+    # wheel fails CUDA init with "driver is too old". Install with
+    #   --index-url https://download.pytorch.org/whl/cu128
+    "torch==2.8.0",
+    "torchvision==0.23.0",
     "h5py>=3.12",
     "numpy>=2.0",
     "transformers>=4.49",
