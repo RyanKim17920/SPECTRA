@@ -31,6 +31,9 @@ dependencies = [
 # Diagnostic PLISM retrieval eval (see PLAN.md 1: PLISM is TRAINING data for us,
 # so plismbench numbers are diagnostics only and are never leaderboard-comparable).
 plism = ["owkin-plismbench"]
+# PathoROB (PRIMARY metric) is cloned into third_party/, not pip-depended on -- but its
+# FeatureDataManager, which we call to write embeddings, needs these.
+pathorob = ["pandas>=2.2", "scikit-learn>=1.5", "matplotlib>=3.9", "seaborn>=0.13"]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]

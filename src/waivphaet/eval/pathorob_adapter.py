@@ -1,0 +1,174 @@
+"""Adapter onto PathoROB -- our PRIMARY metric (PLAN.md 1).
+
+What PathoROB actually is (inspected at ``third_party/PathoROB``)
+------------------------------------------------------------------
+* Package ``pathorob``, no console scripts; everything is ``python -m``.
+* The robustness index itself is dead simple and never touches a model::
+
+      # pathorob/robustness_index/robustness_index_utils.py:92
+      RI = SO / (SO + OS)
+
+  where ``SO`` = fraction of kNN neighbours with the *same biological class, other
+  medical center* and ``OS`` = *other class, same center*. Everything upstream is a kNN
+  over L2-normalised embeddings.
+* **It consumes precomputed embeddings, not models.** ``FeatureDataManager.load_features``
+  reads ``{features_dir}/{model}/{dataset}/{medical_center}.npz`` where each npz maps
+  ``f"{slide_id}-{patch_id}" -> 1-D float vector``. ``load_model()`` is never called by
+  the metric scripts.
+
+So the whole adapter is: run *our* encoder over their patches, hand the array to *their*
+``save_features``, then shell out to *their* metric. We add no math.
+
+Their metadata CSVs ship in the repo (``data/metadata/*.csv``, columns
+``subset,slide_id,patch_id,biological_class,medical_center``); the images stream from HF
+(``bifold-pathomics/PathoROB-{dataset}``), so set ``HF_HOME=/data/ryan.kim/hf_home``.
+
+Reference numbers are committed under ``third_party/PathoROB/results/``, including
+``phikonv2_clsmean`` -- that is the gate for PLAN.md 3 phase 5 (reproduce Avg RI 0.469,
+Camelyon 0.019). Report cross-stain and cross-scanner separately (PLAN.md 6).
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+DATASETS = ("tcga", "camelyon", "tolkach_esca")
+DEFAULT_ROOT = Path("third_party/PathoROB")
+
+#: Waiv Table 1 (PLAN.md 1). Our phase-5 gate is the base row.
+TARGETS = {
+    "phikon_v2_base": {"tcga": 0.619, "camelyon": 0.019, "tolkach_esca": 0.768, "avg": 0.469},
+    "phaet_target": {"tcga": 0.785, "camelyon": 0.702, "tolkach_esca": 0.932, "avg": 0.806},
+}
+
+
+@dataclass
+class PathoRobPaths:
+    """PathoROB resolves its default paths against *cwd*, so we always pass absolutes."""
+
+    root: Path = DEFAULT_ROOT
+
+    @property
+    def features_dir(self) -> Path:
+        return (self.root / "data" / "features").resolve()
+
+    @property
+    def metadata_dir(self) -> Path:
+        return (self.root / "data" / "metadata").resolve()
+
+    @property
+    def results_dir(self) -> Path:
+        return (self.root / "results").resolve()
+
+    def check(self) -> None:
+        if not (self.root / "pathorob").is_dir():
+            raise FileNotFoundError(
+                f"PathoROB not found at {self.root}. Clone it:\n"
+                "  git clone --depth 1 https://github.com/bifold-pathomics/PathoROB "
+                f"{self.root}\n  pip install -e {self.root}"
+            )
+
+
+def _data_manager(paths: PathoRobPaths):
+    """Import their FeatureDataManager, adding the clone to ``sys.path`` if not installed."""
+    paths.check()
+    try:
+        from pathorob.features.data_manager import FeatureDataManager
+    except ImportError:
+        sys.path.insert(0, str(paths.root.resolve()))
+        from pathorob.features.data_manager import FeatureDataManager
+    return FeatureDataManager(
+        features_dir=str(paths.features_dir), metadata_dir=str(paths.metadata_dir)
+    )
+
+
+def load_metadata(dataset: str, paths: PathoRobPaths | None = None):
+    """Load their metadata CSV. ``dataset`` is a *metadata* name, e.g. ``tcga_4x4``."""
+    return _data_manager(paths or PathoRobPaths()).load_metadata(dataset)
+
+
+def save_features(
+    model_name: str,
+    dataset: str,
+    features: np.ndarray,
+    metadata,
+    paths: PathoRobPaths | None = None,
+) -> None:
+    """Write ``(N, D)`` embeddings row-aligned to ``metadata`` in their npz layout.
+
+    ``model_name`` is a free-form directory name -- because the metric scripts never call
+    ``load_model``, we never have to register a ``ModelWrapper``. Use e.g.
+    ``waivphaet_step0005000``.
+    """
+    if len(features) != len(metadata):
+        raise ValueError(f"features {len(features)} != metadata rows {len(metadata)}")
+    _data_manager(paths or PathoRobPaths()).save_features(
+        model_name, dataset, np.asarray(features), metadata
+    )
+
+
+def run_robustness_index(
+    model_name: str,
+    datasets: list[str] | None = None,
+    *,
+    paths: PathoRobPaths | None = None,
+    k_opt_param: int = 0,
+    paired_evaluation: bool = False,
+    extra_args: list[str] | None = None,
+) -> subprocess.CompletedProcess:
+    """Shell out to ``python -m pathorob.robustness_index.robustness_index``.
+
+    We invoke their module rather than importing ``compute()`` so that the metric we
+    report is byte-identical to the one that produced their published leaderboard.
+    ``k_opt_param=0`` uses their per-dataset default k (tcga 61 / camelyon 11 /
+    tolkach 46); ``-1`` sweeps k by balanced accuracy.
+    """
+    paths = paths or PathoRobPaths()
+    paths.check()
+    cmd = [
+        sys.executable, "-m", "pathorob.robustness_index.robustness_index",
+        "--model", model_name,
+        "--features_dir", str(paths.features_dir),
+        "--metadata_dir", str(paths.metadata_dir),
+        "--results_dir", str(paths.results_dir),
+        "--k_opt_param", str(k_opt_param),
+    ]
+    if datasets:
+        cmd += ["--datasets", *datasets]
+    if paired_evaluation:
+        cmd += ["--paired_evaluation"]
+    cmd += extra_args or []
+    return subprocess.run(cmd, cwd=str(paths.root.resolve()), check=True)
+
+
+def read_results(
+    model_name: str,
+    dataset: str,
+    *,
+    paths: PathoRobPaths | None = None,
+    max_patches_per_combi: str = "-1",
+    k_opt_param: int = 0,
+) -> dict:
+    """Read their ``results_summary.json`` (key ``robustness_index``, among others)."""
+    import json
+
+    paths = paths or PathoRobPaths()
+    p = (
+        paths.results_dir / "robustness_index" / model_name / dataset
+        / f"{max_patches_per_combi}_{k_opt_param}" / "results_summary.json"
+    )
+    if not p.exists():
+        raise FileNotFoundError(f"no PathoROB results at {p}; run run_robustness_index first")
+    return json.loads(p.read_text())
+
+
+def summarize(model_name: str, **kw) -> dict[str, float]:
+    """``{dataset: RI, ..., "avg": mean}`` -- the shape of Waiv's Table 1 row."""
+    out = {d: float(read_results(model_name, d, **kw)["robustness_index"]) for d in DATASETS}
+    out["avg"] = float(np.mean(list(out.values())))
+    return out
