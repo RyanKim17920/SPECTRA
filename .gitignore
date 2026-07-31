@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# never commit data or weights
+data/
+*.h5
+*.safetensors
+*.bin
+*.parquet
+*.npy
+*.pt
+*.ckpt
+checkpoints/
+features/
+outputs/
+wandb/
+slurm-*.out
