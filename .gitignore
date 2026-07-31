@@ -22,3 +22,4 @@ slurm-*.out
 
 # vendored third-party eval harnesses (cloned, not committed)
 third_party/
+runs/
