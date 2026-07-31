@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "waivphaet"
+version = "0.1.0"
+description = "Robustifying Phikon-v2 via registered-pair contrastive fine-tuning (a PHAET-class reproduction attempt)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Ryan Kim" }]
+
+dependencies = [
+    "torch>=2.6",
+    "torchvision>=0.21",
+    "h5py>=3.12",
+    "numpy>=2.0",
+    "transformers>=4.49",
+    "peft>=0.14",
+    "huggingface_hub>=0.28",
+    "einops>=0.8",
+    "tqdm>=4.66",
+    "safetensors>=0.4",
+]
+
+[project.optional-dependencies]
+# Diagnostic PLISM retrieval eval (see PLAN.md 1: PLISM is TRAINING data for us,
+# so plismbench numbers are diagnostics only and are never leaderboard-comparable).
+plism = ["owkin-plismbench"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+waiv-repack = "waivphaet.data.repack:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
