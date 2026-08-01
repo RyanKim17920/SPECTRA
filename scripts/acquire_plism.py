@@ -171,7 +171,7 @@ def process(cond, args, manifest: dict) -> dict:
     local.unlink()
     purge_incomplete(h5_dir)
     freed = purge_hf_cache(REPO_ID)
-    if freed:
+    if freed > 2**20:  # sub-MiB is just refs/ bookkeeping, not a duplicated blob
         log(f"  WARNING: purged {freed / GIB:.2f} GiB of unexpected HF blob cache")
 
     return {
@@ -268,7 +268,11 @@ def main(argv: list[str] | None = None) -> int:
                     time.sleep(5)
 
         resting = tree_bytes(args.h5_dir)
-        strays = list(args.h5_dir.glob("*.tif.h5"))
+        # A .h5 for a slide we have not reached yet is a legitimate pre-existing source.
+        # A .h5 for a slide already past is a copy we failed to delete -- that is the
+        # duplication this loop exists to avoid.
+        pending = {c.filename for c in todo[n:]}
+        strays = [s for s in args.h5_dir.glob("*.tif.h5") if s.name not in pending]
         log(f"  resting usage {resting / GIB:.1f} GiB | free {free_gb(args.h5_dir):.0f} GB "
             f"| ok {ok} failed {len(failed)}")
         if strays:
