@@ -1,31 +1,48 @@
-"""Phikon-v2 backbone with LoRA across *all* transformer blocks, plus a wide projection head.
+"""A *model-agnostic* ViT backbone with LoRA across **all** transformer blocks, plus a
+wide projection head.
 
 Design choices and where they come from
 ---------------------------------------
-* **Base = ``owkin/phikon-v2``** (Dinov2, ViT-L/16, 24 blocks, 1024-d, ungated, 1.21 GB).
-  PLAN.md 1: weakest starting point on PathoROB (Avg RI 0.469, Camelyon 0.019) and the
-  largest published gain (-> 0.806 / 0.702), so it is the cheapest informative base.
+* **Base is a parameter, not a constant.** The default is ``owkin/phikon-v2`` (Dinov2,
+  ViT-L/16, 24 blocks, 1024-d, ungated, 1.21 GB) -- PLAN.md 1: weakest starting point
+  on PathoROB (Avg RI 0.469, Camelyon 0.019) and the largest published gain
+  (-> 0.806 / 0.702), so it is the cheapest informative base. But the pipeline has to
+  generalise, so ``hidden_size``, ``num_hidden_layers`` and ``patch_size`` are read off
+  the *loaded* config and the LoRA target set is **discovered by module-name pattern**.
+  Nothing about ViT-L/16 is baked in. Second validated backbone: ``kaiko-ai/midnight``
+  (Dinov2 ViT-g/14, 40 blocks, 1536-d, SwiGLU FFN, MIT, 4.55 GB).
 
 * **LoRA on every block, not head-only.** PLAN.md 2 + 0 (their Fig 4): base H-Optimus-0
   only develops cross-scanner matching in the last few blocks, and fine-tuning pushes
   that ~8 blocks earlier. Invariance has to build *across depth*, so head-only tuning is
-  ruled out. We therefore target ``query/key/value/attention.output.dense/mlp.fc1/mlp.fc2``
-  in **all 24 blocks**. LoRA rather than full FT is our deliberate anti-forgetting
-  divergence (PLAN.md 2): it bounds drift on a backbone that saw 456M tiles, cuts
-  memory, and merges back to full weights afterwards. Full FT is the escalation
-  (PLAN.md 3 phase 9).
+  ruled out. LoRA rather than full FT is our deliberate anti-forgetting divergence
+  (PLAN.md 2): it bounds drift on a backbone that saw 456M tiles, cuts memory, and
+  merges back to full weights afterwards. Full FT is the escalation (PLAN.md 3 phase 9).
+
+  **Why discovery rather than a fixed name list.** ``fc1``/``fc2`` is the HF Dinov2 MLP
+  naming, but ``kaiko-ai/midnight`` sets ``use_swiglu_ffn=True`` and its FFN linears are
+  ``mlp.weights_in`` / ``mlp.weights_out``. A fixed list would still have matched
+  ``query/key/value/dense`` -- so the block-coverage assertion would have *passed* while
+  silently adapting attention only and leaving 2/3 of the block parameters frozen. The
+  failure mode is invisible in every log line and reads downstream as "LoRA had less
+  effect on ViT-g". So we discover, and we assert the per-block match count is uniform
+  and non-empty, and we log it.
 
 * **Projection width >= 512.** PLAN.md 2: ScanGen used hidden 48/96 for binary MIL,
-  far too narrow for retrieval among 16k tiles. Default 1024 hidden / 512 out.
+  far too narrow for retrieval among 16k tiles. Default 1024 hidden / 512 out. The
+  projector's *input* width is ``embed_dim``, i.e. it is tied to the **training**
+  pooling -- see ``build_model`` in ``scripts/extract_pathorob_features.py``.
 
 * **Pooling defaults to ``clsmean``** (CLS token concatenated with the mean of patch
-  tokens, 2048-d) because that is exactly what PathoROB's own ``phikonv2_clsmean`` entry
-  uses -- matching it is what makes our reproduced Avg RI 0.469 gate (PLAN.md 3 phase 5)
-  meaningful. ``cls`` gives the plain 1024-d embedding.
+  tokens) because that is exactly what PathoROB's own ``phikonv2_clsmean`` entry uses --
+  matching it is what makes our reproduced Avg RI 0.469 gate (PLAN.md 3 phase 5)
+  meaningful. ``embed_dim`` is *derived*: ``hidden`` for cls/mean, ``2*hidden`` for
+  clsmean -- 1024/2048 on phikon-v2, 1536/3072 on midnight.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 import torch
@@ -40,11 +57,35 @@ DEFAULT_BACKBONE = "owkin/phikon-v2"
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
-#: Dinov2 block sub-modules that carry the bulk of the parameters. Named so that
-#: ``target_modules`` matches in *every* block, which is the point (PLAN.md 2).
+#: Superset of leaf module names that carry the bulk of a transformer block's parameters,
+#: across the ViT namings we care about. This is a *candidate* set: the actual target set
+#: is the intersection with what the loaded backbone really has, computed per block.
+#:
+#:   HF Dinov2 / BERT-style : query, key, value, dense, fc1, fc2
+#:   SwiGLU FFN (ViT-g)     : weights_in, weights_out
+#:   timm / fused-qkv ViTs  : qkv, proj
+#:   HF CLIP-style attn     : q_proj, k_proj, v_proj, out_proj
+LORA_CANDIDATE_MODULES: tuple[str, ...] = (
+    "query", "key", "value", "dense", "fc1", "fc2",
+    "weights_in", "weights_out",
+    "qkv", "proj",
+    "q_proj", "k_proj", "v_proj", "out_proj",
+)
+
+#: Backwards-compatible alias. The old fixed phikon-v2 list; kept so that an explicit
+#: ``lora_target_modules=LORA_TARGET_MODULES`` still means what it used to.
 LORA_TARGET_MODULES: tuple[str, ...] = (
     "query", "key", "value", "dense", "fc1", "fc2",
 )
+
+#: How a transformer block index appears in a module path. Covers HF (``encoder.layer.N``,
+#: ``encoder.layers.N``), timm (``blocks.N``) and GPT-style (``h.N``).
+_BLOCK_RE = re.compile(r"(?:^|\.)(?:layer|layers|blocks|block|h)\.(\d+)(?:\.|$)")
+
+
+def _block_index(name: str) -> int | None:
+    m = _BLOCK_RE.search(name)
+    return int(m.group(1)) if m else None
 
 
 @dataclass
@@ -57,7 +98,10 @@ class EncoderConfig:
     lora_rank: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.0
-    lora_target_modules: tuple[str, ...] = LORA_TARGET_MODULES
+    #: ``None`` (the default) = **discover** the target leaf names from the loaded
+    #: backbone by intersecting ``LORA_CANDIDATE_MODULES`` with the block Linears it
+    #: actually has. Pass an explicit tuple only to deliberately narrow the set.
+    lora_target_modules: tuple[str, ...] | None = None
     lora_blocks: tuple[int, ...] | None = None  # None = ALL blocks (the default, on purpose)
     # --- projection head (PLAN.md 2: >= 512, NOT ScanGen's 48)
     proj_hidden_dim: int = 1024
@@ -113,33 +157,47 @@ class ProjectionHead(nn.Module):
         return self.net(x)
 
 
-def _lora_target_names(model: nn.Module, cfg: EncoderConfig) -> list[str]:
+def _lora_target_names(model: nn.Module, cfg: EncoderConfig) -> tuple[list[str], dict[int, int], tuple[str, ...]]:
     """Resolve full module names so we can (a) hit every block and (b) *prove* we did.
 
     PEFT's ``target_modules`` accepts bare suffixes, but a bare suffix silently matches
     whatever happens to share the name. We enumerate explicit full names instead, then
     assert the per-block count -- head-only adaptation is the failure mode PLAN.md 2
     explicitly rules out, and it would otherwise be invisible.
+
+    Architecture-agnostic by construction: we walk the backbone's ``nn.Linear`` modules,
+    keep the ones that live inside a numbered transformer block, and select by leaf name
+    against ``cfg.lora_target_modules`` -- or, when that is ``None``, against the
+    *candidate* superset, which is what makes ``fc1/fc2`` (Dinov2 MLP) and
+    ``weights_in/weights_out`` (SwiGLU FFN, ViT-g) both resolve without a per-model list.
+
+    Returns ``(names, per_block_counts, resolved_leaf_names)``.
     """
-    names = []
+    candidates = cfg.lora_target_modules or LORA_CANDIDATE_MODULES
+    names: list[str] = []
+    per_block: dict[int, int] = {}
+    leaves: set[str] = set()
     for name, mod in model.named_modules():
         if not isinstance(mod, nn.Linear):
             continue
-        if name.rsplit(".", 1)[-1] not in cfg.lora_target_modules:
+        leaf = name.rsplit(".", 1)[-1]
+        if leaf not in candidates:
             continue
-        if cfg.lora_blocks is not None:
-            parts = name.split(".")
-            try:
-                blk = int(parts[parts.index("layer") + 1])
-            except (ValueError, IndexError):
-                continue
-            if blk not in cfg.lora_blocks:
-                continue
+        blk = _block_index(name)
+        if blk is None:
+            # A Linear with a matching leaf name outside any transformer block (a head,
+            # a pooler). Never adapt it: LoRA-on-the-head is exactly what PLAN.md 2 rules
+            # out, and it would inflate the "targets" count while adapting no depth.
+            continue
+        if cfg.lora_blocks is not None and blk not in cfg.lora_blocks:
+            continue
         names.append(name)
-    return names
+        per_block[blk] = per_block.get(blk, 0) + 1
+        leaves.add(leaf)
+    return names, per_block, tuple(sorted(leaves))
 
 
-class PhikonEncoder(nn.Module):
+class WaivEncoder(nn.Module):
     """Backbone (optionally LoRA-adapted) + projection head.
 
     ``forward`` returns ``(embedding, projection)``:
@@ -152,31 +210,71 @@ class PhikonEncoder(nn.Module):
         super().__init__()
         self.cfg = cfg = cfg or EncoderConfig()
         backbone = AutoModel.from_pretrained(cfg.backbone)
-        self.hidden_size = int(backbone.config.hidden_size)
-        self.num_blocks = int(backbone.config.num_hidden_layers)
+        # Everything geometric is READ OFF THE LOADED CONFIG. Nothing here may be a
+        # literal: phikon-v2 is 1024/24/patch16, midnight is 1536/40/patch14.
+        bc = backbone.config
+        self.hidden_size = int(bc.hidden_size)
+        self.num_blocks = int(bc.num_hidden_layers)
+        self.patch_size = int(getattr(bc, "patch_size", 0)) or None
+        #: Tokens the backbone emits at ``image_size``, per its own config. We feed 224px
+        #: everywhere (PathoROB/HEST/THUNDER/PLISM all resize to 224), and Dinov2
+        #: interpolates its position embeddings, so the *runtime* patch count is
+        #: ``(224/patch_size)**2`` -- 196 on phikon-v2 (16), 256 on midnight (14).
+        self.config_image_size = int(getattr(bc, "image_size", 0)) or None
+        self.model_type = str(getattr(bc, "model_type", "unknown"))
 
         if cfg.freeze_backbone:
             for p in backbone.parameters():
                 p.requires_grad_(False)
 
         self.lora_target_names: list[str] = []
+        self.lora_target_leaves: tuple[str, ...] = ()
+        self.lora_per_block: dict[int, int] = {}
         if cfg.use_lora:
             from peft import LoraConfig, get_peft_model
 
-            self.lora_target_names = _lora_target_names(backbone, cfg)
+            self.lora_target_names, self.lora_per_block, self.lora_target_leaves = (
+                _lora_target_names(backbone, cfg)
+            )
+            # A silently-empty target set trains NOTHING and reads downstream as "the
+            # method had no effect on this backbone". Refuse, loudly, with the evidence.
             if not self.lora_target_names:
-                raise RuntimeError(f"no LoRA targets matched {cfg.lora_target_modules}")
-            covered = {
-                int(n.split(".")[n.split(".").index("layer") + 1])
-                for n in self.lora_target_names
-                if "layer" in n.split(".")
-            }
+                sample = sorted({
+                    n.rsplit(".", 1)[-1]
+                    for n, m in backbone.named_modules()
+                    if isinstance(m, nn.Linear) and _block_index(n) is not None
+                })
+                raise RuntimeError(
+                    f"no LoRA targets matched on backbone {cfg.backbone!r} "
+                    f"(model_type={self.model_type}): candidates="
+                    f"{cfg.lora_target_modules or LORA_CANDIDATE_MODULES}, but the block "
+                    f"Linears are named {sample}. Add the missing names to "
+                    "LORA_CANDIDATE_MODULES -- an empty target set trains nothing."
+                )
+            covered = set(self.lora_per_block)
             expected = set(cfg.lora_blocks) if cfg.lora_blocks is not None else set(range(self.num_blocks))
             if covered != expected:
                 raise RuntimeError(
                     f"LoRA covers blocks {sorted(covered)} but expected {sorted(expected)}; "
                     "PLAN.md 2 requires adaptation across the full depth, not head-only"
                 )
+            # Uniformity is the second half of the guard. A ragged count means the leaf
+            # names differ between blocks, i.e. some blocks are only partly adapted --
+            # which the block-coverage check above cannot see.
+            counts = set(self.lora_per_block.values())
+            if len(counts) != 1:
+                ragged = {b: c for b, c in sorted(self.lora_per_block.items())}
+                raise RuntimeError(
+                    f"LoRA match count is not uniform across blocks: {ragged}"
+                )
+            print(
+                f"[encoder] backbone={cfg.backbone} type={self.model_type} "
+                f"hidden={self.hidden_size} blocks={self.num_blocks} "
+                f"patch={self.patch_size} | LoRA targets={len(self.lora_target_names)} "
+                f"= {counts.pop()}/block x {self.num_blocks} blocks, "
+                f"leaves={list(self.lora_target_leaves)}",
+                flush=True,
+            )
             backbone = get_peft_model(
                 backbone,
                 LoraConfig(
@@ -246,10 +344,19 @@ class PhikonEncoder(nn.Module):
         total = sum(p.numel() for p in self.parameters())
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         return {
+            "backbone": self.cfg.backbone,
+            "model_type": self.model_type,
+            "hidden_size": self.hidden_size,
+            "embed_dim": self.embed_dim,
+            "patch_size": self.patch_size,
             "total": total,
             "trainable": trainable,
             "trainable_pct": 100.0 * trainable / max(total, 1),
             "lora_targets": len(self.lora_target_names),
+            "lora_targets_per_block": (
+                max(self.lora_per_block.values()) if self.lora_per_block else 0
+            ),
+            "lora_target_leaves": list(self.lora_target_leaves),
             "blocks": self.num_blocks,
         }
 
@@ -264,5 +371,10 @@ class PhikonEncoder(nn.Module):
         return self.backbone.merge_and_unload()
 
 
-def build_encoder(**kwargs) -> PhikonEncoder:
-    return PhikonEncoder(EncoderConfig(**kwargs))
+#: The class was phikon-v2-specific when it was written; it no longer is. Alias kept so
+#: saved checkpoints, the THUNDER entry point and any external caller keep importing.
+PhikonEncoder = WaivEncoder
+
+
+def build_encoder(**kwargs) -> WaivEncoder:
+    return WaivEncoder(EncoderConfig(**kwargs))
