@@ -188,6 +188,39 @@ the 0.019 / 0.469 targets in `PLAN.md` are sound.
 The harness is therefore trustworthy: a Camelyon RI that moves after fine-tuning is a real
 effect, not harness drift.
 
+### First fine-tuned readout: 300-step rank-8 smoke checkpoint
+
+Job 369019 (rank 8, all 24 blocks, 2 groups × 32, 300 steps). Features re-extracted
+through the *identical* pipeline — same Resize(224)→CenterCrop(224)→ToTensor→ImageNet
+Normalize, same clsmean 2048-d, same fp32, same npz layout — with the LoRA adapter as the
+only difference (job 369036, 1×H100, 5m30s for 99,392 patches).
+
+| dataset | base | +LoRA | Δ RI | Waiv T1 target | base bal-acc | +LoRA bal-acc | Δ bal-acc |
+|---|---|---|---|---|---|---|---|
+| camelyon | 0.018951 | **0.525523** | +0.506572 | 0.702 | 0.9536 | 0.9653 | +0.0118 |
+| tolkach_esca | 0.768112 | **0.910295** | +0.142181 | 0.932 | 0.9588 | 0.9684 | +0.0097 |
+| tcga | 0.618771 | **0.772558** | +0.153786 | 0.785 | 0.9202 | 0.9177 | −0.0026 |
+| **Avg** | **0.468611** | **0.736125** | **+0.267514** | **0.806** | 0.9442 | 0.9505 | +0.0063 |
+
+The decomposition says *why*, and it is the mechanism we wanted rather than a shortcut.
+The entire gain lands on `confounder_insensitivity` (camelyon 0.0011→0.0541, tolkach
+0.261→0.729, tcga 0.238→0.532) while `prediction_performance` is flat (0.941→0.954,
+0.929→0.937, 0.873→0.868) and `generalization_index` barely moves. Balanced accuracy is
+flat-to-up on all three, so this is not a robustness gain bought by destroying the
+biological signal. `k_opt` is unchanged per dataset (11 / 46 / 61), so the kNN operating
+point is the same one the base model was scored at.
+
+Read it with three caveats. **(1)** The checkpoint was trained *after* the
+`masked_info_nce` orientation fix (`5907f54`, committed 00:32:45; job started 00:33:20,
+and its artifacts — `embed_probe.py` output, `negatives_per_anchor` in `metrics.json` —
+exist only in post-fix code), so the condition-spanning-negatives shortcut is **not** the
+explanation. **(2)** It is still a 300-step smoke run on a saturated objective (top-1 1.0
+by step 150), single seed, no error bars. **(3)** Camelyon's base RI of 0.019 is
+pathologically low, so its headline jump is the least surprising of the three. The
+movement is far outside harness noise (the Phase-2 gate reproduces to 6 decimals) — but it
+is one run, and the honest claim is "the backbone moved the metric in the right way", not
+"we hit the PHAET targets". Avg is 0.736 against a 0.806 target.
+
 Default split holds out scanners `GT450`, `S210` and stains `HRH`, `KR`, `MY` → 50 train /
 41 held-out conditions (`PLAN.md` §4 phase 7). It is *named*, not sampled, so it is
 reproducible without carrying a seed.
