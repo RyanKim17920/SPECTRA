@@ -57,6 +57,12 @@ def main() -> int:
     ap.add_argument("--num-workers", type=int, default=8)
     ap.add_argument("--precision", default="float32", choices=("float32", "float16", "bfloat16"),
                     help="TRIDENT's phikon_v2 baseline runs fp32; keep it for the gate run")
+    ap.add_argument("--also-encoders", nargs="*", default=[],
+                    help="extra TRIDENT-registry encoders to run alongside ours, e.g. "
+                         "'phikon_v2' (their own baseline, an end-to-end harness control) "
+                         "or 'resnet50' (their published 0.3252 floor). Empty by default: "
+                         "BenchmarkConfig would otherwise silently append resnet50 to every "
+                         "run and double the GPU time")
     args = ap.parse_args()
 
     if args.checkpoint and args.adapter:
@@ -96,6 +102,7 @@ def main() -> int:
         results_dir=str(paths.results_dir),
         exp_code=exp_code,
         datasets=list(args.tasks),
+        encoders=list(args.also_encoders),
         batch_size=args.batch_size,
         num_workers=args.num_workers,
     )
