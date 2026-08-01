@@ -295,3 +295,23 @@ low so its jump is the least surprising of the three.
   H0-mini's 0.541.
 - Retention (HEST / THUNDER / Patho-Bench) alongside **every** robustness claim, as a
   pair. Forgetting is the default outcome here, not a tail risk.
+
+### Note: `adapter_rel_l2_delta` provenance (resolved)
+
+`ri_curve.json` for run `waiv-real-369043` records correct, dataset-distinct
+adapter deltas for steps 500-2500 (camelyon ~0.74-0.76, tolkach ~0.92-0.93,
+tcga ~0.78-0.80). **Step 3000+ is corrupted**: all three datasets read an
+identical 0.2520.
+
+Cause: commit `ea7fa1f` moved the adapter-applied assertion into the shared
+`build_model()` so HEST/THUNDER would inherit it. From that commit on, every
+extraction emits *two* `[adapter-check]` lines -- a deterministic synthetic-batch
+check inside `build_model()`, then the real-tile check in `main()`. The collector's
+`_REL_L2.search()` took the first (synthetic) match. Fixed to `findall()[-1]`.
+
+Identical across datasets because the synthetic batch is fixed (seed 1234);
+different across checkpoints (0.2520 @ 3000, 0.2539 @ 3500) because the weights
+change. **No RI value is affected** -- RI is computed by PathoROB over the written
+.npz features, independent of this diagnostic. All deltas, synthetic or real, are
+orders of magnitude above the 1e-4 abort threshold, so the adapter was applied in
+every extraction.
