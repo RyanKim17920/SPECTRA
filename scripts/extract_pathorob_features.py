@@ -186,7 +186,23 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
         out = set_peft_model_state_dict(model.backbone, state)
         if getattr(out, "unexpected_keys", None):
             raise RuntimeError(f"adapter keys not consumed: {list(out.unexpected_keys)[:5]}")
-        model.projector.load_state_dict(torch.load(adapter / "projector.pt", map_location="cpu"))
+        # The projector is training-only: InfoNCE is applied to its output, but every eval
+        # path here reads model.embed() and never touches it. Its input width is tied to the
+        # *training* pooling (2048 for clsmean, 1024 for cls), so loading it under a different
+        # eval pooling is both impossible and pointless. Load it when the widths agree (keeps
+        # the artifact faithful); skip loudly when they don't, rather than crashing a run whose
+        # features don't depend on it.
+        proj_sd = torch.load(adapter / "projector.pt", map_location="cpu")
+        saved_in = proj_sd["net.0.weight"].shape[1]
+        if saved_in == model.embed_dim:
+            model.projector.load_state_dict(proj_sd)
+        else:
+            print(
+                f"[build_model] skipping projector: trained with a {saved_in}-d input, "
+                f"evaluating at {model.embed_dim}-d (pooling={pooling}). "
+                "Projector is unused for feature extraction; LoRA backbone weights are unaffected.",
+                flush=True,
+            )
         # Cheap CPU-side proof before the caller ever sees the model. Callers that have real
         # tiles on hand (this script's main()) re-run it on those for a sharper number.
         assert_adapter_applied(model.eval())
