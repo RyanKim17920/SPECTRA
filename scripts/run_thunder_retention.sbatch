@@ -52,7 +52,12 @@ export PYTHONUNBUFFERED=1
 export WAIV_POOLING="${WAIV_POOLING:-cls}"
 export WAIV_RUN_NAME="$RUN_NAME"
 if [ -n "$CKPT" ];    then export WAIV_CHECKPOINT="$CKPT"; fi
-if [ -n "$ADAPTER" ]; then export WAIV_ADAPTER="$ADAPTER"; fi
+if [ -n "$ADAPTER" ]; then
+  export WAIV_ADAPTER="$ADAPTER"
+  export WAIV_LORA_RANK="${WAIV_LORA_RANK:-32}"
+  export WAIV_LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
+  export WAIV_PROJ_OUT_DIM="${WAIV_PROJ_OUT_DIM:-512}"
+fi
 
 MODEL="custom:${REPO}/src/waivphaet/eval/thunder_model.py"
 

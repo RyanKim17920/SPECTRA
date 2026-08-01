@@ -43,7 +43,10 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 ARGS=(--pooling "$POOLING" --exp-code "$EXP_CODE" --num-workers 8)
 if [ -n "$CKPT" ];    then ARGS+=(--checkpoint "$CKPT"); fi
 if [ -n "$ADAPTER" ]; then
-  ARGS+=(--adapter "$ADAPTER" --lora-rank "${LORA_RANK:-8}" --lora-alpha "${LORA_ALPHA:-32}" --proj-out-dim "${PROJ_OUT_DIM:-512}")
+  # Defaults are the real run's geometry (runs/waiv-real-369043 == r32/alpha64). build_model
+  # cross-checks these against the saved adapter_config.json and hard-fails on a mismatch,
+  # so a stale default is loud rather than a silently mis-scaled adapter.
+  ARGS+=(--adapter "$ADAPTER" --lora-rank "${LORA_RANK:-32}" --lora-alpha "${LORA_ALPHA:-64}" --proj-out-dim "${PROJ_OUT_DIM:-512}")
 fi
 
 # .venv-hest, NOT .venv: trident hard-pins timm==0.9.16 and drags transformers back to

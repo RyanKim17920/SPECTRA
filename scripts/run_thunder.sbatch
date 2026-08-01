@@ -59,7 +59,14 @@ export WAIV_RUN_NAME="$RUN_NAME"
 # Written as if-blocks, not `[ -n "$X" ] && export ...`: under `set -e` a short-circuiting
 # AND-OR list is a footgun, and the base run passes both of these empty.
 if [ -n "$CKPT" ];    then export WAIV_CHECKPOINT="$CKPT"; fi
-if [ -n "$ADAPTER" ]; then export WAIV_ADAPTER="$ADAPTER"; fi
+if [ -n "$ADAPTER" ]; then
+  export WAIV_ADAPTER="$ADAPTER"
+  # thunder_model.py defaults to r16/alpha32; the real run is r32/alpha64. Without these the
+  # adapter load fails the config cross-check in build_model. Overridable from the caller.
+  export WAIV_LORA_RANK="${WAIV_LORA_RANK:-32}"
+  export WAIV_LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
+  export WAIV_PROJ_OUT_DIM="${WAIV_PROJ_OUT_DIM:-512}"
+fi
 
 MODEL="custom:${REPO}/src/waivphaet/eval/thunder_model.py"
 

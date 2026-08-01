@@ -120,11 +120,62 @@ def build_preprocess():
 # model
 
 
+def assert_adapter_applied(model, batch: torch.Tensor | None = None, tol: float = 1e-4) -> dict:
+    """Prove the LoRA adapter actually changes embeddings.
+
+    A silently-unloaded adapter reproduces the base model exactly, which on a retention
+    benchmark reads as "perfect retention" -- the most dangerous possible false result.
+    Every eval entry point that takes an adapter MUST call this.
+
+    ``batch`` defaults to a deterministic synthetic batch so this works with no dataset
+    on hand (HEST / THUNDER load their data inside third-party harnesses). Any input
+    distinguishes an applied adapter from an absent one.
+    """
+    if batch is None:
+        g = torch.Generator().manual_seed(1234)
+        batch = torch.randn(4, 3, 224, 224, generator=g)
+    device = next(model.parameters()).device
+    batch = batch.to(device)
+    was_training = model.training
+    model.eval()
+    with torch.inference_mode():
+        emb_lora = model.embed(batch)
+        with model.backbone.disable_adapter():
+            emb_base = model.embed(batch)
+    if was_training:
+        model.train()
+    rel = float((emb_lora - emb_base).norm() / emb_base.norm())
+    mean_cos = float(
+        torch.nn.functional.cosine_similarity(emb_lora.float(), emb_base.float(), dim=-1).mean()
+    )
+    print(f"[adapter-check] rel_l2_delta={rel:.6e}  mean_cosine_base_vs_lora={mean_cos:.6f}",
+          flush=True)
+    if rel < tol:
+        raise SystemExit(
+            f"adapter did not change embeddings (rel_l2_delta={rel:.3e} < {tol}); "
+            "adapter likely not applied"
+        )
+    return {"rel_l2_delta": rel, "mean_cosine_base_vs_lora": mean_cos}
+
+
 def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = None,
                 lora_rank: int = 16, lora_alpha: int = 32, proj_out_dim: int = 512):
     from waivphaet.models.encoder import EncoderConfig, PhikonEncoder
 
     if adapter is not None:
+        # The saved adapter_config.json is the source of truth for rank/alpha. Passing the
+        # wrong rank is an easy CLI mistake and would either blow up deep inside peft or,
+        # worse, load a differently-scaled adapter -- check up front and say so plainly.
+        acfg_path = adapter / "adapter" / "adapter_config.json"
+        if acfg_path.exists():
+            acfg = json.loads(acfg_path.read_text())
+            saved_r, saved_alpha = int(acfg["r"]), int(acfg["lora_alpha"])
+            if (saved_r, saved_alpha) != (lora_rank, lora_alpha):
+                raise SystemExit(
+                    f"adapter at {adapter} was saved with r={saved_r} alpha={saved_alpha} "
+                    f"but was asked to load with r={lora_rank} alpha={lora_alpha}; "
+                    "pass --lora-rank/--lora-alpha (or WAIV_LORA_RANK/WAIV_LORA_ALPHA) to match"
+                )
         # Load a PEFT adapter directory (save_checkpoint output).
         cfg = EncoderConfig(pooling=pooling, use_lora=True, lora_rank=lora_rank,
                             lora_alpha=lora_alpha, proj_out_dim=proj_out_dim)
@@ -136,6 +187,9 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
         if getattr(out, "unexpected_keys", None):
             raise RuntimeError(f"adapter keys not consumed: {list(out.unexpected_keys)[:5]}")
         model.projector.load_state_dict(torch.load(adapter / "projector.pt", map_location="cpu"))
+        # Cheap CPU-side proof before the caller ever sees the model. Callers that have real
+        # tiles on hand (this script's main()) re-run it on those for a sharper number.
+        assert_adapter_applied(model.eval())
     elif checkpoint is None:
         # Base phikon-v2: no LoRA, no adapter deltas -- this is the Phase-2 gate model.
         cfg = EncoderConfig(pooling=pooling, use_lora=False)
@@ -198,21 +252,10 @@ def main() -> int:
     if model.embed_dim != 2048 and args.pooling == "clsmean":
         raise RuntimeError(f"clsmean must be 2048-d, got {model.embed_dim}")
 
-    # Adapter-applied check: verify the LoRA adapter actually changed embeddings.
+    # Adapter-applied check on REAL tiles (build_model already ran it on synthetic input).
     if args.adapter is not None:
         check_sz = min(8, len(ds))
-        check_batch = torch.stack([ds[i][0] for i in range(check_sz)]).to(args.device)
-        with torch.inference_mode():
-            emb_lora = model.embed(check_batch)
-            with model.backbone.disable_adapter():
-                emb_base = model.embed(check_batch)
-        rel = float((emb_lora - emb_base).norm() / emb_base.norm())
-        mean_cos = float(
-            torch.nn.functional.cosine_similarity(emb_lora.float(), emb_base.float(), dim=-1).mean()
-        )
-        print(f"[adapter-check] rel_l2_delta={rel:.6e}  mean_cosine_base_vs_lora={mean_cos:.6f}")
-        if rel < 1e-4:
-            raise SystemExit("adapter did not change embeddings (rel_l2_delta < 1e-4); adapter likely not applied")
+        assert_adapter_applied(model, torch.stack([ds[i][0] for i in range(check_sz)]))
 
     indices = list(range(n))
     loader = DataLoader(
