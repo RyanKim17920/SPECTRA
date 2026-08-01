@@ -67,12 +67,22 @@ echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} ==="
 echo "dataset=$DATASET tasks='$TASKS' pooling=$POOLING run_name=$RUN_NAME"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || true
 
+# embedding_pre_loading, not the online_loading default. Under online_loading the linear
+# probe re-runs the frozen ViT-L over every image on every one of its 200 epochs: measured
+# 12 s/epoch on mhist, which is 1743 images -- ~40 min per hyper-parameter point, and the
+# grid has nine. On wilds (302k train) that is not a slow run, it is an impossible one.
+# The backbone is frozen, so those embeddings are identical every epoch; benchmark.py:220
+# takes them straight from the cached h5 instead. Segmentation ignores the flag (same
+# line) because its decoder needs the raw masks, so those jobs are unaffected.
+# image_pre_loading is the wrong lever -- it caches decoded *tiles* in RAM and OOMs a 128G
+# box on the 300k-tile sets.
+MODE=embedding_pre_loading
+case "$TASKS" in *segmentation*) MODE=online_loading ;; esac
+
 for TASK in $TASKS; do
   echo "--- $(date) | $DATASET / $TASK ---"
-  # image_pre_loading would cache decoded tiles in RAM; the big datasets here are 300k+
-  # tiles so that OOMs a 128G box. online_loading is the default for a reason.
   srun --unbuffered "$REPO/.venv-thunder/bin/thunder" benchmark \
-      "$MODEL" "$DATASET" "$TASK" --loading-mode online_loading
+      "$MODEL" "$DATASET" "$TASK" --loading-mode "$MODE"
   echo "--- done $DATASET / $TASK rc=$? ---"
 done
 
