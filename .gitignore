@@ -19,6 +19,8 @@ features/
 outputs/
 wandb/
 slurm-*.out
+slurm-*.err
+.venv-*/
 
 # vendored third-party eval harnesses (cloned, not committed)
 third_party/

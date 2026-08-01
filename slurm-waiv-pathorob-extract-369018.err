@@ -10,3 +10,6 @@ Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF
 Loading weights:   0%|          | 0/439 [00:00<?, ?it/s]Loading weights: 100%|██████████| 439/439 [00:00<00:00, 10739.63it/s]
 /admin/home/ryan.kim/waiv/.venv/lib/python3.12/site-packages/huggingface_hub/constants.py:298: FutureWarning: The `HF_HUB_ENABLE_HF_TRANSFER` environment variable is deprecated as 'hf_transfer' is not used anymore. Please use `HF_XET_HIGH_PERFORMANCE` instead to enable high performance transfer with Xet. Visit https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfxethighperformance for more details.
   warnings.warn(
+Fetching 3 files:   0%|          | 0/3 [00:00<?, ?it/s]Fetching 3 files:  33%|███▎      | 1/3 [00:06<00:13,  6.55s/it]Fetching 3 files:  67%|██████▋   | 2/3 [00:08<00:03,  3.90s/it]Fetching 3 files: 100%|██████████| 3/3 [00:08<00:00,  2.19s/it]Fetching 3 files: 100%|██████████| 3/3 [00:08<00:00,  2.92s/it]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/439 [00:00<?, ?it/s]Loading weights: 100%|██████████| 439/439 [00:00<00:00, 9839.52it/s]
