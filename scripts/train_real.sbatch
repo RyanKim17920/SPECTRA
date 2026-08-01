@@ -4,11 +4,12 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
 # 32 CPUs / 250G / 6h, not "as much as possible": every 8xH100 node here is MIXED+PLANNED,
-# so a 48-CPU 12-hour ask sits behind Priority for ~11 h while a 32-CPU 6-hour one
-# backfills into the gap. 6000 steps x 1.91 s is 3.2 h and the follower drains behind it.
+# so a 48-CPU 12-hour ask sits behind Priority for ~11 h. The nearest PLANNED start is
+# 3 h 49 m out, so the box is sized to backfill INTO that window: 4000 x 1.91 s = 2.1 h
+# of training with the eval follower draining alongside it, ~2.5 h total.
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=250G
-#SBATCH --time=06:00:00
+#SBATCH --time=03:15:00
 #SBATCH --output=slurm-%x-%j.out
 #SBATCH --error=slurm-%x-%j.err
 #
@@ -30,12 +31,12 @@
 #    flat" readout mixed a real change with a set change. All 91 are repacked and
 #    verified now, and the preflight below hard-fails on anything less.
 #
-# 3. LONGER + HIGHER RANK. Rank 32 (alpha 64) vs rank 8, and 6000 steps vs 300, with
+# 3. LONGER + HIGHER RANK. Rank 32 (alpha 64) vs rank 8, and 4000 steps vs 300, with
 #    log-every 20 so top-1 and loss are visible throughout and saturation cannot hide.
 #
 # Sized on a real 25-step probe (job 369039, not arithmetic): 2 x 192 + checkpointing =
 # 21.77 GiB peak of 79.19, 1.91 s/step, 401 tiles/s, and top-1 0.74 at step 25 where the
-# smoke run was already at 0.98 by step 30. 6000 x 1.91 s is ~3.2 h. 2 x 256 also fits,
+# smoke run was already at 0.98 by step 30. 4000 x 1.91 s is ~2.1 h. 2 x 256 also fits,
 # so `--group-size 256` is the escalation if top-1 still saturates.
 #
 # The second GPU runs eval_checkpoints.py as a follower: every checkpoint gets the
@@ -68,7 +69,7 @@ LORA_RANK=32
 LORA_ALPHA=64
 N_GROUPS=2
 GROUP_SIZE=192
-MAX_STEPS=6000
+MAX_STEPS=4000
 CKPT_EVERY=500
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | run $RUN_NAME ==="
