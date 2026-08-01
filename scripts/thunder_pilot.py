@@ -138,6 +138,14 @@ def main() -> int:
         active = len(running) + len(queued)
         slots = max(0, args.cap - active)
         if slots and held:
+            # Release fine-tuned jobs first. GPU capacity here is the binding constraint
+            # (all 8 H100 nodes allocated; SLURM estimates ~20 h to the next start), so
+            # the ORDER decides what we actually learn if the sweep is cut short.
+            # The ft1000 rows are irreplaceable -- they are the result. Our own base rows
+            # are a nice-to-have control: THUNDER publishes per-dataset phikon-v2 values
+            # and our mhist base already reproduced them (66.4 vs 66.1), so `base_cls`
+            # runs can be backfilled later or substituted with the published row.
+            held.sort(key=lambda j: 0 if j["name"].startswith("thdft1k-") else 1)
             batch = [j["id"] for j in held[:slots]]
             names = ", ".join(j["name"] for j in held[:slots])
             r = subprocess.run(["scontrol", "release", ",".join(batch)],
