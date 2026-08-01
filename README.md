@@ -63,9 +63,28 @@ uv pip install --python .venv/bin/python \
 
 # PathoROB's FeatureDataManager (we call it to write embeddings) needs these:
 uv pip install --python .venv/bin/python -e '.[pathorob]'
+uv pip install --python .venv/bin/python pyarrow   # read their HF parquet directly
 ```
 
 Verified imports: `torch 2.8.0+cu128`, `transformers 5.14.1`, `peft 0.20.0`, `h5py 3.16.0`.
+
+### A second venv, on purpose: `.venv-pathorob`
+
+PathoROB hard-pins `numpy==2.2.6`, `pandas==2.3.2`, `transformers==4.56.1`; we run numpy
+2.5 / pandas 3.0 / transformers 5.14. Downgrading ours to match would be the wrong trade —
+their *metric* is the only thing that needs those pins, and it is a pure-numpy kNN.
+
+```bash
+uv venv --python 3.12 .venv-pathorob
+uv pip install --python .venv-pathorob/bin/python \
+  --index-url https://download.pytorch.org/whl/cu128 torch==2.8.0 torchvision==0.23.0
+uv pip install --python .venv-pathorob/bin/python -e third_party/PathoROB
+```
+
+torch 2.8.0 is the one shared pin and it already agreed (fixed here by the CUDA 12.8
+driver, not by them). `run_robustness_index` picks this interpreter up automatically and
+sets `PYTHONNOUSERSITE=1` — `~/.local/lib/python3.12/site-packages` on this machine holds
+a pandas that otherwise shadows the venv's and makes the pins meaningless.
 
 **Always** `export HF_HOME=/data/ryan.kim/hf_home`. `/admin` has ~1.4 TB free and must not
 fill; `/data` has ~7.2 TB (`PLAN.md` §5). All scripts set this default themselves.
@@ -125,6 +144,26 @@ crops, never pixel-exact. Do not add augmentations that assume otherwise.
 # full run
 sbatch scripts/train_lora.sbatch --lora-rank 16 --temperature 0.07
 ```
+
+## Evaluation — PathoROB (primary)
+
+Login nodes have no GPU, so extraction goes through SLURM. One H100 does the whole
+benchmark (99,392 patches) in ~5 min at ~340 img/s; the metric itself is a CPU kNN.
+
+```bash
+# 1. features -> third_party/PathoROB/data/features/{model}/{dataset}/{center}.npz
+sbatch scripts/extract_pathorob.sbatch phikonv2_clsmean_ours "camelyon tolkach_esca tcga"
+# a fine-tuned checkpoint is the same call with a third argument:
+#   sbatch scripts/extract_pathorob.sbatch waiv_step5000 camelyon runs/.../ckpt.pt
+
+# 2. robustness index + the three-way comparison
+PYTHONNOUSERSITE=1 ./.venv-pathorob/bin/python scripts/pathorob_gate.py \
+  --model phikonv2_clsmean_ours --datasets camelyon tolkach_esca tcga
+```
+
+The image data streams from the ungated HF parquet repos and is small — 0.47 GB
+(camelyon) + 0.32 GB (tolkach_esca) + 1.12 GB (tcga) = **1.91 GB**, cached under
+`$HF_HOME`. There is no need to stage anything by hand.
 
 Default split holds out scanners `GT450`, `S210` and stains `HRH`, `KR`, `MY` → 50 train /
 41 held-out conditions (`PLAN.md` §4 phase 7). It is *named*, not sampled, so it is
