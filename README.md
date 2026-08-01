@@ -165,6 +165,29 @@ The image data streams from the ungated HF parquet repos and is small — 0.47 G
 (camelyon) + 0.32 GB (tolkach_esca) + 1.12 GB (tcga) = **1.91 GB**, cached under
 `$HF_HOME`. There is no need to stage anything by hand.
 
+### Phase-2 gate: PASS
+
+Base `owkin/phikon-v2`, clsmean 2048-d, fp32, our extractor + their metric. SLURM job
+369018, 1×H100, 10m32s wall for all 99,392 patches; the metric then took ~30 s (camelyon),
+~40 s (tolkach_esca) and 6m49s (tcga, paired, 112,800 rows) on the login node.
+
+| dataset | ours | PathoROB committed ref | Waiv Table 1 | Δ vs ref |
+|---|---|---|---|---|
+| camelyon | 0.018951 | 0.018951 | 0.019 | **+0.000000** |
+| tolkach_esca | 0.768112 | 0.768114 | 0.768 | −0.000002 |
+| tcga | 0.618771 | 0.618772 | 0.619 | −0.0000005 |
+| **Avg** | **0.468611** | 0.468612 | **0.469** | −0.000001 |
+
+Two things worth separating. **(a)** Our pipeline reproduces PathoROB's own committed
+`phikonv2_clsmean` row to 6+ decimals — camelyon is bit-identical, and the µ-scale drift
+on the other two is float summation order, not a pipeline difference. **(b)** PathoROB's
+committed reference independently agrees with Waiv's quoted Table-1 base row to the 3
+decimals Waiv printed. Those are two separate sources and they corroborate each other, so
+the 0.019 / 0.469 targets in `PLAN.md` are sound.
+
+The harness is therefore trustworthy: a Camelyon RI that moves after fine-tuning is a real
+effect, not harness drift.
+
 Default split holds out scanners `GT450`, `S210` and stains `HRH`, `KR`, `MY` → 50 train /
 41 held-out conditions (`PLAN.md` §4 phase 7). It is *named*, not sampled, so it is
 reproducible without carrying a seed.
