@@ -125,7 +125,7 @@ def run_robustness_index(
     *,
     paths: PathoRobPaths | None = None,
     k_opt_param: int = 0,
-    paired_evaluation: bool = False,
+    paired_evaluation: bool | None = None,
     extra_args: list[str] | None = None,
     python_exe: str | Path | None = None,
 ) -> subprocess.CompletedProcess:
@@ -151,8 +151,10 @@ def run_robustness_index(
     ]
     if datasets:
         cmd += ["--datasets", *datasets]
-    if paired_evaluation:
-        cmd += ["--paired_evaluation"]
+    if paired_evaluation is not None:
+        # Their flag is str2bool-valued, not store_true; leaving it unset selects their
+        # per-dataset default (True for tcga, False elsewhere), which is what we want.
+        cmd += ["--paired_evaluation", str(paired_evaluation).lower()]
     cmd += extra_args or []
     return subprocess.run(cmd, cwd=str(paths.root.resolve()), check=True)
 
