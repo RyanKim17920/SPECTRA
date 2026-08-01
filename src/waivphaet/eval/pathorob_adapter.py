@@ -40,6 +40,13 @@ import numpy as np
 DATASETS = ("tcga", "camelyon", "tolkach_esca")
 DEFAULT_ROOT = Path("third_party/PathoROB")
 
+#: PathoROB hard-pins numpy 2.2.6 / pandas 2.3.2 / transformers 4.56.1; our venv runs
+#: numpy 2.5 / pandas 3.0 / transformers 5.14. We do NOT downgrade ours -- their metric
+#: gets its own venv (``.venv-pathorob``, created from their pyproject) so the number we
+#: report comes off exactly the dependency set that produced their published leaderboard.
+#: Only torch 2.8.0 is shared, and that pin is fixed by the cluster's CUDA 12.8 driver.
+DEFAULT_PYTHON = Path(".venv-pathorob/bin/python")
+
 #: Waiv Table 1 (PLAN.md 1). Our phase-5 gate is the base row.
 TARGETS = {
     "phikon_v2_base": {"tcga": 0.619, "camelyon": 0.019, "tolkach_esca": 0.768, "avg": 0.469},
@@ -120,6 +127,7 @@ def run_robustness_index(
     k_opt_param: int = 0,
     paired_evaluation: bool = False,
     extra_args: list[str] | None = None,
+    python_exe: str | Path | None = None,
 ) -> subprocess.CompletedProcess:
     """Shell out to ``python -m pathorob.robustness_index.robustness_index``.
 
@@ -130,8 +138,11 @@ def run_robustness_index(
     """
     paths = paths or PathoRobPaths()
     paths.check()
+    if python_exe is None:
+        cand = Path(DEFAULT_PYTHON).resolve()
+        python_exe = cand if cand.exists() else sys.executable
     cmd = [
-        sys.executable, "-m", "pathorob.robustness_index.robustness_index",
+        str(python_exe), "-m", "pathorob.robustness_index.robustness_index",
         "--model", model_name,
         "--features_dir", str(paths.features_dir),
         "--metadata_dir", str(paths.metadata_dir),
