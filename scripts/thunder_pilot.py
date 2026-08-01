@@ -63,6 +63,38 @@ def squeue() -> list[dict]:
     return jobs
 
 
+def fast_failures(since: str = "today", max_seconds: int = 150) -> list[str]:
+    """THUNDER jobs that died suspiciously fast.
+
+    The cold-embedding-cache bug killed jobs in ~37s with a FileNotFoundError. A pilot
+    that keeps releasing into that burns the whole queue in minutes and leaves a pile of
+    FAILED jobs that look like they ran. Any systematic breakage shows up as a cluster of
+    sub-150s failures, so that is the circuit breaker: trip, stop releasing, and say so.
+    """
+    try:
+        out = subprocess.run(
+            ["sacct", "-u", USER, "-S", since, "-X", "-n", "-P",
+             "--format=JobID,JobName,State,ElapsedRaw"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except Exception:  # noqa: BLE001 - never let the breaker itself kill the pilot
+        return []
+    bad = []
+    for line in out.stdout.splitlines():
+        parts = line.split("|")
+        if len(parts) != 4:
+            continue
+        jid, name, state, elapsed = parts
+        if not name.startswith(PREFIXES) or not state.startswith("FAILED"):
+            continue
+        try:
+            if int(elapsed) <= max_seconds:
+                bad.append(f"{name}({jid},{elapsed}s)")
+        except ValueError:
+            continue
+    return bad
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cap", type=int, default=4,
@@ -70,9 +102,14 @@ def main() -> int:
     ap.add_argument("--interval", type=int, default=120, help="seconds between checks")
     ap.add_argument("--heartbeat", type=int, default=1800,
                     help="seconds between heartbeats when nothing changes")
+    ap.add_argument("--max-fast-failures", type=int, default=3,
+                    help="halt releases after this many sub-150s THUNDER failures")
     args = ap.parse_args()
 
-    emit(f"START pilot cap={args.cap} interval={args.interval}s")
+    started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+    seen_bad: set[str] = set()
+    emit(f"START pilot cap={args.cap} interval={args.interval}s "
+         f"breaker={args.max_fast_failures} since={started_at}")
     last_beat = 0.0
     last_sig = None
 
@@ -86,6 +123,17 @@ def main() -> int:
         if not jobs:
             emit("DONE no THUNDER jobs held, pending, or running -- sweep complete")
             return 0
+
+        # Circuit breaker: only counts failures from THIS pilot's lifetime, so the
+        # pre-fix cold-cache casualties don't trip it on startup.
+        bad = [b for b in fast_failures(since=started_at) if b not in seen_bad]
+        if bad:
+            seen_bad.update(bad)
+        if len(seen_bad) >= args.max_fast_failures:
+            emit(f"FATAL {len(seen_bad)} THUNDER jobs failed in <150s: "
+                 f"{', '.join(sorted(seen_bad)[:6])} -- systematic breakage, "
+                 f"halting releases with {len(held)} still held. Fix, then relaunch.")
+            return 2
 
         active = len(running) + len(queued)
         slots = max(0, args.cap - active)
