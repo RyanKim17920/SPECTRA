@@ -103,7 +103,7 @@ def main() -> int:
     # --exp-code is not enough on its own.
     _, per_enc = benchmark(
         wrapped,
-        H.build_transform(),
+        H.build_transform(encoder.cfg.backbone),
         getattr(torch, args.precision),
         bench_data_root=str(paths.bench_data),
         embed_dataroot=str(paths.embed_dir / exp_code),

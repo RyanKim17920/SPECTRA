@@ -38,6 +38,10 @@ Their transform for phikon2 comes from ``AutoImageProcessor`` (resize 224, resca
 ImageNet normalise), which is what ``build_transform`` reproduces -- the same transform
 already used for PathoROB and HEST, so a retention delta cannot be a preprocessing
 artefact.
+
+Normalisation, unlike resize/crop, is **per backbone**: ``build_transform`` takes the
+backbone id and looks the stats up in ``BACKBONE_NORMALIZATION``. kaiko-ai/midnight's
+card requires (0.5,0.5,0.5)/(0.5,0.5,0.5), not ImageNet.
 """
 
 from __future__ import annotations
@@ -97,7 +101,7 @@ class WaivPhikonEncoder(PretrainedModel):
             proj_out_dim=int(os.environ.get("WAIV_PROJ_OUT_DIM", 512)),
             backbone=backbone,
         )
-        self.t = build_transform()
+        self.t = build_transform(self.encoder.cfg.backbone)
 
         slug = self.encoder.cfg.backbone.split("/")[-1].replace("-", "").replace(".", "")
         default_name = f"waiv_{slug}_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")

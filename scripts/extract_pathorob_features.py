@@ -100,18 +100,25 @@ class PathoRobParquet(Dataset):
         return self.transform(img), i
 
 
-def build_preprocess():
-    """Byte-for-byte mirror of ``Phikonv2ModelWrapper.get_preprocess``."""
+def build_preprocess(backbone: str | None = None):
+    """Byte-for-byte mirror of ``Phikonv2ModelWrapper.get_preprocess`` -- except that the
+    normalisation follows the *backbone*.
+
+    Resize/crop are shared (both kaiko-ai/midnight's card and PathoROB's phikon wrapper
+    specify Resize(224) -> CenterCrop(224)), but the stats are not: phikon-v2 is ImageNet,
+    midnight is (0.5,0.5,0.5). See ``BACKBONE_NORMALIZATION``.
+    """
     import torchvision.transforms as T
 
-    from waivphaet.models.encoder import IMAGENET_MEAN, IMAGENET_STD
+    from waivphaet.models.encoder import normalization_for
 
+    mean, std = normalization_for(backbone)
     return T.Compose(
         [
             T.Resize(224),
             T.CenterCrop(224),
             T.ToTensor(),
-            T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+            T.Normalize(mean, std),
         ]
     )
 
@@ -290,12 +297,14 @@ def main() -> int:
 
     t0 = time.time()
     print(f"[extract] dataset={args.dataset} device={args.device} HF_HOME={os.environ['HF_HOME']}")
-    ds = PathoRobParquet(args.dataset, build_preprocess())
-    n = len(ds) if not args.limit else min(args.limit, len(ds))
-    print(f"[extract] {len(ds)} rows loaded in {time.time() - t0:.1f}s (using {n})")
-
+    # Model FIRST: the preprocessing normalisation is a property of the backbone, and the
+    # backbone may come from the adapter's own config rather than the CLI.
     model = build_model(args.checkpoint, args.pooling, args.adapter, args.lora_rank,
                       args.lora_alpha, args.proj_out_dim, args.backbone).to(args.device)
+    print(f"[extract] normalization mean={model.norm_mean} std={model.norm_std}")
+    ds = PathoRobParquet(args.dataset, build_preprocess(model.cfg.backbone))
+    n = len(ds) if not args.limit else min(args.limit, len(ds))
+    print(f"[extract] {len(ds)} rows loaded in {time.time() - t0:.1f}s (using {n})")
     print(f"[extract] backbone={model.cfg.backbone} hidden={model.hidden_size} "
           f"embed_dim={model.embed_dim} pooling={args.pooling}")
     # Derived, not literal: 2048 on phikon-v2 (1024x2), 3072 on midnight (1536x2). The

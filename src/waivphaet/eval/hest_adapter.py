@@ -108,20 +108,25 @@ class HestEncoderWrapper(nn.Module):
         return self.encoder.embed(x)
 
 
-def build_transform():
+def build_transform(backbone: str | None = None):
     """Identical to ``build_preprocess`` in the PathoROB extractor *and* to TRIDENT's
     ``Phikonv2InferenceEncoder`` eval transform. Keeping one transform across both
-    benchmarks is what makes robustness-vs-retention a fair pair (PLAN.md §6)."""
+    benchmarks is what makes robustness-vs-retention a fair pair (PLAN.md §6).
+
+    The normalisation follows the backbone (``BACKBONE_NORMALIZATION``): ImageNet for
+    phikon-v2, (0.5,0.5,0.5) for kaiko-ai/midnight, per its model card. The default is
+    phikon-v2, so every existing call is unchanged."""
     import torchvision.transforms as T
 
-    from waivphaet.models.encoder import IMAGENET_MEAN, IMAGENET_STD
+    from waivphaet.models.encoder import normalization_for
 
+    mean, std = normalization_for(backbone)
     return T.Compose(
         [
             T.Resize(224),
             T.CenterCrop(224),
             T.ToTensor(),
-            T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+            T.Normalize(mean, std),
         ]
     )
 

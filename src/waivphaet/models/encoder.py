@@ -57,6 +57,47 @@ DEFAULT_BACKBONE = "owkin/phikon-v2"
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
+#: Symmetric [-1, 1] normalisation.
+HALF_MEAN = (0.5, 0.5, 0.5)
+HALF_STD = (0.5, 0.5, 0.5)
+
+#: **Normalisation is a property of the backbone, not of the pipeline.**
+#:
+#: phikon-v2 wants ImageNet stats (its own ``BitImageProcessor``), and PathoROB's
+#: ``Phikonv2ModelWrapper.get_preprocess`` uses exactly those -- which is why our Avg RI
+#: reproduces theirs to 6 decimals. ``kaiko-ai/midnight`` does **not**: its model card is
+#: explicit -- "trained on 224x224 images normalized with a mean of (0.5, 0.5, 0.5) and a
+#: standard deviation of (0.5, 0.5, 0.5). Please ensure you apply these exact
+#: normalization parameters."
+#:
+#: Feeding midnight ImageNet stats does not crash and does not look wrong anywhere: it
+#: just shifts and rescales every channel, quietly costing base accuracy. It would make
+#: our base-midnight row disagree with Waiv's published 0.759 for a reason that has
+#: nothing to do with the harness being faithful -- i.e. exactly the check we are running
+#: it for. So it is table-driven and travels with the backbone id.
+BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float, float, float]]] = {
+    "owkin/phikon-v2": (IMAGENET_MEAN, IMAGENET_STD),
+    "kaiko-ai/midnight": (HALF_MEAN, HALF_STD),
+}
+
+
+def normalization_for(backbone: str | None) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """Mean/std for ``backbone``. Unknown ids fall back to ImageNet, loudly.
+
+    A wrong-but-plausible normalisation is invisible in every log and every shape check,
+    so a new backbone must not get one silently.
+    """
+    backbone = backbone or DEFAULT_BACKBONE
+    if backbone not in BACKBONE_NORMALIZATION:
+        print(
+            f"[encoder] WARNING: no normalisation registered for {backbone!r}; falling "
+            "back to ImageNet stats. Check the model card -- e.g. kaiko-ai/midnight "
+            "requires (0.5,0.5,0.5)/(0.5,0.5,0.5) and ImageNet stats silently cost it "
+            "accuracy. Add an entry to BACKBONE_NORMALIZATION.",
+            flush=True,
+        )
+    return BACKBONE_NORMALIZATION.get(backbone, (IMAGENET_MEAN, IMAGENET_STD))
+
 #: Superset of leaf module names that carry the bulk of a transformer block's parameters,
 #: across the ViT namings we care about. This is a *candidate* set: the actual target set
 #: is the intersection with what the loaded backbone really has, computed per block.
@@ -122,19 +163,21 @@ class EncoderConfig:
     extra: dict = field(default_factory=dict)
 
 
-def normalize_uint8(x: torch.Tensor) -> torch.Tensor:
+def normalize_uint8(x: torch.Tensor, mean=IMAGENET_MEAN, std=IMAGENET_STD) -> torch.Tensor:
     """``(B, 224, 224, 3)`` uint8 -> ``(B, 3, 224, 224)`` normalised float.
 
     The pair loader hands us raw uint8 NHWC straight off the memmap (no PIL, no resize:
     PLISM tiles are already exactly 224x224), so this is the whole preprocessing stack.
+    ``mean``/``std`` default to ImageNet for backwards compatibility; callers inside the
+    encoder pass the *backbone's* stats (``normalization_for``).
     """
     if x.dtype == torch.uint8:
         x = x.float().div_(255.0)
     if x.ndim == 4 and x.shape[-1] == 3:
         x = x.permute(0, 3, 1, 2)
-    mean = torch.tensor(IMAGENET_MEAN, device=x.device, dtype=x.dtype).view(1, 3, 1, 1)
-    std = torch.tensor(IMAGENET_STD, device=x.device, dtype=x.dtype).view(1, 3, 1, 1)
-    return (x - mean) / std
+    m = torch.tensor(mean, device=x.device, dtype=x.dtype).view(1, 3, 1, 1)
+    s = torch.tensor(std, device=x.device, dtype=x.dtype).view(1, 3, 1, 1)
+    return (x - m) / s
 
 
 class ProjectionHead(nn.Module):
@@ -222,6 +265,7 @@ class WaivEncoder(nn.Module):
         #: ``(224/patch_size)**2`` -- 196 on phikon-v2 (16), 256 on midnight (14).
         self.config_image_size = int(getattr(bc, "image_size", 0)) or None
         self.model_type = str(getattr(bc, "model_type", "unknown"))
+        self.norm_mean, self.norm_std = normalization_for(cfg.backbone)
 
         if cfg.freeze_backbone:
             for p in backbone.parameters():
@@ -323,7 +367,7 @@ class WaivEncoder(nn.Module):
     def embed(self, images: torch.Tensor) -> torch.Tensor:
         """uint8 NHWC (or normalised float NCHW) -> pooled embedding ``(B, embed_dim)``."""
         if images.dtype == torch.uint8 or images.shape[-1] == 3:
-            images = normalize_uint8(images)
+            images = normalize_uint8(images, self.norm_mean, self.norm_std)
         out = self.backbone(pixel_values=images)
         return self._pool(out.last_hidden_state)
 
