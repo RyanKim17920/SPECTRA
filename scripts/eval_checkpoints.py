@@ -128,10 +128,18 @@ def run_pathorob(args, ckpt: Path, step: int, paths: PathoRobPaths) -> dict:
             cwd=str(REPO), check=True, capture_output=True, text=True,
         )
         sys.stdout.write(proc.stdout)
-        m = _REL_L2.search(proc.stdout)
+        # extract_pathorob_features emits TWO adapter checks per run, by design:
+        #   1. inside build_model, on a deterministic *synthetic* batch (seed 1234) -- a cheap
+        #      CPU-side proof before the caller ever sees the model. Same input every time, so
+        #      its value tracks only the checkpoint (~0.25), never the dataset.
+        #   2. in main(), on *real tiles* from this dataset -- the sharper, dataset-specific
+        #      number (camelyon ~0.75, tolkach ~0.93, tcga ~0.79).
+        # .search() returned the first (synthetic) one, so every dataset was recorded as ~0.25.
+        # Take the last match: the real-tile check is always emitted after the synthetic one.
+        matches = _REL_L2.findall(proc.stdout)
         # extract_pathorob_features exits non-zero below 1e-4, so reaching here already
         # means the adapter changed the embeddings; we record how much.
-        adapter_checks[ds] = float(m.group(1)) if m else float("nan")
+        adapter_checks[ds] = float(matches[-1]) if matches else float("nan")
 
     run_robustness_index(model_name, list(args.datasets), paths=paths)
 
