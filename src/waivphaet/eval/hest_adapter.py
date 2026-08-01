@@ -84,6 +84,24 @@ PUBLISHED_PHIKONV2_CLS = {
 PUBLISHED_PHIKONV2_AVG = 0.3747
 PUBLISHED_PHAET_AVG = 0.3943
 
+#: Waiv's per-cancer-type Phaet row, arXiv:2607.22861 Table 3. This DOES exist -- an
+#: earlier note in collect_hest.py claimed they published the average only, which was
+#: wrong and cost us the sharpest available comparison. Because both this and
+#: PUBLISHED_PHIKONV2_CLS come from the same table, their Δ is internally consistent, so
+#: Δ-vs-Δ against our own (base -> fine-tuned) is valid even though the absolute levels
+#: come from different executions.
+#:
+#: Measured against these: our per-task Δ correlates with theirs at r=0.880 -- their three
+#: largest gains (COAD, SKCM, PAAD) are our three largest, and we regress on READ exactly
+#: as they do. The shortfall in our average is concentrated in LUNG and PRAD rather than
+#: spread across tasks.
+WAIV_PHAET_HEST = {
+    "IDC": 0.5630, "PRAD": 0.3546, "PAAD": 0.4748, "SKCM": 0.5985, "COAD": 0.2915,
+    "READ": 0.1696, "CCRCC": 0.2696, "LUNG": 0.5622, "LYMPH_IDC": 0.2649,
+}
+#: Alias so callers can name the base row symmetrically with the Phaet row.
+WAIV_PHIKONV2_HEST = PUBLISHED_PHIKONV2_CLS
+
 #: Their whole dynamic range is ~0.10 Pearson (ResNet50 0.3252 -> H-Optimus-1 0.4229).
 #: Phikon-v1 -> v2 is +0.0087. Quote any delta against this scale or it is meaningless.
 HEST_RANGE = (0.3252, 0.4229)

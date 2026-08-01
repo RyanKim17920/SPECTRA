@@ -33,6 +33,8 @@ from waivphaet.eval.hest_adapter import (  # noqa: E402
     PUBLISHED_PHAET_AVG,
     PUBLISHED_PHIKONV2_AVG,
     PUBLISHED_PHIKONV2_CLS,
+    WAIV_PHAET_HEST,
+    WAIV_PHIKONV2_HEST,
 )
 
 DEFAULT_RESULTS = Path("/data/ryan.kim/hest_work/results")
@@ -159,7 +161,10 @@ def main() -> int:
     if show_published:
         print(f"Waiv's published Phaet HEST average: **{PUBLISHED_PHAET_AVG:.4f}** "
               f"(from {PUBLISHED_PHIKONV2_AVG:.4f} base, i.e. {PUBLISHED_PHAET_AVG - PUBLISHED_PHIKONV2_AVG:+.4f}).")
-        print("They published the AVERAGE only -- there is no per-task Phaet row to compare against.")
+        print("Per-task Phaet row (arXiv:2607.22861 Table 3), for Δ-vs-Δ comparison:")
+        for t, v in WAIV_PHAET_HEST.items():
+            print(f"  {t:10s} {v:.4f}  (base {WAIV_PHIKONV2_HEST[t]:.4f}, "
+                  f"their Δ {v - WAIV_PHIKONV2_HEST[t]:+.4f})")
     for code, blob in loaded:
         print(f"- {code}: embed_dim={blob.get('embed_dim')} precision={blob.get('precision')} "
               f"seconds={blob.get('seconds')}")
