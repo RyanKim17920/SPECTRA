@@ -56,8 +56,10 @@ export PYTHONUNBUFFERED=1
 # numbers silently overwrite another's.
 export WAIV_POOLING="$POOLING"
 export WAIV_RUN_NAME="$RUN_NAME"
-[ -n "$CKPT" ]    && export WAIV_CHECKPOINT="$CKPT"
-[ -n "$ADAPTER" ] && export WAIV_ADAPTER="$ADAPTER"
+# Written as if-blocks, not `[ -n "$X" ] && export ...`: under `set -e` a short-circuiting
+# AND-OR list is a footgun, and the base run passes both of these empty.
+if [ -n "$CKPT" ];    then export WAIV_CHECKPOINT="$CKPT"; fi
+if [ -n "$ADAPTER" ]; then export WAIV_ADAPTER="$ADAPTER"; fi
 
 MODEL="custom:${REPO}/src/waivphaet/eval/thunder_model.py"
 
