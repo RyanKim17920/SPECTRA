@@ -69,7 +69,7 @@ SAMPLER=$!
 trap 'kill $SAMPLER 2>/dev/null || true' EXIT
 
 # --- 1. embedding probe, BEFORE -------------------------------------------------------
-"$PY" scripts/embed_probe.py --packed-dir "$PACKED_DIR" --out "$OUT_DIR/probe_before.json"
+"$PY" scripts/embed_probe.py --packed-dir "$PACKED_DIR" --conditions-file "$OUT_DIR/conditions_used.json" --out "$OUT_DIR/probe_before.json"
 
 # --- 2. short training run ------------------------------------------------------------
 "$PY" scripts/train_lora.py \
@@ -96,7 +96,7 @@ echo "=== last checkpoint: $LAST_CKPT ==="
 
 # --- 3. embedding probe, AFTER (same tiles, same seed, same GPU) ----------------------
 "$PY" scripts/embed_probe.py --packed-dir "$PACKED_DIR" --lora-rank 8 \
-  --adapter "$LAST_CKPT" --out "$OUT_DIR/probe_after.json"
+  --conditions-file "$OUT_DIR/conditions_used.json" --adapter "$LAST_CKPT" --out "$OUT_DIR/probe_after.json"
 
 kill $SAMPLER 2>/dev/null || true
 echo "=== done $(date) -> $OUT_DIR ==="

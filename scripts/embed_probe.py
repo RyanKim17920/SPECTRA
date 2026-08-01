@@ -59,6 +59,11 @@ def parse_args():
                     help="checkpoint dir written by save_checkpoint (contains adapter/ + projector.pt)")
     ap.add_argument("--heldout-scanners", nargs="*", default=["GT450", "S210"])
     ap.add_argument("--heldout-stains", nargs="*", default=["HRH", "KR", "MY"])
+    ap.add_argument("--conditions-file", type=Path, default=None,
+                    help="JSON list of condition keys ('GIVH_AT2') to pin the probe set. "
+                         "REQUIRED for a valid before/after comparison while the acquisition "
+                         "job is still streaming -- otherwise the two probes score different "
+                         "condition sets and the delta mixes a real change with a set change.")
     ap.add_argument("--n-tiles", type=int, default=256)
     ap.add_argument("--batch-size", type=int, default=64)
     ap.add_argument("--lora-rank", type=int, default=16)
@@ -116,6 +121,11 @@ def pair_stats(x: torch.Tensor, y: torch.Tensor) -> dict[str, float]:
 def main() -> int:
     args = parse_args()
     os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+    # the projection head is randomly initialised, so without this the "before" and
+    # "after" runs get different heads and the projection-space delta is meaningless.
+    # (The backbone needs no seed: zero-init LoRA B makes an unloaded adapter exactly
+    # the base model, so embedding-space "before" is base phikon-v2 by construction.)
+    torch.manual_seed(args.seed)
 
     split = make_split(args.heldout_scanners, args.heldout_stains)
     present = present_filenames(args.packed_dir)
@@ -123,6 +133,12 @@ def main() -> int:
         "train": available_conditions(split.train, present),
         "heldout": available_conditions(split.heldout, present),
     }
+    if args.conditions_file is not None:
+        pinned = set(json.loads(args.conditions_file.read_text()))
+        groups = {k: [c for c in v if c.key in pinned] for k, v in groups.items()}
+        got = {c.key for v in groups.values() for c in v}
+        if got != pinned:
+            raise SystemExit(f"pinned conditions not all available: missing {sorted(pinned - got)}")
 
     rng = np.random.default_rng(args.seed)
     from waivphaet.data.conditions import NUM_TILES
