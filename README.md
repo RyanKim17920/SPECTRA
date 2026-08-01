@@ -385,3 +385,25 @@ change. **No RI value is affected** -- RI is computed by PathoROB over the writt
 .npz features, independent of this diagnostic. All deltas, synthetic or real, are
 orders of magnitude above the 1e-4 abort threshold, so the adapter was applied in
 every extraction.
+
+### THUNDER segmentation coverage (2 of 4 datasets)
+
+THUNDER's 16-dataset suite includes 4 segmentation sets. We can report 2:
+
+| dataset | status |
+|---|---|
+| ocelot | usable |
+| pannuke | usable |
+| segpath_epithelial | **absent** -- not present in any tree on this cluster |
+| segpath_lymphocytes | **infeasible** -- see below |
+
+`segpath_lymphocytes` was measured at **5,048 s/epoch x 200 epochs = ~281 h** (job 369061,
+2/200 epochs in 2h50m) against a 20 h wall limit, so it can only ever be killed having
+produced nothing. Cause: segmentation is forced to `online_loading` -- the decoder needs
+raw masks, so the h5 embedding cache that rescues kNN/linear-probing cannot be used -- and
+this is the largest set (23 GB of raw PNG pairs), so the frozen ViT is re-run over all of
+it every epoch. Both the base and fine-tuned jobs were cancelled.
+
+Consequence: THUNDER's `benchmark_segmentation` aggregate is not reportable, and our
+segmentation numbers cover ocelot + pannuke only. **Classification (12 datasets) is
+unaffected**, which is what Waiv's Table 2 kNN / linear-probe / few-shot columns measure.
