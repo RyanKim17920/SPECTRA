@@ -119,6 +119,9 @@ def run_pathorob(args, ckpt: Path, step: int, paths: PathoRobPaths) -> dict:
         if (feat_dir / ds).exists():
             print(f"[eval] features for {model_name}/{ds} already present, skipping extract")
             continue
+        # No --backbone here on purpose: build_model reads it from the adapter's own
+        # adapter_config.json (base_model_name_or_path), so a midnight checkpoint follows
+        # its checkpoint rather than a flag someone forgot to pass on the follower.
         proc = subprocess.run(
             [args.python, "scripts/extract_pathorob_features.py",
              "--dataset", ds, "--model-name", model_name, "--adapter", str(ckpt),
