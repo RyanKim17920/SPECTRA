@@ -33,6 +33,32 @@ PAPER_SEG = ["ocelot", "pannuke", "segpath_epithelial", "segpath_lymphocytes"]
 
 TASKS = ["knn", "linear_probing", "simple_shot", "segmentation"]
 
+# Published phikon2 absolutes, for cross-checking our base run. No one on this cluster has
+# ever run phikon-v2 through THUNDER -- /data/vbelagali, /data/eva-data and /data/anis hold
+# only in-house DINOv2/I-JEPA runs and OpenMidnight -- so the external reference is the
+# paper appendix, not a neighbouring results tree.
+#   knn            arXiv:2507.07860v3 Table S37   (12-dataset mean 70.1 = Table 4 KNN col)
+#   linear_probing arXiv:2507.07860v3 Table S39   (also on the live leaderboard, identical)
+#   segmentation   arXiv:2507.07860v3 Table S50, reported as Dice; binary Dice == F1
+# Tolerance: Waiv's own mixed-precision re-run of phikon-v2 moves lin-probe ~-0.4 and
+# segmentation ~-0.9 against these, so treat ~1 point as agreement, not a regression.
+PUBLISHED = {
+    "knn": {
+        "bach": 53.1, "bracs": 45.9, "break_his": 51.6, "ccrcc": 77.2, "crc": 92.1,
+        "esca": 75.8, "mhist": 66.1, "patch_camelyon": 82.2, "tcga_crc_msi": 56.8,
+        "tcga_tils": 80.8, "tcga_uniform": 69.1, "wilds": 91.0,
+    },
+    "linear_probing": {
+        "bach": 64.7, "bracs": 58.2, "break_his": 53.0, "ccrcc": 76.7, "crc": 92.0,
+        "esca": 77.3, "mhist": 79.2, "patch_camelyon": 90.8, "tcga_crc_msi": 61.1,
+        "tcga_tils": 91.0, "tcga_uniform": 77.7, "wilds": 95.8,
+    },
+    "segmentation": {
+        "ocelot": 78.7, "pannuke": 61.0, "segpath_epithelial": 69.1,
+        "segpath_lymphocytes": 60.9,
+    },
+}
+
 
 def _score(blob: dict, task: str) -> tuple[float | None, float | None]:
     """Pull (f1, ece) out of one outputs.json.
@@ -100,19 +126,40 @@ def main() -> None:
                 for t in cols))
         return
 
-    print(f"| dataset | {' | '.join(c + ' F1' for c in cols)} | LP ECE |")
-    print("|" + "---|" * (len(cols) + 2))
+    hdr = []
+    for c in cols:
+        hdr.append(f"{c} F1")
+        if c in PUBLISHED:
+            hdr += [f"{c} pub", f"{c} Δ"]
+    print(f"| dataset | {' | '.join(hdr)} | LP ECE |")
+    print("|" + "---|" * (len(hdr) + 2))
+    deltas: dict[str, list[float]] = {}
     for ds in PAPER_CLS + PAPER_SEG:
         if ds not in table:
             status = "MISSING (no data on this cluster)" if ds == "segpath_epithelial" else "not run"
-            print(f"| {ds} | " + " | ".join("--" for _ in cols) + f" | -- |  <!-- {status} -->")
+            print(f"| {ds} | " + " | ".join("--" for _ in hdr) + f" | -- |  <!-- {status} -->")
             continue
         cells = []
         for t in cols:
             f1 = table[ds].get(t, (None, None))[0]
-            cells.append("--" if f1 is None else f"{f1:.4f}")
+            # THUNDER stores fractions, the paper prints percentages.
+            pct = None if f1 is None else f1 * 100
+            cells.append("--" if pct is None else f"{pct:.1f}")
+            if t in PUBLISHED:
+                pub = PUBLISHED[t].get(ds)
+                cells.append("--" if pub is None else f"{pub:.1f}")
+                if pub is None or pct is None:
+                    cells.append("--")
+                else:
+                    d = pct - pub
+                    deltas.setdefault(t, []).append(d)
+                    cells.append(f"{d:+.1f}")
         ece = table[ds].get("linear_probing", (None, None))[1]
         print(f"| {ds} | {' | '.join(cells)} | {'--' if ece is None else f'{ece:.4f}'} |")
+    for t, ds_ in deltas.items():
+        worst = max(ds_, key=abs)
+        print(f"# cross-check {t}: n={len(ds_)} meanΔ={sum(ds_)/len(ds_):+.2f} "
+              f"max|Δ|={worst:+.1f} vs arXiv:2507.07860v3")
 
     # A mean over a partial roster is not the paper's mean; label it so nobody quotes it.
     for grp, names in (("classification", PAPER_CLS), ("segmentation", PAPER_SEG)):
