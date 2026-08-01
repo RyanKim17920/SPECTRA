@@ -21,7 +21,7 @@ import torch
 from waivphaet.data.conditions import all_conditions, available_conditions, make_split
 from waivphaet.data.pairs import build_pair_loader
 from waivphaet.data.repack import present_filenames
-from waivphaet.models.encoder import build_encoder
+from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
 from waivphaet.train.contrastive import TrainConfig, train
 
 
@@ -59,6 +59,11 @@ def parse_args():
                          "without this, 80 GiB caps out around 340 images/step.")
     ap.add_argument("--proj-out-dim", type=int, default=512)
     ap.add_argument("--pooling", default="clsmean", choices=["cls", "mean", "clsmean"])
+    ap.add_argument("--backbone", default=DEFAULT_BACKBONE,
+                    help="HF id of the base backbone. Default owkin/phikon-v2 (ViT-L/16, "
+                         "24 blocks, 1024-d). kaiko-ai/midnight is ViT-g/14, 40 blocks, "
+                         "1536-d -- ~3x the parameters, so re-measure the batch that fits "
+                         "before reusing a phikon-v2 --n-groups/--group-size.")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     return ap.parse_args()
 
@@ -108,6 +113,7 @@ def main() -> int:
               "PLAN.md 3 risk 3 says this is the only in-training check against tile memorisation.")
 
     model = build_encoder(
+        backbone=args.backbone,
         lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
         proj_out_dim=args.proj_out_dim, pooling=args.pooling,
         grad_checkpointing=args.grad_checkpointing,
@@ -121,7 +127,7 @@ def main() -> int:
         grad_accum=args.grad_accum, num_workers=args.workers, amp_dtype=args.amp,
         ckpt_every=args.ckpt_every, eval_every=args.eval_every, seed=args.seed,
         weight_decay=args.weight_decay, log_every=args.log_every, symmetric=args.symmetric,
-        encoder={"lora_rank": args.lora_rank, "lora_alpha": args.lora_alpha,
+        encoder={"backbone": args.backbone, "lora_rank": args.lora_rank, "lora_alpha": args.lora_alpha,
                  "pooling": args.pooling, "proj_out_dim": args.proj_out_dim,
                  "grad_checkpointing": args.grad_checkpointing},
     )

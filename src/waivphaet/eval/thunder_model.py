@@ -3,9 +3,14 @@
 Used as::
 
     export THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder
-    export WAIV_POOLING=cls                       # or clsmean
-    export WAIV_ADAPTER=/path/to/checkpoint_dir   # omit for base phikon-v2
+    export WAIV_BACKBONE=kaiko-ai/midnight        # omit for owkin/phikon-v2
+    export WAIV_POOLING=cls                       # omit: defaults PER BACKBONE, see below
+    export WAIV_ADAPTER=/path/to/checkpoint_dir   # omit for the base model
     thunder benchmark custom:src/waivphaet/eval/thunder_model.py break_his knn
+
+**Do not hardcode ``WAIV_POOLING`` in a sweep script.** The correct THUNDER pooling
+depends on the backbone (see ``THUNDER_CLSMEAN_BACKBONES`` below): cls for phikon-v2,
+clsmean for midnight. Leaving it unset picks the right one.
 
 Why a module of its own rather than a function in ``thunder_adapter``
 ----------------------------------------------------------------------
@@ -50,6 +55,21 @@ if str(_REPO / "src") not in sys.path:
 from thunder.models import PretrainedModel  # noqa: E402
 
 
+#: THUNDER pooling is **per backbone**, and it is not our choice -- it is Waiv's.
+#: arXiv:2607.22861 3, line 106: CLS+mean-pool concatenation was used for ALL models in
+#: PathoROB, but in THUNDER only for Virchow2, AquaViT, H0-mini and **Midnight-12k**.
+#: So phikon-v2 must be scored CLS-only here (which is also THUNDER's own published
+#: phikon2 protocol, ``pretrained_models.py:303``) while midnight must be clsmean. Get
+#: this backwards and the base-vs-fine-tuned rank sums are not comparable to their table.
+THUNDER_CLSMEAN_BACKBONES = frozenset({"kaiko-ai/midnight"})
+
+
+def _default_pooling(backbone: str | None) -> str:
+    from waivphaet.models.encoder import DEFAULT_BACKBONE
+
+    return "clsmean" if (backbone or DEFAULT_BACKBONE) in THUNDER_CLSMEAN_BACKBONES else "cls"
+
+
 class WaivPhikonEncoder(PretrainedModel):
     """Our ``PhikonEncoder`` behind THUNDER's three-method interface.
 
@@ -63,7 +83,8 @@ class WaivPhikonEncoder(PretrainedModel):
 
         from waivphaet.eval.hest_adapter import build_transform, load_encoder
 
-        pooling = os.environ.get("WAIV_POOLING", "cls")
+        backbone = os.environ.get("WAIV_BACKBONE") or None
+        pooling = os.environ.get("WAIV_POOLING") or _default_pooling(backbone)
         adapter = os.environ.get("WAIV_ADAPTER") or None
         checkpoint = os.environ.get("WAIV_CHECKPOINT") or None
 
@@ -74,12 +95,15 @@ class WaivPhikonEncoder(PretrainedModel):
             lora_rank=int(os.environ.get("WAIV_LORA_RANK", 16)),
             lora_alpha=int(os.environ.get("WAIV_LORA_ALPHA", 32)),
             proj_out_dim=int(os.environ.get("WAIV_PROJ_OUT_DIM", 512)),
+            backbone=backbone,
         )
         self.t = build_transform()
 
-        default_name = f"waiv_phikonv2_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")
+        slug = self.encoder.cfg.backbone.split("/")[-1].replace("-", "").replace(".", "")
+        default_name = f"waiv_{slug}_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")
         self.name = os.environ.get("WAIV_RUN_NAME", default_name)
-        self.emb_dim = int(self.encoder.embed_dim)  # 1024 for cls, 2048 for clsmean
+        # Derived from the backbone: phikon-v2 1024/2048, midnight 1536/3072.
+        self.emb_dim = int(self.encoder.embed_dim)
         self.vlm = False
 
     def forward(self, x):

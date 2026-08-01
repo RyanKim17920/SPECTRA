@@ -52,6 +52,12 @@ DEFAULT_PYTHON = Path(".venv-pathorob/bin/python")
 TARGETS = {
     "phikon_v2_base": {"tcga": 0.619, "camelyon": 0.019, "tolkach_esca": 0.768, "avg": 0.469},
     "phaet_target": {"tcga": 0.785, "camelyon": 0.702, "tolkach_esca": 0.932, "avg": 0.806},
+    # Second backbone (PLAN.md 5 lists it as the ungated 4.55 GB alternative).
+    # kaiko-ai/midnight = "Midnight-12k" in Waiv's Table 1; MASCARET is their fine-tune of
+    # it, and it carries the largest published gain in the table -- which is why it is the
+    # right second test of whether our reconstruction generalises.
+    "midnight_base": {"tcga": 0.858, "camelyon": 0.478, "tolkach_esca": 0.941, "avg": 0.759},
+    "mascaret_target": {"tcga": 0.893, "camelyon": 0.907, "tolkach_esca": 0.972, "avg": 0.924},
 }
 
 

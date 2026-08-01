@@ -31,7 +31,12 @@ cd "$REPO"
 
 DATASET="${1:?usage: run_thunder.sbatch <dataset> <tasks> [pooling] [run_name] [ckpt] [adapter]}"
 TASKS="${2:-knn linear_probing}"
-POOLING="${3:-cls}"
+# Pooling is BACKBONE-DEPENDENT in THUNDER and it is not a free choice -- arXiv:2607.22861
+# 3 line 106 uses CLS+mean only for Virchow2 / AquaViT / H0-mini / Midnight-12k, CLS
+# elsewhere. Pass "auto" (or nothing, for the phikon-v2 default) to let
+# thunder_model._default_pooling resolve it from WAIV_BACKBONE. An explicit 3rd argument
+# still wins, so the in-flight phikon-v2 sweep (which passes `cls`) is unchanged.
+POOLING="${3:-auto}"
 RUN_NAME="${4:-base_${POOLING}}"
 CKPT="${5:-}"
 ADAPTER="${6:-}"
@@ -54,8 +59,9 @@ export PYTHONUNBUFFERED=1
 # PretrainedModel.name, which is the <model> path component of
 # outputs/res/<dataset>/<model>/<task>/<adaptation>/ -- get it wrong and one checkpoint's
 # numbers silently overwrite another's.
-export WAIV_POOLING="$POOLING"
+if [ "$POOLING" != "auto" ]; then export WAIV_POOLING="$POOLING"; else unset WAIV_POOLING || true; fi
 export WAIV_RUN_NAME="$RUN_NAME"
+# WAIV_BACKBONE is inherited from the submitting environment if set; unset => phikon-v2.
 # Written as if-blocks, not `[ -n "$X" ] && export ...`: under `set -e` a short-circuiting
 # AND-OR list is a footgun, and the base run passes both of these empty.
 if [ -n "$CKPT" ];    then export WAIV_CHECKPOINT="$CKPT"; fi

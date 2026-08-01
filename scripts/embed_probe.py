@@ -48,7 +48,7 @@ import torch.nn.functional as F
 
 from waivphaet.data.conditions import available_conditions, make_split
 from waivphaet.data.repack import open_slide, present_filenames
-from waivphaet.models.encoder import build_encoder
+from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
 
 
 def parse_args():
@@ -70,6 +70,8 @@ def parse_args():
     ap.add_argument("--lora-alpha", type=int, default=32)
     ap.add_argument("--proj-out-dim", type=int, default=512)
     ap.add_argument("--pooling", default="clsmean", choices=["cls", "mean", "clsmean"])
+    ap.add_argument("--backbone", default=DEFAULT_BACKBONE,
+                    help="HF id of the base backbone; must match what --adapter was trained on")
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     return ap.parse_args()
@@ -147,6 +149,7 @@ def main() -> int:
 
     device = torch.device(args.device)
     model = build_encoder(
+        backbone=args.backbone,
         lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
         proj_out_dim=args.proj_out_dim, pooling=args.pooling,
     )

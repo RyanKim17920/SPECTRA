@@ -159,8 +159,19 @@ def assert_adapter_applied(model, batch: torch.Tensor | None = None, tol: float 
 
 
 def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = None,
-                lora_rank: int = 16, lora_alpha: int = 32, proj_out_dim: int = 512):
-    from waivphaet.models.encoder import EncoderConfig, PhikonEncoder
+                lora_rank: int = 16, lora_alpha: int = 32, proj_out_dim: int = 512,
+                backbone: str | None = None):
+    """Single loader shared by PathoROB, HEST and THUNDER (see ``hest_adapter``).
+
+    ``backbone`` defaults to ``DEFAULT_BACKBONE`` (owkin/phikon-v2) so every existing
+    call site keeps its exact behaviour. When an adapter directory is given, the backbone
+    is taken from the adapter's own ``base_model_name_or_path`` unless explicitly
+    overridden -- evaluating a midnight adapter on top of phikon-v2 would load, produce
+    numbers, and be silently meaningless.
+    """
+    from waivphaet.models.encoder import DEFAULT_BACKBONE, EncoderConfig, WaivEncoder
+
+    backbone = backbone or os.environ.get("WAIV_BACKBONE") or None
 
     if adapter is not None:
         # The saved adapter_config.json is the source of truth for rank/alpha. Passing the
@@ -176,10 +187,21 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
                     f"but was asked to load with r={lora_rank} alpha={lora_alpha}; "
                     "pass --lora-rank/--lora-alpha (or WAIV_LORA_RANK/WAIV_LORA_ALPHA) to match"
                 )
+            saved_base = acfg.get("base_model_name_or_path")
+            if saved_base:
+                if backbone is None:
+                    backbone = saved_base
+                elif backbone != saved_base:
+                    raise SystemExit(
+                        f"adapter at {adapter} was trained on {saved_base!r} but the "
+                        f"backbone was set to {backbone!r}; a cross-backbone load either "
+                        "crashes in peft or silently scores the wrong model"
+                    )
         # Load a PEFT adapter directory (save_checkpoint output).
-        cfg = EncoderConfig(pooling=pooling, use_lora=True, lora_rank=lora_rank,
+        cfg = EncoderConfig(backbone=backbone or DEFAULT_BACKBONE,
+                            pooling=pooling, use_lora=True, lora_rank=lora_rank,
                             lora_alpha=lora_alpha, proj_out_dim=proj_out_dim)
-        model = PhikonEncoder(cfg)
+        model = WaivEncoder(cfg)
         from peft import set_peft_model_state_dict
         from safetensors.torch import load_file
         state = load_file(str(adapter / "adapter" / "adapter_model.safetensors"))
@@ -207,15 +229,21 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
         # tiles on hand (this script's main()) re-run it on those for a sharper number.
         assert_adapter_applied(model.eval())
     elif checkpoint is None:
-        # Base phikon-v2: no LoRA, no adapter deltas -- this is the Phase-2 gate model.
-        cfg = EncoderConfig(pooling=pooling, use_lora=False)
-        model = PhikonEncoder(cfg)
+        # Base backbone: no LoRA, no adapter deltas -- this is the Phase-2 gate model.
+        cfg = EncoderConfig(backbone=backbone or DEFAULT_BACKBONE,
+                            pooling=pooling, use_lora=False)
+        model = WaivEncoder(cfg)
     else:
         ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
         cfg = ckpt.get("encoder_config")
         cfg = EncoderConfig(**cfg) if isinstance(cfg, dict) else cfg
         cfg.pooling = pooling
-        model = PhikonEncoder(cfg)
+        if backbone is not None and backbone != cfg.backbone:
+            raise SystemExit(
+                f"checkpoint {checkpoint} carries backbone {cfg.backbone!r}; "
+                f"refusing the requested override {backbone!r}"
+            )
+        model = WaivEncoder(cfg)
         model.load_state_dict(ckpt["model"], strict=False)
     return model.eval()
 
@@ -232,7 +260,11 @@ def main() -> int:
         help="free-form features dir name, e.g. phikonv2_clsmean_ours. The metric scripts "
         "never call load_model(), so this needs no registry entry.",
     )
-    ap.add_argument("--checkpoint", default=None, help="omit for base phikon-v2")
+    ap.add_argument("--checkpoint", default=None, help="omit for the base backbone")
+    ap.add_argument("--backbone", default=None,
+                    help="HF id of the base backbone (default: owkin/phikon-v2, or "
+                         "WAIV_BACKBONE, or whatever --adapter/--checkpoint was trained "
+                         "on). e.g. kaiko-ai/midnight")
     ap.add_argument("--adapter", type=Path, default=None,
                     help="checkpoint dir written by save_checkpoint (contains adapter/ + projector.pt); mutually exclusive with --checkpoint")
     ap.add_argument("--lora-rank", type=int, default=16)
@@ -263,10 +295,18 @@ def main() -> int:
     print(f"[extract] {len(ds)} rows loaded in {time.time() - t0:.1f}s (using {n})")
 
     model = build_model(args.checkpoint, args.pooling, args.adapter, args.lora_rank,
-                      args.lora_alpha, args.proj_out_dim).to(args.device)
-    print(f"[extract] embed_dim={model.embed_dim} pooling={args.pooling}")
-    if model.embed_dim != 2048 and args.pooling == "clsmean":
-        raise RuntimeError(f"clsmean must be 2048-d, got {model.embed_dim}")
+                      args.lora_alpha, args.proj_out_dim, args.backbone).to(args.device)
+    print(f"[extract] backbone={model.cfg.backbone} hidden={model.hidden_size} "
+          f"embed_dim={model.embed_dim} pooling={args.pooling}")
+    # Derived, not literal: 2048 on phikon-v2 (1024x2), 3072 on midnight (1536x2). The
+    # check still earns its keep -- it catches a pooling/embed_dim desync, which is what
+    # would silently write half-width features into PathoROB's npz layout.
+    expected = model.hidden_size * (2 if args.pooling == "clsmean" else 1)
+    if model.embed_dim != expected:
+        raise RuntimeError(
+            f"pooling={args.pooling} on hidden={model.hidden_size} must give {expected}-d, "
+            f"got {model.embed_dim}"
+        )
 
     # Adapter-applied check on REAL tiles (build_model already ran it on synthetic input).
     if args.adapter is not None:

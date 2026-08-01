@@ -41,7 +41,11 @@ def main() -> int:
                     help="cls reproduces HEST's published phikon_v2 row (CLS-only, 1024-d); "
                          "clsmean matches our PathoROB representation but has no published "
                          "counterpart -- never compare a clsmean number to 0.3747")
-    ap.add_argument("--checkpoint", default=None, help="omit for base phikon-v2")
+    ap.add_argument("--checkpoint", default=None, help="omit for the base backbone")
+    ap.add_argument("--backbone", default=None,
+                    help="HF id of the base backbone (default owkin/phikon-v2, or "
+                         "WAIV_BACKBONE). Note the published 0.3747 row is phikon-v2 "
+                         "CLS only -- another backbone has no such counterpart")
     ap.add_argument("--adapter", type=Path, default=None,
                     help="LoRA checkpoint dir (adapter/ + projector.pt)")
     ap.add_argument("--lora-rank", type=int, default=16)
@@ -75,13 +79,17 @@ def main() -> int:
 
     encoder = H.load_encoder(args.checkpoint, args.adapter, args.pooling,
                              lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
-                             proj_out_dim=args.proj_out_dim)
+                             proj_out_dim=args.proj_out_dim, backbone=args.backbone)
     wrapped = H.HestEncoderWrapper(encoder)
-    expected = 2048 if args.pooling == "clsmean" else 1024
+    # Derived from the backbone's own hidden size, not a literal: 1024/2048 on phikon-v2,
+    # 1536/3072 on midnight. Still asserted -- a pooling/embed_dim desync would write
+    # half-width embeddings that HEST would happily regress on.
+    expected = encoder.hidden_size * (2 if args.pooling == "clsmean" else 1)
     if wrapped.embed_dim != expected:
         raise RuntimeError(f"pooling={args.pooling} should give {expected}-d, "
                            f"got {wrapped.embed_dim}")
-    print(f"[hest] pooling={args.pooling} embed_dim={wrapped.embed_dim} "
+    print(f"[hest] backbone={encoder.cfg.backbone} pooling={args.pooling} "
+          f"embed_dim={wrapped.embed_dim} "
           f"precision={args.precision} tasks={len(args.tasks)}", flush=True)
 
     exp_code = args.exp_code or f"{args.pooling}_{'base' if not (args.checkpoint or args.adapter) else 'ckpt'}"
@@ -111,12 +119,15 @@ def main() -> int:
     exp_dirs = sorted(paths.results_dir.glob(f"{exp_code}::*"))
     results = H.read_results(exp_dirs[-1]) if exp_dirs else {}
     payload = {
-        "exp_code": exp_code, "pooling": args.pooling, "embed_dim": wrapped.embed_dim,
+        "exp_code": exp_code, "backbone": encoder.cfg.backbone,
+        "pooling": args.pooling, "embed_dim": wrapped.embed_dim,
         "precision": args.precision, "seconds": round(dt, 1),
         "results": results, "hest_perf_per_encoder": per_enc,
         "results_dir": str(exp_dirs[-1]) if exp_dirs else None,
     }
-    if args.pooling == "cls":
+    # The published 0.3747 row is *phikon-v2, CLS*. Both halves matter: on any other
+    # backbone the comparison is meaningless, so do not emit it.
+    if args.pooling == "cls" and encoder.cfg.backbone == "owkin/phikon-v2":
         payload["vs_published_phikonv2"] = H.compare_to_published(results)
         payload["note"] = (
             "published row is HEST's own phikon_v2 (CLS, fp32); Waiv Table 1 quotes it "
@@ -125,8 +136,9 @@ def main() -> int:
         )
     else:
         payload["note"] = (
-            "clsmean has NO published counterpart -- this is our own reference for "
-            "checkpoint-to-checkpoint retention only. Do not compare to 0.3747."
+            f"backbone={encoder.cfg.backbone} pooling={args.pooling} has NO published "
+            "counterpart here -- this is our own reference for checkpoint-to-checkpoint "
+            "retention only. 0.3747 is phikon-v2 CLS and nothing else."
         )
     print(json.dumps(payload, indent=2))
     out = paths.results_dir / f"{exp_code}_summary.json"

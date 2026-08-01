@@ -39,7 +39,11 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 
 for DS in $DATASETS; do
   echo "--- $DS ---"
-  ARGS=(--dataset "$DS" --model-name "$MODEL_NAME" --batch-size 256 --num-workers 16)
+  ARGS=(--dataset "$DS" --model-name "$MODEL_NAME" --batch-size "${BATCH_SIZE:-256}" --num-workers 16)
+  # Backbone is a parameter now. Unset => owkin/phikon-v2 (the Phase-2 gate model);
+  # WAIV_BACKBONE=kaiko-ai/midnight for the ViT-g row. --pooling likewise.
+  if [ -n "${WAIV_BACKBONE:-}" ]; then ARGS+=(--backbone "$WAIV_BACKBONE"); fi
+  if [ -n "${WAIV_POOLING:-}" ]; then ARGS+=(--pooling "$WAIV_POOLING"); fi
   if [ -n "$CKPT" ]; then ARGS+=(--checkpoint "$CKPT"); fi
   if [ -n "$ADAPTER" ]; then
     ARGS+=(--adapter "$ADAPTER" --lora-rank "${LORA_RANK:-8}" --lora-alpha "${LORA_ALPHA:-32}" --proj-out-dim "${PROJ_OUT_DIM:-512}")
