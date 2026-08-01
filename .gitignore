@@ -25,3 +25,6 @@ slurm-*.err
 # vendored third-party eval harnesses (cloned, not committed)
 third_party/
 runs/
+
+# scratch: throwaway sizing probes, never part of a run
+.scratch/
