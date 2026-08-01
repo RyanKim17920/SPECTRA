@@ -109,10 +109,22 @@ else
 fi
 
 for TASK in $TASKS; do
-  echo "--- $(date) | $DATASET / $TASK ---"
+  # Per-task mode. pre_computing_embeddings WRITES the cache, so it must not be told to
+  # read it -- passing embedding_pre_loading to the precompute step makes it try to open
+  # the very labels.h5 it is supposed to create, and it dies in ~45s (jobs 369135/6/8).
+  # Everything downstream then finds nothing and fails identically, which is why the
+  # first version of this fix looked like it engaged and still failed.
+  TASK_MODE="$MODE"
+  case "$TASK" in pre_computing_embeddings) TASK_MODE=online_loading ;; esac
+  echo "--- $(date) | $DATASET / $TASK (loading-mode=$TASK_MODE) ---"
   srun --unbuffered "$REPO/.venv-thunder/bin/thunder" benchmark \
-      "$MODEL" "$DATASET" "$TASK" --loading-mode "$MODE"
-  echo "--- done $DATASET / $TASK rc=$? ---"
+      "$MODEL" "$DATASET" "$TASK" --loading-mode "$TASK_MODE"
+  rc=$?
+  echo "--- done $DATASET / $TASK rc=$rc ---"
+  if [ "$rc" -ne 0 ]; then
+    echo "FATAL: $DATASET/$TASK failed rc=$rc -- aborting remaining tasks"
+    exit "$rc"
+  fi
 done
 
 echo "=== done $(date) ==="
