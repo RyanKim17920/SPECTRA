@@ -155,9 +155,14 @@ def run_pathorob(args, ckpt: Path, step: int, paths: PathoRobPaths) -> dict:
 
 def write_curve(args, curve: list[dict]) -> None:
     out = args.run_dir / "ri_curve.json"
-    out.write_text(json.dumps(
+    # Atomic: a plain write_text leaves a truncated file visible to anyone reading the
+    # curve mid-run, and a job killed at the wall clock mid-write would leave unparseable
+    # JSON that the backfill job needs in order to know which steps are already done.
+    tmp = out.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(
         {"run_dir": str(args.run_dir), "datasets": list(args.datasets),
          "targets": TARGETS, "points": curve}, indent=2))
+    os.replace(tmp, out)
     print(f"\n[eval] --- RI vs step ({out}) ---")
     hdr = f"{'step':>7}" + "".join(f"{d:>15}" for d in args.datasets) + \
           f"{'AVG RI':>9}{'AVG bal-acc':>13}{'sep(scan)':>11}{'top1(scan)':>12}"
