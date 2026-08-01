@@ -39,8 +39,13 @@ def _score(blob: dict, task: str) -> tuple[float | None, float | None]:
 
     knn nests under the k value and simple_shot under the shot count, while
     linear_probing and segmentation are flat -- so the shape has to be sniffed rather than
-    assumed. THUNDER's headline knn row is k=20 (config/task/knn.yaml); we fall back to
-    the largest k present if it was not persisted.
+    assumed.
+
+    knn searches k over [1,3,5,10,20,30,40,50] on val and persists ONLY the selected k
+    (mhist came back as a lone "3"), so there is exactly one key to take and picking a
+    fixed k=20 would just miss the file. simple_shot is the opposite -- every shot count
+    is kept -- so there we do want a specific one, and 16 is the shot count in THUNDER's
+    published simple_shot row.
     """
     def _flat(d: dict) -> tuple[float | None, float | None]:
         f1 = d.get("f1", {}).get("metric_score") if isinstance(d.get("f1"), dict) else d.get("f1")
@@ -50,12 +55,14 @@ def _score(blob: dict, task: str) -> tuple[float | None, float | None]:
     if task in ("linear_probing", "segmentation"):
         return _flat(blob)
 
-    # nested: {"20": {...}} for knn, {"16": {...}} for simple_shot
+    # nested: {"<selected k>": {...}} for knn, {"1".."16": {...}} for simple_shot
     keys = [k for k in blob if k.isdigit()]
     if not keys:
         return _flat(blob)
-    want = "20" if task == "knn" else "16"
-    key = want if want in keys else max(keys, key=int)
+    if task == "knn":
+        key = keys[0] if len(keys) == 1 else max(keys, key=int)
+    else:
+        key = "16" if "16" in keys else max(keys, key=int)
     return _flat(blob[key])
 
 
