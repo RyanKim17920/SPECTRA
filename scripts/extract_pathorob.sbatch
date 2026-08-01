@@ -26,6 +26,7 @@ cd "$REPO"
 MODEL_NAME="${1:-phikonv2_clsmean_ours}"
 DATASETS="${2:-camelyon}"
 CKPT="${3:-}"
+ADAPTER="${4:-}"
 
 export HF_HOME=/data/ryan.kim/hf_home
 export HF_HUB_ENABLE_HF_TRANSFER=1
@@ -40,6 +41,9 @@ for DS in $DATASETS; do
   echo "--- $DS ---"
   ARGS=(--dataset "$DS" --model-name "$MODEL_NAME" --batch-size 256 --num-workers 16)
   if [ -n "$CKPT" ]; then ARGS+=(--checkpoint "$CKPT"); fi
+  if [ -n "$ADAPTER" ]; then
+    ARGS+=(--adapter "$ADAPTER" --lora-rank "${LORA_RANK:-8}" --lora-alpha "${LORA_ALPHA:-32}" --proj-out-dim "${PROJ_OUT_DIM:-512}")
+  fi
   # fp32 on purpose: the gate is a numeric comparison against PathoROB's committed
   # reference, so we do not want autocast rounding in the one run that validates the
   # harness. Add `--amp bfloat16` for throughput once the gate has passed.

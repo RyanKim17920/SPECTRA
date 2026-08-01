@@ -61,7 +61,9 @@ def main() -> int:
 
     rows, verdicts = [], []
     for ds in args.datasets:
-        ours = float(read_results(args.model, ds, paths=paths)["robustness_index"])
+        res = read_results(args.model, ds, paths=paths)
+        ours = float(res["robustness_index"])
+        ours_bal = res.get("balanced_accuracy", None)
         ref = float(read_results(REFERENCE_MODEL, ds, paths=paths)["robustness_index"])
         waiv = TARGETS["phikon_v2_base"][ds]
         d_ref, d_waiv = ours - ref, ours - waiv
@@ -70,18 +72,19 @@ def main() -> int:
         rows.append(
             {"dataset": ds, "ours": ours, "pathorob_reference": ref, "waiv_table1": waiv,
              "delta_vs_reference": d_ref, "delta_vs_waiv": d_waiv,
-             "reference_vs_waiv": ref - waiv, "pass": ok}
+             "reference_vs_waiv": ref - waiv, "bal_acc": ours_bal, "pass": ok}
         )
 
     w = max(len(r["dataset"]) for r in rows) + 2
     print()
     print(f"{'dataset':<{w}}{'ours':>10}{'PathoROB ref':>14}{'Waiv T1':>10}"
-          f"{'d(ref)':>10}{'d(Waiv)':>10}   gate")
-    print("-" * (w + 58))
+          f"{'d(ref)':>10}{'d(Waiv)':>10}{'bal_acc':>10}   gate")
+    print("-" * (w + 68))
     for r in rows:
+        bal = f"{r['bal_acc']:.4f}" if r['bal_acc'] is not None else "-"
         print(f"{r['dataset']:<{w}}{r['ours']:>10.6f}{r['pathorob_reference']:>14.6f}"
               f"{r['waiv_table1']:>10.3f}{r['delta_vs_reference']:>+10.6f}"
-              f"{r['delta_vs_waiv']:>+10.6f}   {'PASS' if r['pass'] else 'FAIL'}")
+              f"{r['delta_vs_waiv']:>+10.6f}{bal:>10}   {'PASS' if r['pass'] else 'FAIL'}")
     if len(rows) == 3:
         avg = sum(r["ours"] for r in rows) / 3
         avg_ref = sum(r["pathorob_reference"] for r in rows) / 3
