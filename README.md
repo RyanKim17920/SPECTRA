@@ -111,7 +111,7 @@ is what makes index-aligned positives possible.
 
 ```bash
 ./.venv/bin/python -m waivphaet.data.repack \
-  --h5-dir /data/ryan.kim/plism --out-dir /data/ryan.kim/plism_packed --verify --benchmark
+  --h5-dir /data/ryan.kim/plism --out-dir /data/ryan.kim/plism/repacked --verify --benchmark
 ```
 
 16,278 tiny HDF5 datasets per slide means random pair sampling is I/O bound. Repacking to
