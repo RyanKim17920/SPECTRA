@@ -30,6 +30,7 @@ Camelyon 0.019). Report cross-stain and cross-scanner separately (PLAN.md 6).
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -70,7 +71,10 @@ class PathoRobPaths:
 
     @property
     def results_dir(self) -> Path:
-        return (self.root / "results").resolve()
+        """Their ``--results_dir`` default is ``results/robustness_index``, i.e. it already
+        includes the metric name -- passing bare ``results/`` silently writes one level
+        too high and the summary is then unreadable at the documented path."""
+        return (self.root / "results" / "robustness_index").resolve()
 
     def check(self) -> None:
         if not (self.root / "pathorob").is_dir():
@@ -139,7 +143,9 @@ def run_robustness_index(
     paths = paths or PathoRobPaths()
     paths.check()
     if python_exe is None:
-        cand = Path(DEFAULT_PYTHON).resolve()
+        # .absolute(), NOT .resolve(): the venv's python is a symlink to the interpreter
+        # it was built from, and resolving it silently drops us out of the venv.
+        cand = Path(DEFAULT_PYTHON).absolute()
         python_exe = cand if cand.exists() else sys.executable
     cmd = [
         str(python_exe), "-m", "pathorob.robustness_index.robustness_index",
@@ -156,7 +162,10 @@ def run_robustness_index(
         # per-dataset default (True for tcga, False elsewhere), which is what we want.
         cmd += ["--paired_evaluation", str(paired_evaluation).lower()]
     cmd += extra_args or []
-    return subprocess.run(cmd, cwd=str(paths.root.resolve()), check=True)
+    # PYTHONNOUSERSITE: ~/.local/lib/python3.12/site-packages is on this machine and its
+    # (broken) pandas shadows the venv's pinned one. Isolate or the pins mean nothing.
+    env = {**os.environ, "PYTHONNOUSERSITE": "1"}
+    return subprocess.run(cmd, cwd=str(paths.root.resolve()), check=True, env=env)
 
 
 def read_results(
@@ -172,7 +181,7 @@ def read_results(
 
     paths = paths or PathoRobPaths()
     p = (
-        paths.results_dir / "robustness_index" / model_name / dataset
+        paths.results_dir / model_name / dataset
         / f"{max_patches_per_combi}_{k_opt_param}" / "results_summary.json"
     )
     if not p.exists():
