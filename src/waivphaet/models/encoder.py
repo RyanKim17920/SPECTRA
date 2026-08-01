@@ -63,6 +63,15 @@ class EncoderConfig:
     proj_hidden_dim: int = 1024
     proj_out_dim: int = 512
     proj_use_bn: bool = True
+    # --- memory/compute trade
+    #: Recompute block activations in the backward pass instead of storing them. The
+    #: same-condition constraint makes the *in-group* negative count ``group_size - 1``,
+    #: so the only way to buy more negatives is a bigger forward batch -- and at
+    #: ~0.21 GiB/image (measured, 128 img/step -> 27.35 GiB) a plain ViT-L/16 run caps
+    #: out near 340 images on an 80 GiB H100. Checkpointing drops that to ~0.02 GiB/image
+    #: for roughly +35% step time, which is the trade that makes 384-anchor groups
+    #: possible at all. Off by default so the smoke-run numbers stay reproducible.
+    grad_checkpointing: bool = False
     # --- misc
     freeze_backbone: bool = False  # True => frozen-feature probe (PLAN.md 3 phase 6)
     dtype: str = "float32"
@@ -178,6 +187,20 @@ class PhikonEncoder(nn.Module):
                     bias="none",
                 ),
             )
+        if cfg.grad_checkpointing:
+            # use_reentrant=False: the reentrant autograd.Function variant needs at least
+            # one input with requires_grad, and with LoRA the embedding output is frozen,
+            # so the reentrant path silently produces *no* gradient for the early blocks.
+            target = getattr(backbone, "base_model", backbone)
+            target = getattr(target, "model", target)
+            target.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs={"use_reentrant": False}
+            )
+            if not getattr(target, "is_gradient_checkpointing", False):
+                raise RuntimeError(
+                    "gradient checkpointing did not take on the backbone; refusing to run "
+                    "with the batch size it was requested for"
+                )
         self.backbone = backbone
 
         self.embed_dim = self.hidden_size * (2 if cfg.pooling == "clsmean" else 1)

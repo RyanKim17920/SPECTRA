@@ -53,6 +53,10 @@ def parse_args():
     ap.add_argument("--symmetric", action="store_true",
                     help="ABLATION ONLY: adds the anchor->positive direction, whose candidate "
                          "row spans conditions and reintroduces the acquisition shortcut")
+    ap.add_argument("--grad-checkpointing", action="store_true",
+                    help="recompute block activations in backward. The negative count is "
+                         "group_size-1, so more negatives means a bigger forward batch; "
+                         "without this, 80 GiB caps out around 340 images/step.")
     ap.add_argument("--proj-out-dim", type=int, default=512)
     ap.add_argument("--pooling", default="clsmean", choices=["cls", "mean", "clsmean"])
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -106,6 +110,7 @@ def main() -> int:
     model = build_encoder(
         lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
         proj_out_dim=args.proj_out_dim, pooling=args.pooling,
+        grad_checkpointing=args.grad_checkpointing,
     )
     print("[train] params:", model.trainable_parameter_summary())
 
@@ -116,20 +121,22 @@ def main() -> int:
         grad_accum=args.grad_accum, num_workers=args.workers, amp_dtype=args.amp,
         ckpt_every=args.ckpt_every, eval_every=args.eval_every, seed=args.seed,
         weight_decay=args.weight_decay, log_every=args.log_every, symmetric=args.symmetric,
-        encoder={"lora_rank": args.lora_rank, "pooling": args.pooling,
-                 "proj_out_dim": args.proj_out_dim},
+        encoder={"lora_rank": args.lora_rank, "lora_alpha": args.lora_alpha,
+                 "pooling": args.pooling, "proj_out_dim": args.proj_out_dim,
+                 "grad_checkpointing": args.grad_checkpointing},
     )
 
     def on_checkpoint(model, step, metrics, ckpt_dir):
-        """Hook for PathoROB (primary) + HEST/THUNDER/Patho-Bench retention.
+        """PLAN.md 3 phase 8 wants the eval at *every* checkpoint, not just the end.
 
-        Deliberately left as a stub with a loud reminder rather than silently doing
-        nothing: PLAN.md 3 risk 1 says forgetting is the *default* outcome, and a
-        robustness win that costs retention is a failed reproduction.
+        It is NOT run inline. Extraction + the CPU kNN is ~15-20 min per checkpoint,
+        which would roughly double wall time and stall the GPU. ``eval_checkpoints.py``
+        follows this directory on a second GPU instead and evaluates each ``step_*`` as
+        it lands, so the RI-vs-step curve is live while training keeps the first GPU
+        saturated. ``metrics.json`` is written last by ``save_checkpoint``, so its
+        presence is the "this checkpoint is complete" sentinel the follower waits on.
         """
-        print(f"[ckpt] step {step} -> {ckpt_dir}  {json.dumps(metrics)}")
-        print("[ckpt] TODO: run waivphaet.eval.pathorob_adapter + retention suites here "
-              "(PLAN.md 3 phase 8 / PLAN.md 6).")
+        print(f"[ckpt] step {step} -> {ckpt_dir}  {json.dumps(metrics)}", flush=True)
 
     summary = train(
         model, train_loader, cfg, heldout_loader=heldout_loader,
