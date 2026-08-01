@@ -148,8 +148,27 @@ def main() -> int:
     tiles = np.sort(rng.choice(NUM_TILES, size=args.n_tiles, replace=False))
 
     device = torch.device(args.device)
+    # A checkpoint must carry its own backbone. eval_checkpoints.py deliberately does not
+    # pass --backbone (see its run_pathorob comment) because extract_pathorob_features
+    # derives it from the adapter; the probe did not, so a Midnight adapter (1536-d) was
+    # loaded into a phikon-v2 model (1024-d) and died on a size mismatch across all 24
+    # layers. Derive it here too, and hard-fail on an explicit contradiction rather than
+    # silently preferring one source.
+    backbone = args.backbone
+    if args.adapter is not None:
+        acfg = Path(args.adapter) / "adapter" / "adapter_config.json"
+        if acfg.exists():
+            saved = json.loads(acfg.read_text()).get("base_model_name_or_path")
+            if saved:
+                if args.backbone != DEFAULT_BACKBONE and args.backbone != saved:
+                    raise SystemExit(
+                        f"--backbone {args.backbone} contradicts the adapter's own "
+                        f"base_model_name_or_path={saved} ({acfg})"
+                    )
+                backbone = saved
+    print(f"[probe] backbone={backbone}", flush=True)
     model = build_encoder(
-        backbone=args.backbone,
+        backbone=backbone,
         lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
         proj_out_dim=args.proj_out_dim, pooling=args.pooling,
     )
