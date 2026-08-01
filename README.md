@@ -225,6 +225,68 @@ Default split holds out scanners `GT450`, `S210` and stains `HRH`, `KR`, `MY` �
 41 held-out conditions (`PLAN.md` §4 phase 7). It is *named*, not sampled, so it is
 reproducible without carrying a seed.
 
+### The first real run: job 369043 — Avg RI plateaus **on** the 0.806 target
+
+`scripts/train_real.sbatch`, 1×H100 for training + 1×H100 running
+`scripts/eval_checkpoints.py` as a live follower. Rank 32 / alpha 64, all 24 blocks,
+**2 groups × 192 = 191 negatives per anchor**, 4000 steps, all **91** slides, lr 1e-4,
+T 0.07, bf16, 1.91 s/step.
+
+Three things changed from the smoke run, each fixing a defect it exposed:
+
+1. **191 negatives, up from 31.** The smoke objective was *solved* — top-1 1.0 by step
+   70, loss 0.038 — so its late gradient was noise. Negatives come only from the
+   anchor's condition-homogeneous group, so more negatives requires a bigger *forward*
+   batch (768 images/step); grad accumulation cannot buy them. At the measured
+   0.21 GiB/image that is ~161 GiB, so this run enables gradient checkpointing
+   (21.77 GiB peak, ~+35% step time). **2 × 192 is not reachable without it.**
+2. **All 91 slides.** The smoke saw 59–72 mid-stream.
+3. **Rank 32 and 4000 steps** vs rank 8 and 300 (3.07M tiles vs 38k).
+
+| step | camelyon | tolkach_esca | tcga | **Avg RI** | Avg bal-acc | sep cross-scanner | top-1 cross-scanner |
+|---|---|---|---|---|---|---|---|
+| base | 0.018951 | 0.768112 | 0.618771 | **0.4686** | 0.9442 | 0.3760 | 0.8579 |
+| 500 | 0.698211 | 0.928967 | 0.783647 | **0.8036** | 0.9454 | 0.3936 | 0.9951 |
+| 1000 | 0.716945 | 0.927932 | 0.779072 | **0.8080** | 0.9437 | 0.4164 | 0.9964 |
+| 1500 | 0.704983 | 0.927470 | 0.777217 | **0.8032** | 0.9425 | 0.4267 | 0.9965 |
+| 2000 | 0.713128 | 0.925482 | 0.776589 | **0.8051** | 0.9418 | 0.4270 | 0.9964 |
+| Waiv T1 | 0.702 | 0.932 | 0.785 | **0.806** | — | — | — |
+
+**The curve is a plateau, not a climb.** Avg RI is 0.803–0.808 across every checkpoint
+from 500 on — it lands on the 0.806 target by step 500 and then does not move. Steps
+500→2000 buy nothing on the headline metric. That is the single most useful result
+here: the next run should sweep *away* from this operating point rather than train
+longer, and the cost of a data point is ~500 steps, not 4000.
+
+**Read the two probe columns separately, because they disagree.** Rank-based top-1
+jumps and stays (0.858 → 0.995); mean-cosine **separation** improves far less
+(0.3760 → 0.4270) because *matched* and *random* rise together — the smoke run's
+"matched up, random up" signature persists. Separation did move monotonically this
+time, which the smoke run could not show: its before/after probes scored *different*
+condition sets (60 vs 67) because the pin landed in `ffc6e4c` after that job's probes
+ran. Both probes here are pinned to the identical 91-condition set. Matched cosine is
+still never the claim — it rises under collapse — but the collapse gauge
+`within_condition_random` *fell* from 500 → 1000 (0.5771 → 0.5535) while separation
+rose, which is the opposite of the collapse signature.
+
+**Objective saturation: fixed, but not eliminated.** Top-1 oscillates 0.90–0.99 through
+step 2000 (held-out-condition top-1 0.949 → 0.965) where the smoke run was pinned at
+1.0 from step 70. There is still gradient signal at step 2000. It is drifting upward
+though, so **2 × 256 (255 negatives) is the next escalation** — measured to fit at
+28.55 GiB, 2.91 s/step.
+
+**Retention:** balanced accuracy 0.9454 → 0.9418 against a 0.9442 base — flat, with a
+slow downward drift worth watching. `k_opt` is unchanged (11 / 46 / 61), so the kNN
+operating point is the base model's. HEST / THUNDER / Patho-Bench are still not wired,
+so this is the only forgetting detector in play (`PLAN.md` §3 risk 1).
+
+**The adapter is proven applied at every eval**, not assumed: the extractor compares
+against `disable_adapter()` and exits non-zero below 1e-4. Observed `rel_l2_delta` is
+0.73–0.93 across all datasets and checkpoints, recorded per-point in `ri_curve.json`.
+
+Caveats unchanged: one seed, no error bars, and camelyon's 0.019 base is pathologically
+low so its jump is the least surprising of the three.
+
 ## Reporting discipline (`PLAN.md` §6)
 
 - Cross-stain and cross-scanner **separately** — the composite hides the hard axis.
