@@ -3,9 +3,12 @@
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=400G
-#SBATCH --time=12:00:00
+# 32 CPUs / 250G / 6h, not "as much as possible": every 8xH100 node here is MIXED+PLANNED,
+# so a 48-CPU 12-hour ask sits behind Priority for ~11 h while a 32-CPU 6-hour one
+# backfills into the gap. 6000 steps x 1.91 s is 3.2 h and the follower drains behind it.
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=250G
+#SBATCH --time=06:00:00
 #SBATCH --output=slurm-%x-%j.out
 #SBATCH --error=slurm-%x-%j.err
 #
@@ -109,7 +112,7 @@ CUDA_VISIBLE_DEVICES=1 "$PY" scripts/eval_checkpoints.py \
   --packed-dir "$PACKED_DIR" \
   --conditions-file "$OUT_DIR/conditions_used.json" \
   --lora-rank "$LORA_RANK" --lora-alpha "$LORA_ALPHA" \
-  --num-workers 12 \
+  --num-workers 8 \
   --follow --stop-file "$OUT_DIR/TRAIN_DONE" --poll-s 60 \
   > "$OUT_DIR/eval_follow.log" 2>&1 &
 FOLLOWER=$!
@@ -132,7 +135,7 @@ CUDA_VISIBLE_DEVICES=0 "$PY" scripts/train_lora.py \
   --n-groups "$N_GROUPS" \
   --group-size "$GROUP_SIZE" \
   --grad-checkpointing \
-  --workers 24 \
+  --workers 20 \
   --amp bfloat16 \
   --log-every 20 \
   --ckpt-every "$CKPT_EVERY" \
