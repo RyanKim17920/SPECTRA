@@ -125,6 +125,26 @@ def repack_slide(
     return dst, time.perf_counter() - t0
 
 
+def present_filenames(out_dir: Path) -> list[str]:
+    """Source ``.h5`` filenames whose repack is complete **and byte-verified**.
+
+    ``scripts/acquire_plism.py`` streams slides in and writes a ``manifest.json`` entry
+    only after a repack has been byte-checked against its source. A bare ``*.npy`` glob
+    would also pick up a slide that landed a moment ago and has not been verified yet, so
+    when a manifest exists it is the authority and the glob is only the fallback.
+    """
+    out_dir = Path(out_dir)
+    man = out_dir / "manifest.json"
+    if man.exists():
+        entries = json.loads(man.read_text())
+        return [
+            v.get("filename", f"{k}_to_{'GMH_S60'}.tif.h5")
+            for k, v in entries.items()
+            if v.get("verified") and (out_dir / f"{k}_to_GMH_S60.npy").exists()
+        ]
+    return [p.name.replace(".npy", ".tif.h5") for p in out_dir.glob("*.npy")]
+
+
 def open_slide(out_dir: Path, slide_stem: str) -> np.memmap:
     """Memory-map a repacked slide read-only. ``slide_stem`` e.g. ``GIVH_AT2_to_GMH_S60``."""
     return np.load(Path(out_dir) / f"{slide_stem}.npy", mmap_mode="r")
@@ -206,7 +226,7 @@ def benchmark(
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--h5-dir", type=Path, default=Path("/data/ryan.kim/plism"))
-    p.add_argument("--out-dir", type=Path, default=Path("/data/ryan.kim/plism_packed"))
+    p.add_argument("--out-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
     p.add_argument("--overwrite", action="store_true")
     p.add_argument("--verify", action="store_true", help="byte-check a random tile sample")
     p.add_argument("--verify-samples", type=int, default=64)

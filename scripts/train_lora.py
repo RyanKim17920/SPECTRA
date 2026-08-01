@@ -20,13 +20,14 @@ import torch
 
 from waivphaet.data.conditions import all_conditions, available_conditions, make_split
 from waivphaet.data.pairs import build_pair_loader
+from waivphaet.data.repack import present_filenames
 from waivphaet.models.encoder import build_encoder
 from waivphaet.train.contrastive import TrainConfig, train
 
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism_packed"))
+    ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
     ap.add_argument("--out-dir", type=Path, required=True)
     # split (PLAN.md 3 phase 7): 2 of 7 scanners, 3 of 13 stains
     ap.add_argument("--heldout-scanners", nargs="*", default=["GT450", "S210"])
@@ -47,6 +48,11 @@ def parse_args():
     ap.add_argument("--ckpt-every", type=int, default=500)
     ap.add_argument("--eval-every", type=int, default=500)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--weight-decay", type=float, default=0.05)
+    ap.add_argument("--log-every", type=int, default=20)
+    ap.add_argument("--symmetric", action="store_true",
+                    help="ABLATION ONLY: adds the anchor->positive direction, whose candidate "
+                         "row spans conditions and reintroduces the acquisition shortcut")
     ap.add_argument("--proj-out-dim", type=int, default=512)
     ap.add_argument("--pooling", default="clsmean", choices=["cls", "mean", "clsmean"])
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -59,14 +65,25 @@ def main() -> int:
     torch.manual_seed(args.seed)
 
     split = make_split(args.heldout_scanners, args.heldout_stains)
-    present = [p.name for p in Path(args.packed_dir).glob("*.npy")]
-    present = [n.replace(".npy", ".tif.h5") for n in present]
+    # verified-complete slides only: the acquisition job may still be streaming in
+    present = present_filenames(args.packed_dir)
     train_conds = available_conditions(split.train, present)
     heldout_conds = available_conditions(split.heldout, present)
     print(f"[train] {split.summary()}")
     print(f"[train] repacked & usable: {len(train_conds)} train / {len(heldout_conds)} heldout")
+    print(f"[train] train conditions:   {sorted(c.key for c in train_conds)}")
+    print(f"[train] heldout conditions: {sorted(c.key for c in heldout_conds)}")
     if len(train_conds) < 2:
         raise SystemExit("need >=2 repacked training conditions; run `waiv-repack` first")
+
+    # PLAN.md 3 risk 3: held-out *conditions* are the only in-training check against
+    # tile-identity memorisation, so prove the exclusion instead of trusting the split.
+    assert set(train_conds).isdisjoint(heldout_conds), "train/heldout condition sets overlap"
+    leaked = [c.key for c in train_conds
+              if c.scanner in set(args.heldout_scanners) or c.stain in set(args.heldout_stains)]
+    assert not leaked, f"held-out scanner/stain present in the training conditions: {leaked}"
+    print(f"[train] held-out exclusion verified: no {args.heldout_scanners} scanner and no "
+          f"{args.heldout_stains} stain among the {len(train_conds)} training conditions")
 
     train_loader = build_pair_loader(
         args.packed_dir, conditions=train_conds, n_groups=args.n_groups,
@@ -98,6 +115,7 @@ def main() -> int:
         warmup_steps=args.warmup_steps, n_groups=args.n_groups, group_size=args.group_size,
         grad_accum=args.grad_accum, num_workers=args.workers, amp_dtype=args.amp,
         ckpt_every=args.ckpt_every, eval_every=args.eval_every, seed=args.seed,
+        weight_decay=args.weight_decay, log_every=args.log_every, symmetric=args.symmetric,
         encoder={"lora_rank": args.lora_rank, "pooling": args.pooling,
                  "proj_out_dim": args.proj_out_dim},
     )
@@ -113,9 +131,14 @@ def main() -> int:
         print("[ckpt] TODO: run waivphaet.eval.pathorob_adapter + retention suites here "
               "(PLAN.md 3 phase 8 / PLAN.md 6).")
 
-    train(model, train_loader, cfg, heldout_loader=heldout_loader,
-          device=args.device, on_checkpoint=on_checkpoint)
-    print(f"[train] done -> {args.out_dir}")
+    summary = train(
+        model, train_loader, cfg, heldout_loader=heldout_loader,
+        device=args.device, on_checkpoint=on_checkpoint,
+        # condition indices are positions in `train_conds`; anything outside that range
+        # would mean a held-out condition reached the batch (it cannot, and we check).
+        allowed_conditions=set(range(len(train_conds))),
+    )
+    print(f"[train] done -> {args.out_dir}  {json.dumps({k: v for k, v in summary.items() if k != 'history'})}")
     return 0
 
 

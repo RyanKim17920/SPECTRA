@@ -13,7 +13,9 @@ import torch
 from waivphaet.data.conditions import (
     SCANNERS, STAINS, all_conditions, make_split, parse_filename,
 )
-from waivphaet.data.pairs import PairBatchSampler
+from waivphaet.data.pairs import (
+    PairBatch, PairBatchSampler, assert_same_condition_negatives, collate_pair_batch,
+)
 from waivphaet.train.contrastive import masked_info_nce
 
 
@@ -90,3 +92,94 @@ def test_masked_infonce_ignores_cross_group_similarity():
     b[2] = torch.tensor([1.0, 0.0])  # duplicate of row 0, but a different group
     loss_b, _ = masked_info_nce(b, b.clone(), g, temperature=0.1)
     assert torch.allclose(loss_a, loss_b, atol=1e-5)
+
+
+# --- the negative constraint, asserted rather than eyeballed ---------------------------
+
+
+def _fake_collated(n_groups=3, group_size=8, n_cond=91, seed=0):
+    """A collated batch dict with the pixel tensors omitted (the checks never read them)."""
+    s = PairBatchSampler(
+        all_conditions()[:n_cond], n_groups=n_groups, group_size=group_size,
+        batches_per_epoch=1, seed=seed,
+    )
+    b = next(iter(s))
+    anchor_cond = np.broadcast_to(b.anchor_cond[:, None], b.tile_idx.shape)
+    item = {
+        "tile_idx": torch.from_numpy(b.tile_idx),
+        "anchor_cond": torch.from_numpy(np.ascontiguousarray(anchor_cond)),
+        "positive_cond": torch.from_numpy(b.positive_cond),
+        "group_id": torch.arange(n_groups).repeat_interleave(group_size),
+    }
+    return b, collate_pair_batch(item)
+
+
+def test_collated_batch_satisfies_the_negative_constraint():
+    """Every group the loss will mask over must be condition-homogeneous."""
+    _, batch = _fake_collated()
+    stats = assert_same_condition_negatives(batch, allowed_conditions=set(range(91)))
+    assert stats["negatives_per_anchor"] == 7.0
+    assert stats["n_groups"] == 3.0
+
+
+def test_assertion_catches_a_condition_mixed_group():
+    """The check must FAIL on the bug it exists to catch, or it is decoration."""
+    _, batch = _fake_collated()
+    batch["anchor_cond"] = batch["anchor_cond"].clone()
+    batch["anchor_cond"][0] = (batch["anchor_cond"][0] + 1) % 91  # one intruder
+    with pytest.raises(AssertionError, match="mixes anchor conditions"):
+        assert_same_condition_negatives(batch)
+
+
+def test_assertion_catches_a_heldout_condition_leak():
+    _, batch = _fake_collated()
+    with pytest.raises(AssertionError, match="held-out condition has leaked"):
+        assert_same_condition_negatives(batch, allowed_conditions={0})
+
+
+def test_assertion_catches_a_repeated_tile_in_a_group():
+    _, batch = _fake_collated()
+    batch["tile_idx"] = batch["tile_idx"].clone()
+    batch["tile_idx"][1] = batch["tile_idx"][0]  # anchor 1 is now anchor 0's own tile
+    with pytest.raises(AssertionError, match="repeats a tile index"):
+        assert_same_condition_negatives(batch)
+
+
+def test_pairbatch_validate_rejects_a_same_condition_positive():
+    b = PairBatch(
+        tile_idx=np.array([[0, 1]]),
+        anchor_cond=np.array([3]),
+        positive_cond=np.array([[3, 5]]),  # first "positive" is the anchor's own condition
+    )
+    with pytest.raises(AssertionError, match="cross-acquisition"):
+        b.validate(91)
+
+
+def test_infonce_queries_positives_against_the_condition_homogeneous_anchors():
+    """Orientation is load-bearing, not cosmetic.
+
+    The candidate row must be the ANCHORS (one shared condition, so acquisition carries
+    no signal), with the positives as queries. Running it the other way makes the
+    candidate row span conditions and reintroduces the acquisition shortcut.
+    """
+    import torch.nn.functional as F
+
+    torch.manual_seed(0)
+    g = torch.arange(16) // 8
+    a, p = torch.randn(16, 12), torch.randn(16, 12)
+    an, pn = F.normalize(a, dim=-1), F.normalize(p, dim=-1)
+    mask = g[:, None] == g[None, :]
+    tgt = torch.arange(16)
+
+    want = F.cross_entropy(((pn @ an.t()) / 0.07).masked_fill(~mask, float("-inf")), tgt)
+    wrong = F.cross_entropy(((an @ pn.t()) / 0.07).masked_fill(~mask, float("-inf")), tgt)
+
+    got, _ = masked_info_nce(a, p, g, temperature=0.07)
+    assert torch.allclose(got, want, atol=1e-5)
+    assert not torch.allclose(want, wrong, atol=1e-3)  # the two really are different
+
+
+def test_symmetric_is_off_by_default():
+    """PLAN.md 2: the anchor->positive direction has cross-condition candidates."""
+    from waivphaet.train.contrastive import TrainConfig
+    assert TrainConfig().symmetric is False

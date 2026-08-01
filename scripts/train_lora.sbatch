@@ -41,7 +41,7 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 # --- preflight ------------------------------------------------------------------------
 # Repack must have run: 16,278 tiny HDF5 datasets per slide makes random pair sampling
 # I/O bound (~112-125x slower than the contiguous memmap, measured).
-PACKED_DIR=/data/ryan.kim/plism_packed
+PACKED_DIR=/data/ryan.kim/plism/repacked
 if [ ! -f "$PACKED_DIR/keys.json" ]; then
   echo "FATAL: $PACKED_DIR not repacked. Run:"
   echo "  ./.venv/bin/python -m waivphaet.data.repack --h5-dir /data/ryan.kim/plism \\"

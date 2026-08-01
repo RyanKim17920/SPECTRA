@@ -12,19 +12,29 @@ so enforcing the constraint here is one mask::
 
     valid_negative[i, j]  <=>  group_id[i] == group_id[j]
 
-For anchor ``i`` the logit row is then: one positive (its own registered pair, from a
-different condition) against the ``group_size - 1`` same-condition negatives. Entries
-outside the group are set to ``-inf`` and contribute nothing to the softmax.
+**Which way the softmax runs is not cosmetic.** The *anchors* are the condition-homogeneous
+side: within a group every anchor shares one (scanner, stain). The *positives* are not --
+each is drawn from its own randomly chosen different condition. So the query has to be the
+positive and the candidate set has to be the anchors::
 
-Note what this costs: the effective negative count is ``group_size - 1``, not
+    logits[k, j] = positive_k . anchor_j / T      for j in group(k),  target j = k
+
+Read the candidate row: all ``group_size`` anchors come from one single condition, so
+acquisition carries **zero** discriminative information among the candidates and the only
+way to find the match is tissue identity. That is ScanGen's "different specimen, same
+scanner" repulsion.
+
+Run it the other way (``anchor_k`` against all ``positive_j``) and the candidates span
+conditions again -- a negative can be pushed away because it was scanned differently
+rather than because it is different tissue, which is precisely the shortcut PLAN.md 2
+forbids. Worse, in a mixed row containing the anchor's own same-condition siblings, "pick
+the candidate whose acquisition differs from mine" *is* the correct answer, so the
+objective would actively reward retaining scanner signal. ``symmetric=True`` adds that
+direction and therefore defaults to **False**; it is kept only for ablation.
+
+Note what the constraint costs: the effective negative count is ``group_size - 1``, not
 ``batch - 1``. Contrastive learning likes many negatives, so prefer *fewer, larger*
 groups (e.g. 4 groups x 128) over many small ones.
-
-Symmetry: the loss is computed anchor->positive and positive->anchor and averaged. The
-reverse direction's negatives are the other *positives* in the group, which come from
-mixed conditions -- so it is masked to the group as well, and additionally we only ever
-use it for the diagonal target. It is included because it stabilises early training; set
-``symmetric=False`` to run the strict one-directional form.
 """
 
 from __future__ import annotations
@@ -39,6 +49,8 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
+from waivphaet.data.pairs import assert_same_condition_negatives
+
 NEG_INF = float("-inf")
 
 
@@ -47,18 +59,21 @@ def masked_info_nce(
     positive_z: torch.Tensor,
     group_id: torch.Tensor,
     temperature: float = 0.07,
-    symmetric: bool = True,
+    symmetric: bool = False,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """InfoNCE restricted to same-condition negatives.
 
     Args:
         anchor_z: ``(B, D)`` projections of the anchors. All anchors sharing a
             ``group_id`` come from the *same* condition -- that is the invariant the
-            sampler guarantees and this loss relies on.
+            sampler guarantees and this loss relies on. They are the **candidates**.
         positive_z: ``(B, D)`` projections of the registered positives (different
-            condition, same tile).
+            condition, same tile). They are the **queries**.
         group_id: ``(B,)`` group membership.
         temperature: softmax temperature. Unknown hyperparameter (PLAN.md 3 risk 4).
+        symmetric: also average in the anchor->positive direction. Its candidate row
+            spans conditions, so it reintroduces the acquisition shortcut; off by
+            default, kept for ablation only (see the module docstring).
 
     Returns:
         (loss, metrics) where metrics carries top-1 pair-retrieval accuracy within the
@@ -67,12 +82,14 @@ def masked_info_nce(
     a = F.normalize(anchor_z.float(), dim=-1)
     p = F.normalize(positive_z.float(), dim=-1)
 
-    logits = (a @ p.t()) / temperature  # (B, B)
     same_group = group_id[:, None] == group_id[None, :]
     if not bool(same_group.diagonal().all()):  # pragma: no cover - defensive
         raise ValueError("group_id mask does not cover the diagonal (its own positive)")
 
-    logits = logits.masked_fill(~same_group, NEG_INF)
+    # query = positive (its own condition), candidates = the group's anchors (ONE shared
+    # condition). Condition is constant down the candidate row, so it cannot be used to
+    # find the match. This orientation is the whole point -- see the module docstring.
+    logits = ((p @ a.t()) / temperature).masked_fill(~same_group, NEG_INF)
     target = torch.arange(a.shape[0], device=a.device)
     loss = F.cross_entropy(logits, target)
     if symmetric:
@@ -89,7 +106,7 @@ class TrainConfig:
     """Every value here is a guess. PLAN.md 3 risk 4: "no recipe means hyperparameter
     search, not a single run" -- LR / steps / LoRA rank / temperature are all unknown."""
 
-    packed_dir: str = "/data/ryan.kim/plism_packed"
+    packed_dir: str = "/data/ryan.kim/plism/repacked"
     out_dir: str = "runs/dev"
     # optimisation
     lr: float = 1e-4
@@ -97,7 +114,9 @@ class TrainConfig:
     warmup_steps: int = 200
     max_steps: int = 5000
     temperature: float = 0.07
-    symmetric: bool = True
+    #: see the module docstring -- the anchor->positive direction has cross-condition
+    #: candidates and reintroduces the acquisition shortcut. Ablation knob, not a default.
+    symmetric: bool = False
     grad_accum: int = 1
     grad_clip: float = 1.0
     # batching -- prefer FEWER, LARGER groups: negatives per anchor is group_size - 1
@@ -181,6 +200,7 @@ def train(
     heldout_loader=None,
     device: str | torch.device = "cuda",
     on_checkpoint=None,
+    allowed_conditions: set[int] | None = None,
 ) -> dict:
     """Run the contrastive fine-tune. Returns the final metrics dict.
 
@@ -203,13 +223,23 @@ def train(
     history: list[dict] = []
     step = 0
     t0 = time.time()
+    tiles_seen = 0
+    win_tiles, win_t0 = 0, time.time()
     pbar = tqdm(total=cfg.max_steps, desc="train", unit="step")
     optimizer.zero_grad(set_to_none=True)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     while step < cfg.max_steps:
         for batch in train_loader:
             if step >= cfg.max_steps:
                 break
+            # PLAN.md 2's load-bearing detail, asserted rather than assumed. Runs every
+            # step: it is a few microseconds on CPU-side index tensors, and a violation
+            # here would still produce a perfectly plausible falling loss curve.
+            batch_stats = assert_same_condition_negatives(
+                batch, allowed_conditions=allowed_conditions
+            )
             lr = cosine_lr(step, cfg)
             for g in optimizer.param_groups:
                 g["lr"] = lr
@@ -236,10 +266,31 @@ def train(
 
             step += 1
             pbar.update(1)
+            # two forward views per anchor, so a "step" moves 2 * batch tiles
+            n_tiles = int(anchor.shape[0]) * 2
+            tiles_seen += n_tiles
+            win_tiles += n_tiles
             if step % cfg.log_every == 0:
-                rec = {"step": step, "lr": lr, "elapsed_s": time.time() - t0, **metrics}
+                now = time.time()
+                rec = {
+                    "step": step,
+                    "lr": lr,
+                    "elapsed_s": now - t0,
+                    "tiles_seen": tiles_seen,
+                    "tiles_per_s": win_tiles / max(now - win_t0, 1e-9),
+                    **metrics,
+                    **{f"batch_{k}": v for k, v in batch_stats.items()},
+                }
+                if device.type == "cuda":
+                    rec["gpu_mem_alloc_gib"] = torch.cuda.max_memory_allocated(device) / 2**30
+                    rec["gpu_mem_reserved_gib"] = torch.cuda.max_memory_reserved(device) / 2**30
+                win_tiles, win_t0 = 0, now
                 history.append(rec)
-                pbar.set_postfix(loss=f"{metrics['loss']:.4f}", top1=f"{metrics['top1']:.3f}")
+                pbar.set_postfix(
+                    loss=f"{metrics['loss']:.4f}",
+                    top1=f"{metrics['top1']:.3f}",
+                    tps=f"{rec['tiles_per_s']:.0f}",
+                )
 
             if step % cfg.eval_every == 0 and heldout_loader is not None and cfg.eval_heldout:
                 metrics.update(
@@ -253,4 +304,18 @@ def train(
 
     pbar.close()
     (out_dir / "history.json").write_text(json.dumps(history, indent=2))
-    return {"step": step, "history": history}
+    summary = {
+        "step": step,
+        "elapsed_s": time.time() - t0,
+        "tiles_seen": tiles_seen,
+        "mean_tiles_per_s": tiles_seen / max(time.time() - t0, 1e-9),
+    }
+    if device.type == "cuda":
+        free_b, total_b = torch.cuda.mem_get_info(device)
+        summary.update(
+            peak_alloc_gib=torch.cuda.max_memory_allocated(device) / 2**30,
+            peak_reserved_gib=torch.cuda.max_memory_reserved(device) / 2**30,
+            device_total_gib=total_b / 2**30,
+        )
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    return {**summary, "history": history}

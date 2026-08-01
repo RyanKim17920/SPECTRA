@@ -52,9 +52,62 @@ __all__ = [
     "PairBatch",
     "PairBatchSampler",
     "RegisteredPairDataset",
+    "assert_same_condition_negatives",
     "collate_pair_batch",
     "build_pair_loader",
 ]
+
+
+def assert_same_condition_negatives(
+    batch: dict[str, torch.Tensor], *, allowed_conditions: set[int] | None = None
+) -> dict[str, float]:
+    """Assert the negative constraint on the *collated, flattened* batch.
+
+    :meth:`PairBatch.validate` checks the plan; this checks the thing the loss actually
+    consumes, after the ``(G, S, ...) -> (G*S, ...)`` flatten. The loss builds each
+    anchor's negative set from the other members of its ``group_id`` block, so the
+    constraint reduces to: **every entry sharing a ``group_id`` must share an
+    ``anchor_cond``**. If that ever fails, InfoNCE is being handed cross-condition
+    negatives and "different scanner" becomes a partially-correct shortcut for
+    "different tile" -- the failure mode PLAN.md 2 calls the one load-bearing detail.
+
+    Returns a small dict of observed statistics so the caller can log evidence rather
+    than trust.
+    """
+    gid = batch["group_id"]
+    acond = batch["anchor_cond"]
+    pcond = batch["positive_cond"]
+    tiles = batch["tile_idx"]
+    groups = torch.unique(gid)
+    negatives_per_anchor = 0.0
+    for g in groups.tolist():
+        sel = gid == g
+        conds = torch.unique(acond[sel])
+        if conds.numel() != 1:
+            raise AssertionError(
+                f"group {g} mixes anchor conditions {conds.tolist()}: its members are NOT "
+                "valid same-condition negatives for one another"
+            )
+        t = tiles[sel]
+        if torch.unique(t).numel() != t.numel():
+            raise AssertionError(f"group {g} repeats a tile index -> false negative")
+        negatives_per_anchor += float(sel.sum().item() - 1)
+    if bool((pcond == acond).any()):
+        raise AssertionError("a positive shares its anchor's condition -- not a cross-acquisition pair")
+    if allowed_conditions is not None:
+        seen = set(torch.unique(torch.cat([acond, pcond])).tolist())
+        leaked = seen - allowed_conditions
+        if leaked:
+            raise AssertionError(
+                f"condition indices {sorted(leaked)} are outside the loader's condition list; "
+                "a held-out condition has leaked into a training batch"
+            )
+    return {
+        "n_groups": float(groups.numel()),
+        "negatives_per_anchor": negatives_per_anchor / max(groups.numel(), 1),
+        "distinct_anchor_conditions": float(torch.unique(acond).numel()),
+        "distinct_positive_conditions": float(torch.unique(pcond).numel()),
+    }
 
 
 @dataclass(frozen=True)
@@ -76,6 +129,44 @@ class PairBatch:
     @property
     def group_size(self) -> int:
         return int(self.tile_idx.shape[1])
+
+    def validate(self, n_conditions: int | None = None) -> None:
+        """Assert the three structural invariants. Cheap; run on every batch.
+
+        These are exactly the properties that fail *silently* -- a broken one still
+        produces a plausible falling loss curve, which is why they are asserted rather
+        than eyeballed (PLAN.md 2, the "one load-bearing detail").
+
+        1. tiles are unique within a group -> no in-group negative is the anchor's own
+           tile, i.e. no false negative;
+        2. every positive comes from a condition different from its anchor's -> the
+           positive is a genuine cross-acquisition view, not the same image twice;
+        3. condition indices stay inside the sampler's condition list -> held-out
+           conditions cannot appear (they are simply not in the list).
+        """
+        if self.tile_idx.shape != self.positive_cond.shape:
+            raise AssertionError("tile_idx and positive_cond must have the same shape")
+        if self.anchor_cond.shape != (self.n_groups,):
+            raise AssertionError("anchor_cond must be one condition per group")
+        for g in range(self.n_groups):
+            if np.unique(self.tile_idx[g]).size != self.group_size:
+                raise AssertionError(
+                    f"group {g} repeats a tile index; an in-group negative would be a "
+                    "false negative (the anchor's own tile under another condition)"
+                )
+        if (self.positive_cond == self.anchor_cond[:, None]).any():
+            raise AssertionError(
+                "positive drawn from the anchor's own condition: the pair is no longer a "
+                "cross-acquisition positive"
+            )
+        if n_conditions is not None:
+            lo = min(int(self.anchor_cond.min()), int(self.positive_cond.min()))
+            hi = max(int(self.anchor_cond.max()), int(self.positive_cond.max()))
+            if lo < 0 or hi >= n_conditions:
+                raise AssertionError(
+                    f"condition index out of range [0,{n_conditions}); a condition outside "
+                    "the sampler's list (e.g. a held-out one) has leaked into the batch"
+                )
 
 
 class PairBatchSampler(Sampler[PairBatch]):
@@ -143,11 +234,13 @@ class PairBatchSampler(Sampler[PairBatch]):
             # n_cond-1 valid conditions with no rejection loop.
             offs = rng.integers(0, n_cond - 1, size=(self.n_groups, self.group_size))
             positive_cond = offs + (offs >= anchor_cond[:, None])
-            yield PairBatch(
+            batch = PairBatch(
                 tile_idx=tile_idx.astype(np.int64),
                 anchor_cond=anchor_cond.astype(np.int64),
                 positive_cond=positive_cond.astype(np.int64),
             )
+            batch.validate(n_cond)
+            yield batch
 
 
 class RegisteredPairDataset(Dataset):
@@ -204,6 +297,9 @@ class RegisteredPairDataset(Dataset):
         return out.reshape(*cond.shape, 224, 224, 3)
 
     def __getitem__(self, batch: PairBatch) -> dict[str, torch.Tensor]:
+        # re-assert in the worker process: this is the last point before real pixels are
+        # gathered, and a bad plan here means training on the wrong pairs, silently.
+        batch.validate(len(self.conditions))
         anchor_cond = np.broadcast_to(
             batch.anchor_cond[:, None], batch.tile_idx.shape
         )

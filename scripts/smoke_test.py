@@ -11,7 +11,7 @@ which is the degenerate case PLAN.md 2 warns about.
 Assumes the local ``.h5`` have been repacked::
 
     python -m waivphaet.data.repack --h5-dir /data/ryan.kim/plism \
-        --out-dir /data/ryan.kim/plism_packed --verify
+        --out-dir /data/ryan.kim/plism/repacked --verify
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from waivphaet.train.contrastive import TrainConfig, train
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--h5-dir", type=Path, default=Path("/data/ryan.kim/plism"))
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism_packed"))
+    ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
     ap.add_argument("--out-dir", type=Path, default=Path("runs/smoke"))
     ap.add_argument("--steps", type=int, default=4)
     ap.add_argument("--n-groups", type=int, default=2)
