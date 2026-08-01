@@ -207,8 +207,9 @@ def main() -> int:
             with model.backbone.disable_adapter():
                 emb_base = model.embed(check_batch)
         rel = float((emb_lora - emb_base).norm() / emb_base.norm())
-        cos = torch.nn.functional.normalize(emb_lora.float(), dim=-1) @ torch.nn.functional.normalize(emb_base.float(), dim=-1)
-        mean_cos = float(cos.diagonal().mean())
+        mean_cos = float(
+            torch.nn.functional.cosine_similarity(emb_lora.float(), emb_base.float(), dim=-1).mean()
+        )
         print(f"[adapter-check] rel_l2_delta={rel:.6e}  mean_cosine_base_vs_lora={mean_cos:.6f}")
         if rel < 1e-4:
             raise SystemExit("adapter did not change embeddings (rel_l2_delta < 1e-4); adapter likely not applied")
