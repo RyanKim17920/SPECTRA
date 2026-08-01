@@ -92,6 +92,22 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 MODE=embedding_pre_loading
 case "$TASKS" in *segmentation*) MODE=online_loading ;; esac
 
+# embedding_pre_loading READS a cache; it does not CREATE one. THUNDER exposes cache
+# creation as its own task (`pre_computing_embeddings`, benchmark.py:25). Without it,
+# every dataset whose cache is cold dies in ~37s on
+#   FileNotFoundError: .../embeddings/<ds>/<model>/train/labels.h5
+# which is exactly how 5 of the 6 base classification jobs failed (only mhist survived,
+# because an earlier run had already populated its cache). Prepend the precompute step
+# whenever the cache is cold, so a job is self-sufficient rather than depending on
+# whatever happened to run before it.
+EMB_DIR="${THUNDER_BASE_DATA_FOLDER}/embeddings/${DATASET}/${RUN_NAME}"
+if [ "$MODE" = "embedding_pre_loading" ] && [ ! -f "$EMB_DIR/train/labels.h5" ]; then
+  echo "--- cold embedding cache at $EMB_DIR -- precomputing first ---"
+  TASKS="pre_computing_embeddings $TASKS"
+else
+  echo "--- embedding cache warm at $EMB_DIR (or segmentation) -- skipping precompute ---"
+fi
+
 for TASK in $TASKS; do
   echo "--- $(date) | $DATASET / $TASK ---"
   srun --unbuffered "$REPO/.venv-thunder/bin/thunder" benchmark \
