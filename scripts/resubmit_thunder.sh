@@ -20,7 +20,10 @@ GO=0
 CLS_TASKS="knn linear_probing simple_shot"
 SEG_TASKS="segmentation"
 CLASSIFICATION="bach bracs break_his ccrcc crc esca mhist patch_camelyon tcga_crc_msi tcga_tils tcga_uniform wilds"
-SEGMENTATION="ocelot pannuke segpath_lymphocytes"
+# segpath_lymphocytes removed: 5048 s/epoch x 200 = ~281h vs a 20h wall (job 369061).
+# Structurally infeasible -- segmentation must use online_loading and it is the
+# largest set (23GB), so the frozen ViT is re-run over all of it every epoch.
+SEGMENTATION="ocelot pannuke"
 # segpath_epithelial is absent from this cluster -- deliberately not listed.
 
 FT_ADAPTER="runs/waiv-real-369043/step_0001000"
