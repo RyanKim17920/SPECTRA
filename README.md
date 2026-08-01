@@ -407,3 +407,44 @@ it every epoch. Both the base and fine-tuned jobs were cancelled.
 Consequence: THUNDER's `benchmark_segmentation` aggregate is not reportable, and our
 segmentation numbers cover ocelot + pannuke only. **Classification (12 datasets) is
 unaffected**, which is what Waiv's Table 2 kNN / linear-probe / few-shot columns measure.
+
+## Second model: Midnight-12k (generalization validated)
+
+The recipe was re-run unchanged on `kaiko-ai/midnight` (ViT-g/14, 1.18B, SwiGLU FFN,
+40 blocks, 3072-d clsmean, (0.5,0.5,0.5) normalization) to test whether it is a
+*recipe* rather than a phikon-v2-specific result.
+
+**Harness validated first.** Base Midnight through our pipeline reproduces Waiv's
+published base row: camelyon 0.4780 (0.478), tolkach 0.9411 (0.941), tcga 0.8575
+(0.858), **Avg 0.7589 vs 0.759**. Separately, the backbone-agnostic refactor left
+phikon-v2 bit-identical (Avg RI 0.4686113 vs 0.468611).
+
+**Training.** Identical config to the phikon-v2 run -- rank 32/alpha 64, 2x192 =
+191 negatives/anchor, 768 images/step with gradient checkpointing, all 91 PLISM
+slides, held-out scanners GT450+S210 and stains HRH+KR+MY. LoRA targets 240 =
+6/block x 40 blocks, leaves `[dense, key, query, value, weights_in, weights_out]`
+-- the SwiGLU FFN projections are adapted, which the old hardcoded target list
+would have silently skipped while still passing the block-coverage assertion.
+1500 steps, 3h26m on 1xH100. Held-out top-1 rose 0.943 -> 0.972 while train top-1
+stayed flat.
+
+**Result (PathoROB Avg RI):**
+
+| step | Avg RI | bal. acc |
+|---|---|---|
+| base | 0.7589 | -- |
+| 250 | 0.8981 | 0.9652 |
+| **500** | **0.9080** | 0.9663 |
+| 750 | 0.9068 | 0.9664 |
+| 1000 | 0.8996 | 0.9637 |
+| 1250 | 0.8995 | 0.9632 |
+| 1500 | 0.8997 | 0.9633 |
+| MASCARET (Waiv) | 0.924 | -- |
+
+**0.7589 -> 0.9080 = 90.3% of the available headroom**, 0.016 short of MASCARET,
+balanced accuracy flat across all six checkpoints (0.963-0.966).
+
+Same shape as phikon-v2: the gain arrives by the first checkpoint and then
+plateaus (six checkpoints span 0.010). Waiv published no curves, so this
+early-plateau behaviour is not visible in their paper -- and it means their
+"lightweight" claim is, if anything, understated: a few hundred steps suffice.
