@@ -34,7 +34,7 @@ src/waivphaet/
   data/conditions.py   91 filenames -> (stain, scanner); deterministic held-out split
   data/repack.py       h5 -> contiguous (16278,224,224,3) uint8 memmap  [throughput]
   data/pairs.py        registered-pair batch sampler, same-condition negatives
-  models/encoder.py    phikon-v2 + LoRA on all 24 blocks + 512-d projection head
+  models/encoder.py    ANY HF ViT + LoRA on all blocks + 512-d projection head
   train/contrastive.py masked InfoNCE, AMP, grad accum, checkpointing
   eval/                thin adapters: PathoROB (primary), plismbench (diagnostic)
 scripts/
@@ -144,6 +144,76 @@ crops, never pixel-exact. Do not add augmentations that assume otherwise.
 # full run
 sbatch scripts/train_lora.sbatch --lora-rank 16 --temperature 0.07
 ```
+
+## Second backbone: the pipeline is model-agnostic
+
+The recipe is a reconstruction (Waiv published no method), so a single-backbone result is
+weak evidence. `kaiko-ai/midnight` is the second test: **ungated and MIT**, and its Waiv
+counterpart MASCARET carries the *largest* published gain in their Table 1
+(Avg RI 0.759 → **0.924**; THUNDER rank sum 70 → 34). H0-mini / UNI2-h / Virchow2 /
+Prov-GigaPath are all gated and are not options.
+
+`EncoderConfig.backbone` is now a parameter and everything geometric is read off the
+loaded config — nothing about ViT-L/16 survives in the code:
+
+| | phikon-v2 | midnight |
+|---|---|---|
+| arch | Dinov2 ViT-L/16 | Dinov2 ViT-g/14 |
+| hidden / blocks | 1024 / 24 | 1536 / 40 |
+| `embed_dim` cls / clsmean | 1024 / **2048** | 1536 / **3072** |
+| tokens @224 | 196 | 256 |
+| FFN | `mlp.fc1` / `mlp.fc2` | `mlp.weights_in` / `mlp.weights_out` (SwiGLU) |
+| normalisation | ImageNet | **(0.5,0.5,0.5) / (0.5,0.5,0.5)** |
+| LoRA targets | 144 = 6/block × 24 | 240 = 6/block × 40 |
+
+### Two ways this could have failed silently
+
+Both would have produced a running pipeline, plausible numbers, and no warning anywhere.
+They are the reason the refactor is worth more than a `backbone=` kwarg.
+
+1. **SwiGLU FFN.** The old LoRA target list was the fixed tuple
+   `(query, key, value, dense, fc1, fc2)`. Midnight sets `use_swiglu_ffn=True`, so `fc1`
+   and `fc2` match *nothing* — but `query/key/value/dense` still match in every block, so
+   the existing "LoRA covers all blocks" assertion would have **passed** while the entire
+   FFN stayed frozen (4/block instead of 6/block, ~⅓ of each block's parameters adapted).
+   Downstream that reads as "LoRA is just weaker on ViT-g", not as a bug. Targets are now
+   *discovered* by leaf name, and the per-block count is asserted non-empty **and uniform**
+   and printed at build time.
+2. **Normalisation.** Midnight's model card: *"trained on 224x224 images normalized with a
+   mean of (0.5, 0.5, 0.5) and a standard deviation of (0.5, 0.5, 0.5). Please ensure you
+   apply these exact normalization parameters."* Our stack hardcoded ImageNet stats —
+   correct for phikon-v2 (it is what PathoROB's own `Phikonv2ModelWrapper` uses, which is
+   why we reproduce their RI to 6 decimals) and wrong here. It changes no shape and throws
+   no error; it just costs base accuracy. It would have surfaced as our base-Midnight row
+   *disagreeing with Waiv's published 0.759* — i.e. as false evidence that our harness is
+   unfaithful, which is the exact question that comparison exists to answer.
+   `BACKBONE_NORMALIZATION` is now table-driven; an unregistered backbone warns loudly.
+
+### THUNDER pooling is per-backbone and is not our choice
+
+arXiv:2607.22861 §3 (line 106): CLS+mean-pool concatenation was used for **all** models in
+PathoROB, but in THUNDER only for Virchow2, AquaViT, H0-mini and **Midnight-12k**. So
+phikon-v2 is `cls` in THUNDER (which is also THUNDER's own published `phikon2` protocol)
+and midnight is `clsmean`. `thunder_model._default_pooling` resolves it from the backbone;
+`run_thunder.sbatch` takes `auto`. Hardcoding either one makes the base-vs-fine-tuned rank
+sums non-comparable to their table.
+
+### Regression: base phikon-v2 is bit-identical across the refactor
+
+`scripts/regression_bitcheck.py` loads the extractor from two worktrees and compares raw
+feature arrays. Pre-refactor `861cacf` vs post-refactor HEAD, base phikon-v2, 64 camelyon
+patches, fp32 CPU:
+
+| pooling | dim | inputs identical | features identical | max abs delta |
+|---|---|---|---|---|
+| clsmean | 2048 | yes | **yes** | 0.000e+00 |
+| cls | 1024 | yes | **yes** | 0.000e+00 |
+
+`robustness_index` is a deterministic function of the written features, so byte-identical
+features imply a byte-identical RI. That is sharper than the RI comparison itself, which
+has to explain away µ-scale float-summation drift on tolkach and tcga. It does not replace
+the full-benchmark rerun (that also covers the parquet read, the npz layout and the
+metric) — which is why the gate is still rerun end-to-end.
 
 ## Evaluation — PathoROB (primary)
 
