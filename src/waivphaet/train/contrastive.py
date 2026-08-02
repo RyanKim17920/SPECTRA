@@ -131,6 +131,10 @@ class TrainConfig:
     log_every: int = 20
     eval_every: int = 500
     eval_batches: int = 20
+    #: Optional non-uniform checkpoint schedule (e.g. [50, 100, 200, 500, 1000]).
+    #: Overrides ckpt_every when set. Useful for full FT where representation can
+    #: degrade within tens of steps.
+    ckpt_schedule: list[int] | None = None
     #: PLAN.md 3 phase 8: "evaluate retention at every checkpoint, not just at the end".
     #: A robustness win that costs retention is a failed reproduction (risk 1). Point this
     #: at a callable (or leave None and let the caller hook `on_checkpoint`).
@@ -178,18 +182,39 @@ def evaluate_heldout(model, loader, cfg: TrainConfig, device, n_batches: int) ->
 
 
 def save_checkpoint(model, optimizer, step: int, cfg: TrainConfig, metrics: dict) -> Path:
+    """Save a training checkpoint.
+
+    LoRA mode: saves PEFT adapter dir (a few MB) + projector.pt + optim.pt + metrics.json.
+    Full FT mode: saves backbone.safetensors (~1.2 GB for ViT-L) + projector.pt + optim.pt
+        + metrics.json. No adapter directory.
+
+    ``metrics.json`` is written LAST -- it is the completeness sentinel that
+    ``eval_checkpoints.py:discover`` waits on before attempting to load the checkpoint.
+    """
     out = Path(cfg.out_dir) / f"step_{step:07d}"
     out.mkdir(parents=True, exist_ok=True)
-    # LoRA adapters only when using PEFT -- a few MB instead of 1.2 GB per checkpoint,
-    # which is what makes "checkpoint often" (PLAN.md 3 phase 8) affordable.
+
     if getattr(model.cfg, "use_lora", False):
+        # LoRA mode: save PEFT adapter (small, ~few MB).
         model.backbone.save_pretrained(out / "adapter")
     else:
-        torch.save(model.backbone.state_dict(), out / "backbone.pt")
+        # Full FT mode: save full backbone weights via safetensors (~1.2 GB for ViT-L).
+        backbone_sd = model.backbone.state_dict()
+        from safetensors.torch import save_file
+        save_file(backbone_sd, str(out / "backbone.safetensors"))
+
     torch.save(model.projector.state_dict(), out / "projector.pt")
     torch.save({"optimizer": optimizer.state_dict(), "step": step}, out / "optim.pt")
+    # metrics.json is the completeness sentinel -- written LAST.
     (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
     return out
+
+
+def _should_checkpoint(step: int, cfg: TrainConfig) -> bool:
+    """Determine whether to checkpoint at *step* using schedule or periodic interval."""
+    if cfg.ckpt_schedule is not None:
+        return step in cfg.ckpt_schedule
+    return step % cfg.ckpt_every == 0
 
 
 def train(
@@ -297,7 +322,7 @@ def train(
                     evaluate_heldout(model, heldout_loader, cfg, device, cfg.eval_batches)
                 )
 
-            if step % cfg.ckpt_every == 0 or step == cfg.max_steps:
+            if _should_checkpoint(step, cfg) or step == cfg.max_steps:
                 ck = save_checkpoint(model, optimizer, step, cfg, {"step": step, **metrics})
                 if on_checkpoint is not None:
                     on_checkpoint(model, step, metrics, ck)

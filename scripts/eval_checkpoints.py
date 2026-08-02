@@ -71,23 +71,46 @@ def sh(cmd: list[str], **kw) -> subprocess.CompletedProcess:
 def discover(run_dir: Path) -> list[tuple[int, Path]]:
     """Complete checkpoints, ascending. ``metrics.json`` is written last by
     ``save_checkpoint``, so it is the completeness sentinel -- without it we could read
-    a half-flushed ``adapter_model.safetensors``."""
+    a half-flushed ``adapter_model.safetensors``.
+
+    Handles both checkpoint formats:
+    - LoRA: ``step_*/adapter/`` directory + metrics.json
+    - Full FT: ``step_*/backbone.safetensors`` + metrics.json
+    """
     out = []
     for d in sorted(run_dir.glob("step_*")):
-        if (d / "metrics.json").exists() and (d / "adapter").is_dir():
+        if not (d / "metrics.json").exists():
+            continue
+        # LoRA checkpoint has an adapter/ dir; full FT has backbone.safetensors.
+        if (d / "adapter").is_dir() or (d / "backbone.safetensors").exists():
             out.append((int(d.name.split("_")[1]), d))
     return out
+
+
+def is_full_ft_checkpoint(ckpt: Path) -> bool:
+    """Check whether a checkpoint dir is full-FT (backbone.safetensors) vs LoRA (adapter/)."""
+    return (ckpt / "backbone.safetensors").exists() and not (ckpt / "adapter").is_dir()
 
 
 def run_probe(args, ckpt: Path, step: int) -> dict:
     out = args.run_dir / f"probe_step_{step:07d}.json"
     if not out.exists():
-        cmd = [
-            args.python, "scripts/embed_probe.py",
-            "--packed-dir", args.packed_dir, "--adapter", ckpt, "--out", out,
-            "--lora-rank", args.lora_rank, "--lora-alpha", args.lora_alpha,
-            "--proj-out-dim", args.proj_out_dim, "--n-tiles", args.probe_tiles,
-        ]
+        if is_full_ft_checkpoint(ckpt):
+            cmd = [
+                args.python, "scripts/embed_probe.py",
+                "--packed-dir", args.packed_dir,
+                "--checkpoint", ckpt,
+                "--out", out,
+                "--proj-out-dim", args.proj_out_dim,
+                "--n-tiles", args.probe_tiles,
+            ]
+        else:
+            cmd = [
+                args.python, "scripts/embed_probe.py",
+                "--packed-dir", args.packed_dir, "--adapter", ckpt, "--out", out,
+                "--lora-rank", args.lora_rank, "--lora-alpha", args.lora_alpha,
+                "--proj-out-dim", args.proj_out_dim, "--n-tiles", args.probe_tiles,
+            ]
         if args.conditions_file:
             cmd += ["--conditions-file", args.conditions_file]
         sh(cmd)
@@ -119,29 +142,36 @@ def run_pathorob(args, ckpt: Path, step: int, paths: PathoRobPaths) -> dict:
         if (feat_dir / ds).exists():
             print(f"[eval] features for {model_name}/{ds} already present, skipping extract")
             continue
-        # No --backbone here on purpose: build_model reads it from the adapter's own
-        # adapter_config.json (base_model_name_or_path), so a midnight checkpoint follows
-        # its checkpoint rather than a flag someone forgot to pass on the follower.
-        proc = subprocess.run(
-            [args.python, "scripts/extract_pathorob_features.py",
-             "--dataset", ds, "--model-name", model_name, "--adapter", str(ckpt),
-             "--lora-rank", str(args.lora_rank), "--lora-alpha", str(args.lora_alpha),
-             "--proj-out-dim", str(args.proj_out_dim),
-             "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)],
-            cwd=str(REPO), check=True, capture_output=True, text=True,
-        )
+
+        if is_full_ft_checkpoint(ckpt):
+            proc = subprocess.run(
+                [args.python, "scripts/extract_pathorob_features.py",
+                 "--dataset", ds, "--model-name", model_name,
+                 "--checkpoint", str(ckpt),
+                 "--proj-out-dim", str(args.proj_out_dim),
+                 "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)],
+                cwd=str(REPO), check=True, capture_output=True, text=True,
+            )
+        else:
+            proc = subprocess.run(
+                [args.python, "scripts/extract_pathorob_features.py",
+                 "--dataset", ds, "--model-name", model_name, "--adapter", str(ckpt),
+                 "--lora-rank", str(args.lora_rank), "--lora-alpha", str(args.lora_alpha),
+                 "--proj-out-dim", str(args.proj_out_dim),
+                 "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)],
+                cwd=str(REPO), check=True, capture_output=True, text=True,
+            )
         sys.stdout.write(proc.stdout)
-        # extract_pathorob_features emits TWO adapter checks per run, by design:
+        # extract_pathorob_features emits TWO adapter/checkpoint checks per run, by design:
         #   1. inside build_model, on a deterministic *synthetic* batch (seed 1234) -- a cheap
         #      CPU-side proof before the caller ever sees the model. Same input every time, so
         #      its value tracks only the checkpoint (~0.25), never the dataset.
         #   2. in main(), on *real tiles* from this dataset -- the sharper, dataset-specific
         #      number (camelyon ~0.75, tolkach ~0.93, tcga ~0.79).
-        # .search() returned the first (synthetic) one, so every dataset was recorded as ~0.25.
         # Take the last match: the real-tile check is always emitted after the synthetic one.
         matches = _REL_L2.findall(proc.stdout)
         # extract_pathorob_features exits non-zero below 1e-4, so reaching here already
-        # means the adapter changed the embeddings; we record how much.
+        # means the adapter/checkpoint changed the embeddings; we record how much.
         adapter_checks[ds] = float(matches[-1]) if matches else float("nan")
 
     run_robustness_index(model_name, list(args.datasets), paths=paths)

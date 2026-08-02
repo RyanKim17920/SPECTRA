@@ -165,6 +165,58 @@ def assert_adapter_applied(model, batch: torch.Tensor | None = None, tol: float 
     return {"rel_l2_delta": rel, "mean_cosine_base_vs_lora": mean_cos}
 
 
+def assert_checkpoint_applied(model, checkpoint_path: str | Path,
+                               batch: torch.Tensor | None = None,
+                               tol: float = 1e-4) -> dict:
+    """Prove a full-FT checkpoint actually changed the backbone weights.
+
+    Replaces ``assert_adapter_applied`` for full-FT checkpoints (no PEFT adapter,
+    no ``disable_adapter()``). Loads the base backbone (same ``backbone`` id), runs
+    the same input, and asserts the checkpoint embeddings differ from the base.
+
+    A silently-unloaded full-FT checkpoint reproduces the base numbers exactly and reads
+    as "perfect retention" -- the most dangerous false result in this project. Every eval
+    entry point that loads a full-FT checkpoint MUST call this.
+
+    ``batch`` defaults to a deterministic synthetic batch. Returns the same shape dict
+    as ``assert_adapter_applied`` for callers that consume both.
+    """
+    if batch is None:
+        g = torch.Generator().manual_seed(1234)
+        batch = torch.randn(4, 3, 224, 224, generator=g)
+
+    device = next(model.parameters()).device
+    batch_dev = batch.to(device)
+    backbone_id = model.cfg.backbone
+
+    # Build a fresh base model (no checkpoint) for comparison.
+    from waivphaet.models.encoder import EncoderConfig, WaivEncoder
+    base_cfg = EncoderConfig(backbone=backbone_id, pooling=model.cfg.pooling, use_lora=False)
+    base_model = WaivEncoder(base_cfg).to(device).eval()
+
+    was_training = model.training
+    model.eval()
+    with torch.inference_mode():
+        emb_ckpt = model.embed(batch_dev)
+        emb_base = base_model.embed(batch_dev)
+    if was_training:
+        model.train()
+
+    rel = float((emb_ckpt - emb_base).norm() / emb_base.norm())
+    mean_cos = float(
+        torch.nn.functional.cosine_similarity(emb_ckpt.float(), emb_base.float(), dim=-1).mean()
+    )
+    print(f"[checkpoint-check] rel_l2_delta={rel:.6e}  mean_cosine_base_vs_ckpt={mean_cos:.6f}",
+          flush=True)
+    if rel < tol:
+        raise SystemExit(
+            f"checkpoint at {checkpoint_path} did not change embeddings "
+            f"(rel_l2_delta={rel:.3e} < {tol}); checkpoint likely not loaded or "
+            "contains unmodified base weights"
+        )
+    return {"rel_l2_delta": rel, "mean_cosine_base_vs_lora": mean_cos}
+
+
 def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = None,
                 lora_rank: int = 16, lora_alpha: int = 32, proj_out_dim: int = 512,
                 backbone: str | None = None):
@@ -241,17 +293,98 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
                             pooling=pooling, use_lora=False)
         model = WaivEncoder(cfg)
     else:
-        ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
-        cfg = ckpt.get("encoder_config")
-        cfg = EncoderConfig(**cfg) if isinstance(cfg, dict) else cfg
-        cfg.pooling = pooling
-        if backbone is not None and backbone != cfg.backbone:
-            raise SystemExit(
-                f"checkpoint {checkpoint} carries backbone {cfg.backbone!r}; "
-                f"refusing the requested override {backbone!r}"
-            )
-        model = WaivEncoder(cfg)
-        model.load_state_dict(ckpt["model"], strict=False)
+        # --- Checkpoint loading: handle both legacy torch.load format and full-FT safetensors ---
+        ckpt_path = Path(checkpoint)
+
+        # Try to load encoder_config from the checkpoint or from the run's config.json.
+        # Full-FT checkpoints may not carry encoder_config inside the weight file.
+        cfg_from_ckpt = None
+
+        # Check for a parent run config.json (the run_dir's top-level config).
+        run_config = ckpt_path.parent.parent / "config.json"
+        if run_config.exists():
+            run_cfg = json.loads(run_config.read_text())
+            enc_cfg = run_cfg.get("encoder", {})
+            if isinstance(enc_cfg, dict) and enc_cfg:
+                cfg_from_ckpt = EncoderConfig(**enc_cfg)
+
+        # Try to load as a single torch.load archive containing encoder_config + model.
+        if cfg_from_ckpt is None:
+            try:
+                raw = torch.load(checkpoint, map_location="cpu", weights_only=False)
+                if isinstance(raw, dict):
+                    saved_cfg = raw.get("encoder_config")
+                    if isinstance(saved_cfg, dict):
+                        cfg_from_ckpt = EncoderConfig(**saved_cfg)
+                    if "model" in raw:
+                        model_state = raw["model"]
+                        cfg_from_ckpt = cfg_from_ckpt or EncoderConfig()
+                        cfg_from_ckpt.pooling = pooling
+                        backbone_id = cfg_from_ckpt.backbone
+                        if backbone is not None and backbone != backbone_id:
+                            raise SystemExit(
+                                f"checkpoint {checkpoint} carries backbone {backbone_id!r}; "
+                                f"refusing the requested override {backbone!r}"
+                            )
+                        model = WaivEncoder(cfg_from_ckpt)
+                        model.load_state_dict(model_state, strict=False)
+                    else:
+                        # raw is a plain state_dict (legacy full-FT format).
+                        cfg_from_ckpt = cfg_from_ckpt or EncoderConfig(
+                            backbone=backbone or DEFAULT_BACKBONE,
+                            pooling=pooling, use_lora=False,
+                        )
+                        model = WaivEncoder(cfg_from_ckpt)
+                        model.load_state_dict(raw, strict=False)
+            except Exception:
+                raise SystemExit(
+                    f"checkpoint {checkpoint} is not a recognised format. "
+                    "Expected a step_NNNNNNN/ dir containing backbone.safetensors "
+                    "(full FT) or an adapter/ dir (LoRA)."
+                )
+
+        if cfg_from_ckpt is None:
+            # No config found — treat as full-FT safetensors checkpoint dir.
+            backbone_id = backbone or DEFAULT_BACKBONE
+            cfg_from_ckpt = EncoderConfig(backbone=backbone_id, pooling=pooling, use_lora=False)
+
+        model = WaivEncoder(cfg_from_ckpt)
+
+        # Load full-FT backbone weights from safetensors if present.
+        backbone_safetensors = ckpt_path / "backbone.safetensors"
+        if backbone_safetensors.exists():
+            from safetensors.torch import load_file
+            backbone_sd = load_file(str(backbone_safetensors))
+            model.backbone.load_state_dict(backbone_sd)
+        else:
+            # Try backbone.pt fallback (legacy format).
+            backbone_pt = ckpt_path / "backbone.pt"
+            if backbone_pt.exists():
+                backbone_sd = torch.load(str(backbone_pt), map_location="cpu", weights_only=False)
+                model.backbone.load_state_dict(backbone_sd)
+
+        # Load projector when the input width matches.
+        proj_path = ckpt_path / "projector.pt"
+        if proj_path.exists():
+            try:
+                proj_sd = torch.load(str(proj_path), map_location="cpu", weights_only=False)
+                saved_in = proj_sd["net.0.weight"].shape[1]
+                if saved_in == model.embed_dim:
+                    model.projector.load_state_dict(proj_sd)
+                else:
+                    print(
+                        f"[build_model] skipping projector: trained with a {saved_in}-d input, "
+                        f"evaluating at {model.embed_dim}-d (pooling={pooling}). "
+                        "Projector is unused for feature extraction; backbone weights are unaffected.",
+                        flush=True,
+                    )
+            except Exception as e:
+                print(f"[build_model] WARNING: could not load projector: {e}", flush=True)
+
+        # Full-FT checkpoint guard: prove the loaded weights differ from the base model.
+        model.eval()
+        assert_checkpoint_applied(model, checkpoint)
+
     return model.eval()
 
 
@@ -267,13 +400,17 @@ def main() -> int:
         help="free-form features dir name, e.g. phikonv2_clsmean_ours. The metric scripts "
         "never call load_model(), so this needs no registry entry.",
     )
-    ap.add_argument("--checkpoint", default=None, help="omit for the base backbone")
+    ap.add_argument("--checkpoint", default=None,
+                    help="Full-FT checkpoint dir (step_NNNNNNN/ with backbone.safetensors + "
+                         "projector.pt) or legacy torch.load archive. Mutually exclusive "
+                         "with --adapter. Omit for the base backbone.")
     ap.add_argument("--backbone", default=None,
                     help="HF id of the base backbone (default: owkin/phikon-v2, or "
                          "WAIV_BACKBONE, or whatever --adapter/--checkpoint was trained "
                          "on). e.g. kaiko-ai/midnight")
     ap.add_argument("--adapter", type=Path, default=None,
-                    help="checkpoint dir written by save_checkpoint (contains adapter/ + projector.pt); mutually exclusive with --checkpoint")
+                    help="LoRA checkpoint dir written by save_checkpoint (contains adapter/ + "
+                         "projector.pt); mutually exclusive with --checkpoint")
     ap.add_argument("--lora-rank", type=int, default=16)
     ap.add_argument("--lora-alpha", type=int, default=32)
     ap.add_argument("--proj-out-dim", type=int, default=512)
@@ -299,8 +436,10 @@ def main() -> int:
     print(f"[extract] dataset={args.dataset} device={args.device} HF_HOME={os.environ['HF_HOME']}")
     # Model FIRST: the preprocessing normalisation is a property of the backbone, and the
     # backbone may come from the adapter's own config rather than the CLI.
-    model = build_model(args.checkpoint, args.pooling, args.adapter, args.lora_rank,
-                      args.lora_alpha, args.proj_out_dim, args.backbone).to(args.device)
+    model = build_model(
+        args.checkpoint, args.pooling, args.adapter, args.lora_rank,
+        args.lora_alpha, args.proj_out_dim, args.backbone,
+    ).to(args.device)
     print(f"[extract] normalization mean={model.norm_mean} std={model.norm_std}")
     ds = PathoRobParquet(args.dataset, build_preprocess(model.cfg.backbone))
     n = len(ds) if not args.limit else min(args.limit, len(ds))

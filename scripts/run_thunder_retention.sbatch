@@ -16,6 +16,9 @@
 #   sbatch scripts/run_thunder_retention.sbatch base_cls                       # reference row
 #   sbatch scripts/run_thunder_retention.sbatch step5000 runs/waiv-real-369043/step5000
 #
+# Full FT checkpoint (backbone.safetensors format):
+#   sbatch scripts/run_thunder_retention.sbatch full_ft_s1000 runs/full_ft/step_0000100
+#
 # Why a subset and not all 15: the full sweep is ~1.5M tiles of ViT-L inference and takes
 # most of a day. Retention has to be cheap enough to run at every checkpoint or phase 8
 # does not actually happen. These four are THUNDER's smallest classification sets --
