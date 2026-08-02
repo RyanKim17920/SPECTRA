@@ -448,3 +448,32 @@ Same shape as phikon-v2: the gain arrives by the first checkpoint and then
 plateaus (six checkpoints span 0.010). Waiv published no curves, so this
 early-plateau behaviour is not visible in their paper -- and it means their
 "lightweight" claim is, if anything, understated: a few hundred steps suffice.
+
+## THUNDER: complete, same-pipeline (12/12 classification, 2/4 segmentation)
+
+Both base and fine-tuned run through identical code, so these deltas carry no
+cross-study assumption. Our base reproduces THUNDER's published phikon-v2 row
+(mean Δ +0.08 over 12 datasets on linear probing), which is what makes the
+comparison to Waiv's deltas legitimate despite their runs being mixed-precision
+and ours fp32 -- each Δ is internally precision-consistent.
+
+| task | our base | our ft (step 1000) | our Δ | Waiv Δ |
+|---|---|---|---|---|
+| kNN | 70.28 | 75.20 | **+4.92** | +3.7 |
+| linear probing | 76.54 | 79.24 | **+2.70** | +1.4 |
+| few-shot | 69.33 | 70.99 | **+1.66** | +1.5 |
+| segmentation | 70.40 | 70.09 | **-0.31** | -1.2 |
+
+11 of 12 datasets improve on kNN (median Δ +4.8, so not an outlier artefact).
+Waiv's segmentation regression (-1.2, which they flag as a limitation) is
+present but milder here.
+
+**The one clear negative: `tcga_uniform`** regresses on both kNN (-9.1) and
+linear probing (-6.2) against the published base. Consistency across two
+independent probes rules out a local-neighbourhood explanation -- information is
+genuinely lost for that dataset. Unexplained; it is the single result that
+should be understood before any publication claim.
+
+Coverage caveat: Waiv aggregate over 16 datasets, we over 14 (segpath_epithelial
+absent from this cluster, segpath_lymphocytes structurally infeasible -- see
+above). Per-task Δ is therefore the sound comparison, not absolute levels.
