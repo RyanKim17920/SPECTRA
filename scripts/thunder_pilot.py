@@ -31,7 +31,10 @@ USER = "ryan.kim"
 # Job-name prefixes for the THUNDER sweep: `thd-` = base phikon-v2, `thdft1k-` =
 # fine-tuned step-1000 adapter. Anything else in the queue (hest, speedlm, qwen,
 # other users' work) is deliberately untouched.
-PREFIXES = ("thd-", "thdft1k-")
+#: phikon-v2 sweep = thd-/thdft1k-, Midnight sweep = mthd-/mthdft-. A prefix missing here
+#: makes the pilot see an empty queue and declare DONE while jobs sit held forever, which
+#: is exactly what happened on the first Midnight submission.
+PREFIXES = ("thd-", "thdft1k-", "mthd-", "mthdft-")
 
 
 def emit(msg: str) -> None:
