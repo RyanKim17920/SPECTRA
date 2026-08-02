@@ -16,6 +16,64 @@ frozen."* We apply that loss family **to the backbone**.
 **Read [`PLAN.md`](PLAN.md) first.** It is the spec; every module docstring cites the
 section it comes from.
 
+## Results vs Waiv — consolidated
+
+Every row is our number against Waiv's published value for the *same* quantity.
+Each backbone's **base** was reproduced against a published reference before any
+fine-tuning, which is what makes the deltas meaningful rather than merely plausible.
+
+### Robustness (PathoROB Avg RI)
+
+| model | base (ours) | base (published) | fine-tuned (ours) | Waiv | headroom captured |
+|---|---|---|---|---|---|
+| phikon-v2 → Phaet | 0.468611 | 0.468612 | **0.8080** (step 1000) | 0.806 | ~100% |
+| Midnight-12k → Mascaret | 0.7589 | 0.759 | **0.9080** (step 500) | 0.924 | 90.3% |
+
+### Retention — THUNDER (phikon-v2, step 1000, same-pipeline)
+
+| task | our base | our ft | our Δ | Waiv Δ |
+|---|---|---|---|---|
+| kNN | 70.28 | 75.20 | **+4.92** | +3.7 |
+| linear probing | 76.54 | 79.24 | **+2.70** | +1.4 |
+| few-shot | 69.33 | 70.99 | **+1.66** | +1.5 |
+| segmentation | 70.40 | 70.09 | **−0.31** | −1.2 |
+
+### Retention — HEST (phikon-v2, CLS protocol, per cancer type)
+
+Waiv publish the full per-type Phaet row (Table 3), so this is Δ-vs-Δ, not just averages.
+
+| task | base | Waiv Phaet | Δ Waiv | ours (s1000) | ours (s2000) | Δ ours (s2000) |
+|---|---|---|---|---|---|---|
+| IDC | 0.5408 | 0.5630 | +0.0222 | 0.5476 | 0.5491 | +0.0083 |
+| PRAD | 0.3545 | 0.3546 | +0.0001 | 0.3268 | 0.3334 | −0.0211 |
+| PAAD | 0.4455 | 0.4748 | +0.0293 | 0.4627 | 0.4666 | +0.0211 |
+| SKCM | 0.5554 | 0.5985 | +0.0431 | 0.5813 | 0.5880 | +0.0326 |
+| COAD | 0.2500 | 0.2915 | +0.0415 | 0.2907 | 0.2859 | +0.0359 |
+| READ | 0.1749 | 0.1696 | −0.0053 | 0.1455 | 0.1655 | −0.0094 |
+| CCRCC | 0.2659 | 0.2696 | +0.0037 | 0.2681 | 0.2666 | +0.0007 |
+| LUNG | 0.5419 | 0.5622 | +0.0203 | 0.5316 | 0.5299 | −0.0120 |
+| LYMPH_IDC | 0.2437 | 0.2649 | +0.0212 | 0.2600 | 0.2575 | +0.0138 |
+| **Avg** | **0.3747** | **0.3943** | **+0.0196** | 0.3794 | **0.3825** | **+0.0078** |
+
+**corr(Δ_waiv, Δ_ours) = 0.880.** Their three largest gains (COAD, SKCM, PAAD) are our
+three largest; we regress on READ exactly as they do. The average shortfall is
+**concentrated in LUNG and PRAD**, not spread across tasks — which points at PLISM's
+single-institution tissue coverage rather than at the objective.
+
+### Caveats a reader should carry
+
+- **Checkpoint selection is not neutral.** THUNDER/HEST above use step 1000, chosen because
+  it was the best *PathoROB* checkpoint. Step 2000 is better on HEST (+0.0078 vs +0.0047).
+  Robustness and retention peak at different steps, so any single-checkpoint headline
+  understates one axis.
+- **Midnight has PathoROB only.** No THUNDER or HEST runs for it yet.
+- **`tcga_uniform` regresses** −9.1 kNN / −6.2 linear probing. Consistent across two
+  independent probes, so it is real information loss, not a metric artefact. Unexplained.
+- **Coverage:** Waiv aggregate over 16 THUNDER datasets, we over 14.
+- **Precision:** their THUNDER runs are mixed precision, ours fp32. Each Δ is internally
+  precision-consistent, so Δ-vs-Δ is valid; absolute levels are not comparable.
+- **n=1 seed** throughout. No error bars.
+
 ## Design in one paragraph
 
 PLISM (7 scanners × 13 stains × 16,278 Elastix-registered tiles) is our **training** set —
@@ -347,7 +405,9 @@ though, so **2 × 256 (255 negatives) is the next escalation** — measured to f
 
 **Retention:** balanced accuracy 0.9454 → 0.9418 against a 0.9442 base — flat, with a
 slow downward drift worth watching. `k_opt` is unchanged (11 / 46 / 61), so the kNN
-operating point is the base model's. HEST / THUNDER / Patho-Bench are still not wired,
+operating point is the base model's. (HEST and THUNDER were wired later; see the
+consolidated results at the top. Patho-Bench was dropped -- ~8 TB of WSIs and no
+traceable target number.) Historical note, kept for provenance:
 so this is the only forgetting detector in play (`PLAN.md` §3 risk 1).
 
 **The adapter is proven applied at every eval**, not assumed: the extractor compares
