@@ -288,3 +288,50 @@ def test_thunder_pooling_is_resolved_per_backbone_not_hardcoded():
     assert mod._default_pooling(None) == "cls"                 # default = phikon-v2
     assert mod._default_pooling("owkin/phikon-v2") == "cls"
     assert mod._default_pooling("kaiko-ai/midnight") == "clsmean"
+
+
+def test_thunder_auto_pooling_never_resolves_to_clsmean_for_segmentation():
+    """clsmean advertises emb_dim = 2*hidden, but get_segmentation_embeddings returns raw
+    hidden-d patch tokens; THUNDER sizes its seg decoder from emb_dim, so on Midnight
+    (3072 vs 1536) the job dies at task_specific_models.py:121. The correction must be
+    narrow: explicit pooling and every classification run are untouched."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "src" / "waivphaet" / "eval" / "thunder_model.py"
+    spec = importlib.util.spec_from_file_location("_waiv_thunder_seg_test", src)
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except ImportError:  # thunder lives in .venv-thunder, not the default venv
+        pytest.skip("thunder not importable in this interpreter")
+    sys.modules.pop("_waiv_thunder_seg_test", None)
+
+    mid, phi = "kaiko-ai/midnight", "owkin/phikon-v2"
+
+    # The bug: auto + segmentation + a backbone whose cls dim != patch dim.
+    assert mod.resolve_pooling(mid, None, True) == "cls"
+    # ... and nothing else moves.
+    assert mod.resolve_pooling(mid, None, False) == "clsmean"   # the 24 held cls jobs
+    assert mod.resolve_pooling(phi, None, True) == "cls"
+    assert mod.resolve_pooling(phi, None, False) == "cls"
+    # Explicit pooling always wins, segmentation or not -- the 4 running jobs pass cls.
+    for seg in (True, False):
+        for backbone in (mid, phi, None):
+            for explicit in ("cls", "clsmean", "mean"):
+                assert mod.resolve_pooling(backbone, explicit, seg) == explicit
+
+    # Task detection is an EXACT argv token match, so no dataset / task / loading mode /
+    # model path used by the classification sweep can trip it.
+    assert mod._is_segmentation_run(["benchmark", "custom:/x/thunder_model.py",
+                                     "ocelot", "segmentation",
+                                     "--loading-mode", "online_loading"])
+    for task in ("knn", "linear_probing", "simple_shot", "pre_computing_embeddings"):
+        for ds in ("bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
+                   "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds"):
+            assert not mod._is_segmentation_run(
+                ["benchmark", "custom:/admin/home/ryan.kim/waiv/src/waivphaet/eval/"
+                 "thunder_model.py", ds, task,
+                 "--loading-mode", "embedding_pre_loading"]
+            )

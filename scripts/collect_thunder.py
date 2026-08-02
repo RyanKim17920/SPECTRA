@@ -13,6 +13,15 @@ Writes  a markdown/CSV table to stdout.
 
     python scripts/collect_thunder.py --model base_cls
     python scripts/collect_thunder.py --model base_cls --csv > runs/thunder_base.csv
+
+--model takes one or more run names, searched in order, first hit per dataset wins. The
+Midnight-12k sweep needs this: clsmean pooling (3072-d) crashes the segmentation decoder on
+ViT-g, so its 12 classification sets land under <run>_clsmean and its 2 segmentation sets
+under <run>_cls. That is a real methodological difference, not a bookkeeping one, so as soon
+as more than one run name is given the table grows a `run_name` column (and the CSV a
+`run_name` field) naming the run that supplied each row, plus a provenance footnote.
+
+    python scripts/collect_thunder.py --model mbase_clsmean mbase_cls
 """
 
 from __future__ import annotations
@@ -95,33 +104,53 @@ def _score(blob: dict, task: str) -> tuple[float | None, float | None]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder"))
-    ap.add_argument("--model", required=True, help="PretrainedModel.name, i.e. WAIV_RUN_NAME")
+    ap.add_argument("--model", required=True, nargs="+",
+                    help="one or more PretrainedModel.name (WAIV_RUN_NAME), searched in order; "
+                         "the first with results on disk supplies each dataset row")
     ap.add_argument("--adaptation", default="frozen")
     ap.add_argument("--csv", action="store_true")
     args = ap.parse_args()
 
     res = Path(args.root) / "outputs" / "res"
     table: dict[str, dict[str, tuple]] = {}
+    # Which run_name actually supplied each row. With one --model this is constant and the
+    # column is suppressed so single-name output is unchanged; with several it is the whole
+    # point of the merge and must be visible.
+    source: dict[str, str] = {}
     for ds in PAPER_CLS + PAPER_SEG:
-        for task in TASKS:
-            p = res / ds / args.model / task / args.adaptation / "outputs.json"
-            if not p.is_file():
-                continue
-            try:
-                f1, ece = _score(json.loads(p.read_text()), task)
-            except Exception as e:  # a truncated file from a killed job must not hide the rest
-                print(f"# WARN unreadable {p}: {e}")
-                continue
-            table.setdefault(ds, {})[task] = (f1, ece)
+        found: dict[str, dict[str, tuple]] = {}
+        for model in args.model:
+            got: dict[str, tuple] = {}
+            for task in TASKS:
+                p = res / ds / model / task / args.adaptation / "outputs.json"
+                if not p.is_file():
+                    continue
+                try:
+                    f1, ece = _score(json.loads(p.read_text()), task)
+                except Exception as e:  # a truncated file from a killed job must not hide the rest
+                    print(f"# WARN unreadable {p}: {e}")
+                    continue
+                got[task] = (f1, ece)
+            if got:
+                found[model] = got
+        if not found:
+            continue
+        names = list(found)
+        if len(names) > 1:
+            # Two pooling variants of the same dataset are not interchangeable -- say so.
+            print(f"# WARN {ds} has results under {' and '.join(names)}; using {names[0]}")
+        table[ds] = found[names[0]]
+        source[ds] = names[0]
 
+    show_src = len(args.model) > 1
     cols = [t for t in TASKS if any(t in v for v in table.values())]
     if args.csv:
-        print("dataset,split," + ",".join(cols))
+        print("dataset,split," + ("run_name," if show_src else "") + ",".join(cols))
         for ds in PAPER_CLS + PAPER_SEG:
             if ds not in table:
                 continue
             grp = "classification" if ds in PAPER_CLS else "segmentation"
-            print(f"{ds},{grp}," + ",".join(
+            print(f"{ds},{grp}," + (f"{source[ds]}," if show_src else "") + ",".join(
                 "" if t not in table[ds] or table[ds][t][0] is None else f"{table[ds][t][0]:.4f}"
                 for t in cols))
         return
@@ -131,13 +160,14 @@ def main() -> None:
         hdr.append(f"{c} F1")
         if c in PUBLISHED:
             hdr += [f"{c} pub", f"{c} Δ"]
-    print(f"| dataset | {' | '.join(hdr)} | LP ECE |")
-    print("|" + "---|" * (len(hdr) + 2))
+    print(f"| dataset |{' run_name |' if show_src else ''} {' | '.join(hdr)} | LP ECE |")
+    print("|" + "---|" * (len(hdr) + 2 + (1 if show_src else 0)))
     deltas: dict[str, list[float]] = {}
     for ds in PAPER_CLS + PAPER_SEG:
+        src = f" {source.get(ds, '--')} |" if show_src else ""
         if ds not in table:
             status = "MISSING (no data on this cluster)" if ds == "segpath_epithelial" else "not run"
-            print(f"| {ds} | " + " | ".join("--" for _ in hdr) + f" | -- |  <!-- {status} -->")
+            print(f"| {ds} |{src} " + " | ".join("--" for _ in hdr) + f" | -- |  <!-- {status} -->")
             continue
         cells = []
         for t in cols:
@@ -155,7 +185,14 @@ def main() -> None:
                     deltas.setdefault(t, []).append(d)
                     cells.append(f"{d:+.1f}")
         ece = table[ds].get("linear_probing", (None, None))[1]
-        print(f"| {ds} | {' | '.join(cells)} | {'--' if ece is None else f'{ece:.4f}'} |")
+        print(f"| {ds} |{src} {' | '.join(cells)} | {'--' if ece is None else f'{ece:.4f}'} |")
+    if show_src:
+        by: dict[str, list[str]] = {}
+        for ds, m in source.items():
+            by.setdefault(m, []).append(ds)
+        for m in args.model:
+            if m in by:
+                print(f"# provenance {m}: {len(by[m])} rows -- {', '.join(by[m])}")
     for t, ds_ in deltas.items():
         worst = max(ds_, key=abs)
         print(f"# cross-check {t}: n={len(ds_)} meanΔ={sum(ds_)/len(ds_):+.2f} "

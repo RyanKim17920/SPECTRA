@@ -31,8 +31,12 @@ embedding is ``out.last_hidden_state[:, 0, :]`` (CLS, 1024-d; ``emb_dim: 1024`` 
 So ``WAIV_POOLING=cls`` is the setting that is comparable to their published phikon2 row,
 and ``clsmean`` is ours alone -- see ``hest_adapter`` for the same argument at length.
 
-Segmentation is unaffected: it consumes patch tokens either way, so the two pooling modes
-differ only on the five tile-level tasks.
+Segmentation consumes patch tokens either way, so the two pooling modes differ only on the
+five tile-level tasks *numerically* -- but they are NOT interchangeable there. clsmean
+advertises ``emb_dim = 2 * hidden`` and THUNDER sizes its segmentation decoder from
+``emb_dim``, so on a backbone whose CLS dim differs from its patch dim (Midnight: 3072 vs
+1536) a clsmean segmentation run crashes in ``task_specific_models.py:121``. ``auto`` is
+therefore resolved to ``cls`` for segmentation runs; see ``resolve_pooling`` below.
 
 Their transform for phikon2 comes from ``AutoImageProcessor`` (resize 224, rescale,
 ImageNet normalise), which is what ``build_transform`` reproduces -- the same transform
@@ -74,6 +78,52 @@ def _default_pooling(backbone: str | None) -> str:
     return "clsmean" if (backbone or DEFAULT_BACKBONE) in THUNDER_CLSMEAN_BACKBONES else "cls"
 
 
+def _is_segmentation_run(argv: list[str] | None = None) -> bool:
+    """True iff this process was launched as a THUNDER *segmentation* benchmark.
+
+    THUNDER instantiates the custom model with ``obj()`` and no arguments, from inside
+    ``benchmark()`` *before* the config is built (``thunder/benchmark.py:62``), so the task
+    is not reachable from ``__init__`` by any supported channel. The one thing that is
+    visible is the CLI we were invoked with::
+
+        thunder benchmark custom:<file> <dataset> <task> --loading-mode <mode>
+
+    so we match the task name as an EXACT argv token. Exact-token matching is what makes
+    this safe: no THUNDER dataset name, task name, loading mode, or our model path
+    contains the bare token ``segmentation``, so a classification run can never trip it.
+    Anything we cannot see (e.g. ``thunder.benchmark(...)`` called from Python) simply
+    reads False and keeps the previous behaviour.
+    """
+    return "segmentation" in (sys.argv[1:] if argv is None else argv)
+
+
+def resolve_pooling(backbone: str | None, explicit: str | None, segmentation: bool) -> str:
+    """The single place ``WAIV_POOLING`` / ``auto`` is turned into a pooling mode.
+
+    An explicit value always wins -- unchanged, including for segmentation, so an operator
+    who deliberately passes a pooling mode still gets exactly it.
+
+    Otherwise the backbone default applies, with one narrow correction: ``clsmean`` is
+    never used for a segmentation run. clsmean advertises ``emb_dim = 2 * hidden``, and
+    THUNDER sizes its segmentation decoder from ``emb_dim``, while
+    ``get_segmentation_embeddings`` hands back raw per-patch tokens, which are hidden-d.
+    On Midnight (ViT-g, hidden 1536) that is 3072 vs 1536 and the job dies in
+    ``task_specific_models.py:121``::
+
+        RuntimeError: mat1 and mat2 shapes cannot be multiplied (16384x1536 and 3072x768)
+
+    phikon-v2 never hit this only because its CLS dim equals its patch dim. Pooling is not
+    applied to patch tokens at all, so cls is not a protocol compromise here -- it is the
+    only self-consistent reading of "no pooling on the segmentation branch".
+    """
+    if explicit:
+        return explicit
+    pooling = _default_pooling(backbone)
+    if segmentation and pooling == "clsmean":
+        return "cls"
+    return pooling
+
+
 class WaivPhikonEncoder(PretrainedModel):
     """Our ``PhikonEncoder`` behind THUNDER's three-method interface.
 
@@ -88,7 +138,9 @@ class WaivPhikonEncoder(PretrainedModel):
         from waivphaet.eval.hest_adapter import build_transform, load_encoder
 
         backbone = os.environ.get("WAIV_BACKBONE") or None
-        pooling = os.environ.get("WAIV_POOLING") or _default_pooling(backbone)
+        pooling = resolve_pooling(
+            backbone, os.environ.get("WAIV_POOLING") or None, _is_segmentation_run()
+        )
         adapter = os.environ.get("WAIV_ADAPTER") or None
         checkpoint = os.environ.get("WAIV_CHECKPOINT") or None
 
