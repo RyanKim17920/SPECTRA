@@ -16,8 +16,10 @@
 #   sbatch scripts/run_thunder_retention.sbatch base_cls                       # reference row
 #   sbatch scripts/run_thunder_retention.sbatch step5000 runs/waiv-real-369043/step5000
 #
-# Full FT checkpoint (backbone.safetensors format):
-#   sbatch scripts/run_thunder_retention.sbatch full_ft_s1000 runs/full_ft/step_0000100
+# Full FT checkpoint (backbone.safetensors format). Positionals are
+# $1=RUN_NAME $2=ADAPTER $3=CKPT, so the adapter slot must be passed EMPTY -- a full-FT
+# checkpoint in $2 would set WAIV_ADAPTER and be loaded as a LoRA adapter dir:
+#   sbatch scripts/run_thunder_retention.sbatch full_ft_s1000 "" runs/full_ft/step_0000100
 #
 # Why a subset and not all 15: the full sweep is ~1.5M tiles of ViT-L inference and takes
 # most of a day. Retention has to be cheap enough to run at every checkpoint or phase 8

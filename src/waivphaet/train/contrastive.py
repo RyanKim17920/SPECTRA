@@ -250,6 +250,9 @@ def train(
     t0 = time.time()
     tiles_seen = 0
     win_tiles, win_t0 = 0, time.time()
+    # pre-clip grad norm from the most recent optimizer step; None until the first one
+    # (and stays None entirely when cfg.grad_clip is falsy, since nothing computes it)
+    last_grad_norm: float | None = None
     pbar = tqdm(total=cfg.max_steps, desc="train", unit="step")
     optimizer.zero_grad(set_to_none=True)
     if device.type == "cuda":
@@ -284,7 +287,12 @@ def train(
             if (step + 1) % cfg.grad_accum == 0:
                 if cfg.grad_clip:
                     scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip)
+                    # The return is the PRE-clip total norm. Keep it: under full FT a
+                    # grad-norm spike is the earliest visible collapse signal -- it leads
+                    # the loss and the top1 by several steps.
+                    last_grad_norm = float(
+                        torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip)
+                    )
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad(set_to_none=True)
@@ -304,6 +312,7 @@ def train(
                     "tiles_seen": tiles_seen,
                     "tiles_per_s": win_tiles / max(now - win_t0, 1e-9),
                     **metrics,
+                    "grad_norm": last_grad_norm,
                     **{f"batch_{k}": v for k, v in batch_stats.items()},
                 }
                 if device.type == "cuda":

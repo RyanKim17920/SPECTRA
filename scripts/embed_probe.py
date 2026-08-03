@@ -195,7 +195,11 @@ def main() -> int:
 
     if args.checkpoint is not None:
         # Full FT: derive backbone from the run's config.json.
-        run_config = args.checkpoint.parent.parent / "config.json"
+        # config.json lives in the RUN dir, alongside the step_*/ dirs -- so it is the
+        # checkpoint's direct parent, not its grandparent. Getting this wrong reads a
+        # non-existent path, silently falls through, and evaluates DEFAULT_BACKBONE
+        # instead of the run's actual backbone.
+        run_config = args.checkpoint.parent / "config.json"
         if run_config.exists():
             saved_base = json.loads(run_config.read_text()).get("encoder", {}).get("backbone")
             if saved_base:

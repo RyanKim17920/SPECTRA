@@ -95,7 +95,8 @@ def parse_args():
     ap.add_argument("--full-ft", action="store_true",
                     help="Full fine-tuning: train all backbone weights instead of LoRA. "
                          "Use a lower learning rate (e.g. 1e-5 instead of 1e-4). "
-                         "Checkpoints are ~1.2 GB each for ViT-L.")
+                         "Checkpoints are ~3.4 GiB each for ViT-L (backbone.safetensors "
+                         "1.13 GiB + optim.pt ~2.26 GiB of AdamW moments + projector).")
     return ap.parse_args()
 
 
@@ -114,7 +115,7 @@ def main() -> int:
             "Consider --lr 1e-5. Proceeding anyway.", flush=True,
         )
 
-    # --- Disk space warning for full FT (1.2 GB/ckpt for ViT-L) ---
+    # --- Disk space warning for full FT (~3.4 GiB/ckpt for ViT-L) ---
     if args.full_ft:
         import shutil
         try:
@@ -126,7 +127,10 @@ def main() -> int:
                 ckpt_count = math.ceil(args.max_steps / max(args.ckpt_every, 1))
             # +1 for final checkpoint
             ckpt_count += 1
-            est_gb = ckpt_count * 1.2  # rough estimate per full FT checkpoint
+            # A full-FT checkpoint is NOT just the backbone: backbone.safetensors is
+            # 1.13 GiB (303M fp32 params) but optim.pt carries AdamW's two moment
+            # tensors over the same params (~2.26 GiB), plus the projector. ~3.4 GiB.
+            est_gb = ckpt_count * 3.4
             free_gb = free / 2**30
             if free_gb < est_gb * 1.5:
                 print(
