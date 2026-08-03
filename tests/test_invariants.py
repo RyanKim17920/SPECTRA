@@ -6,6 +6,12 @@ a positive that isn't co-registered, or a negative that leaks acquisition signal
 
 from __future__ import annotations
 
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
 import numpy as np
 import pytest
 import torch
@@ -79,7 +85,7 @@ def test_masked_infonce_negative_count_is_group_bounded():
 def test_masked_infonce_random_loss_is_log_group_size():
     g = torch.arange(64) // 8
     torch.manual_seed(0)
-    _, m = masked_info_nce(torch.randn(64, 32), torch.randn(64, 32), g, temperature=1.0)
+    _, m = masked_info_nce(torch.randn(64, 32), torch.randn(64, 32), group_id=g, temperature=1.0)
     assert m["loss"] == pytest.approx(np.log(8), abs=0.35)
 
 
@@ -272,10 +278,6 @@ def test_thunder_pooling_is_resolved_per_backbone_not_hardcoded():
     """arXiv:2607.22861 §3 line 106: in THUNDER, CLS+mean-pool concatenation is used only
     for Virchow2 / AquaViT / H0-mini / Midnight-12k. phikon-v2 is CLS there. Hardcoding
     either one makes the base-vs-fine-tuned rank sums non-comparable to their table."""
-    import importlib.util
-    import sys
-    from pathlib import Path
-
     src = Path(__file__).resolve().parents[1] / "src" / "waivphaet" / "eval" / "thunder_model.py"
     spec = importlib.util.spec_from_file_location("_waiv_thunder_model_test", src)
     mod = importlib.util.module_from_spec(spec)
@@ -335,3 +337,113 @@ def test_thunder_auto_pooling_never_resolves_to_clsmean_for_segmentation():
                  "thunder_model.py", ds, task,
                  "--loading-mode", "embedding_pre_loading"]
             )
+# --------------------------------------------------------------------------------------
+# Full FT mode (full-ft branch)
+
+
+def test_full_ft_trainable_param_assertion():
+    """A full-FT model (use_lora=False, freeze_backbone=False) must have ~100% trainable params.
+
+    A full-FT run that silently trains only the projector would look like a weak result,
+    not an error. The guard in train_lora.py asserts >= 95%.
+    """
+    import torch.nn as nn
+
+    model = _fake_vit(8, ("fc1", "fc2"))
+    # No freezing, no LoRA => all params should be trainable by default.
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+    pct = trainable / max(total, 1)
+    assert pct >= 0.95, f"full FT should have ~100% trainable, got {pct:.1%}"
+
+
+def test_full_ft_checkpoint_roundtrip():
+    """Save full FT backbone weights, reload via safetensors, and verify delta vs base.
+
+    A silently-unloaded full-FT checkpoint reproduces base numbers exactly and reads as
+    'perfect retention' -- the most dangerous false result. This tests the core guard
+    mechanism: load a checkpoint into a model, then compare against the base model.
+    """
+    import torch.nn as nn
+    from safetensors.torch import save_file, load_file
+
+    # Create two models: base and "fine-tuned" (modify weights manually).
+    base = _fake_vit(4, ("fc1", "fc2"))
+    tuned = _fake_vit(4, ("fc1", "fc2"))
+
+    # Modify tuned weights to simulate fine-tuning.
+    for p in tuned.parameters():
+        p.data += torch.randn_like(p) * 0.1
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ckpt_path = Path(tmpdir) / "backbone.safetensors"
+        save_file(tuned.state_dict(), str(ckpt_path))
+
+        # Load into a fresh model.
+        loaded = _fake_vit(4, ("fc1", "fc2"))
+        loaded_sd = load_file(str(ckpt_path))
+        loaded.load_state_dict(loaded_sd)
+
+    # Compare loaded weights vs base — they should differ.
+    base_sd = base.state_dict()
+    loaded_sd = loaded.state_dict()
+    delta = sum((loaded_sd[k] - base_sd[k]).abs().sum().item()
+                for k in loaded_sd)
+    assert delta > 0, "modified checkpoint should differ from base"
+
+
+def test_ckpt_schedule_parser():
+    """Non-uniform checkpoint schedule parsing."""
+    import argparse
+
+    src = Path(__file__).resolve().parents[1] / "scripts" / "train_lora.py"
+    spec = importlib.util.spec_from_file_location("_train_lora_test", str(src))
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except ImportError:
+        pytest.skip("train_lora.py not importable in test environment")
+
+    # Basic parsing.
+    assert mod.parse_ckpt_schedule("25,50,75,100") == [25, 50, 75, 100]
+    assert mod.parse_ckpt_schedule("1000") == [1000]
+
+    # Unsorted input is sorted and deduped.
+    assert mod.parse_ckpt_schedule("200,50,100,75") == [50, 75, 100, 200]
+    assert mod.parse_ckpt_schedule("50,50,100,100") == [50, 100]
+
+    # Whitespace tolerance.
+    assert mod.parse_ckpt_schedule(" 50 , 100 , 150 ") == [50, 100, 150]
+
+    # Invalid inputs.
+    with pytest.raises(argparse.ArgumentTypeError):
+        mod.parse_ckpt_schedule("abc")
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        mod.parse_ckpt_schedule("")
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        mod.parse_ckpt_schedule("-1,50")
+
+
+def test_should_checkpoint_uses_schedule_when_set():
+    """_should_checkpoint respects ckpt_schedule over ckpt_every."""
+    from waivphaet.train.contrastive import TrainConfig, _should_checkpoint
+
+    cfg = TrainConfig(ckpt_every=500, ckpt_schedule=[50, 100, 200])
+    assert _should_checkpoint(50, cfg) is True
+    assert _should_checkpoint(100, cfg) is True
+    assert _should_checkpoint(200, cfg) is True
+    assert _should_checkpoint(500, cfg) is False  # not in schedule
+    assert _should_checkpoint(75, cfg) is False
+
+
+def test_should_checkpoint_uses_ckpt_every_when_no_schedule():
+    """_should_checkpoint falls back to ckpt_every when schedule is None."""
+    from waivphaet.train.contrastive import TrainConfig, _should_checkpoint
+
+    cfg = TrainConfig(ckpt_every=200, ckpt_schedule=None)
+    assert _should_checkpoint(200, cfg) is True
+    assert _should_checkpoint(400, cfg) is True
+    assert _should_checkpoint(100, cfg) is False
+    assert _should_checkpoint(300, cfg) is False

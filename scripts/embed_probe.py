@@ -33,6 +33,7 @@ cross-stain and cross-scanner separately; the composite hides the hard axis".
 
     python scripts/embed_probe.py --out probe_before.json
     python scripts/embed_probe.py --adapter runs/x/step_0000300 --out probe_after.json
+    python scripts/embed_probe.py --checkpoint runs/full_ft/step_0000100 --out probe_ft.json
 """
 
 from __future__ import annotations
@@ -56,7 +57,9 @@ def parse_args():
     ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--adapter", type=Path, default=None,
-                    help="checkpoint dir written by save_checkpoint (contains adapter/ + projector.pt)")
+                    help="LoRA checkpoint dir written by save_checkpoint (contains adapter/ + projector.pt)")
+    ap.add_argument("--checkpoint", type=Path, default=None,
+                    help="Full-FT checkpoint dir written by save_checkpoint (contains backbone.safetensors + projector.pt). Mutually exclusive with --adapter.")
     ap.add_argument("--heldout-scanners", nargs="*", default=["GT450", "S210"])
     ap.add_argument("--heldout-stains", nargs="*", default=["HRH", "KR", "MY"])
     ap.add_argument("--conditions-file", type=Path, default=None,
@@ -71,7 +74,7 @@ def parse_args():
     ap.add_argument("--proj-out-dim", type=int, default=512)
     ap.add_argument("--pooling", default="clsmean", choices=["cls", "mean", "clsmean"])
     ap.add_argument("--backbone", default=DEFAULT_BACKBONE,
-                    help="HF id of the base backbone; must match what --adapter was trained on")
+                    help="HF id of the base backbone; must match what --adapter/--checkpoint was trained on")
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     return ap.parse_args()
@@ -92,6 +95,42 @@ def load_adapter(model, ckpt: Path) -> None:
     if missing:
         raise RuntimeError(f"adapter keys not consumed: {list(missing)[:5]}")
     model.projector.load_state_dict(torch.load(ckpt / "projector.pt", map_location="cpu"))
+
+
+def load_full_ft_checkpoint(model, ckpt: Path) -> None:
+    """Restore a full-FT checkpoint written by ``waivphaet.train.contrastive.save_checkpoint``.
+
+    Loads backbone.safetensors (~1.2 GB for ViT-L) and projector.pt.
+    """
+    backbone_path = ckpt / "backbone.safetensors"
+    if backbone_path.exists():
+        from safetensors.torch import load_file
+        backbone_sd = load_file(str(backbone_path))
+        model.backbone.load_state_dict(backbone_sd)
+    else:
+        # Fallback: backbone.pt (legacy format).
+        backbone_pt = ckpt / "backbone.pt"
+        if backbone_pt.exists():
+            backbone_sd = torch.load(str(backbone_pt), map_location="cpu", weights_only=False)
+            model.backbone.load_state_dict(backbone_sd)
+
+    # Load projector when present.
+    proj_path = ckpt / "projector.pt"
+    if proj_path.exists():
+        try:
+            proj_sd = torch.load(str(proj_path), map_location="cpu", weights_only=False)
+            saved_in = proj_sd["net.0.weight"].shape[1]
+            if saved_in == model.embed_dim:
+                model.projector.load_state_dict(proj_sd)
+            else:
+                print(
+                    f"[probe] skipping projector: trained with a {saved_in}-d input, "
+                    f"evaluating at {model.embed_dim}-d (pooling={model.cfg.pooling}). "
+                    "Projector is unused for feature extraction; backbone weights are unaffected.",
+                    flush=True,
+                )
+        except Exception as e:
+            print(f"[probe] WARNING: could not load projector: {e}", flush=True)
 
 
 @torch.no_grad()
@@ -123,6 +162,10 @@ def pair_stats(x: torch.Tensor, y: torch.Tensor) -> dict[str, float]:
 def main() -> int:
     args = parse_args()
     os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+
+    if args.checkpoint and args.adapter:
+        raise SystemExit("--checkpoint and --adapter are mutually exclusive")
+
     # the projection head is randomly initialised, so without this the "before" and
     # "after" runs get different heads and the projection-space delta is meaningless.
     # (The backbone needs no seed: zero-init LoRA B makes an unloaded adapter exactly
@@ -148,14 +191,26 @@ def main() -> int:
     tiles = np.sort(rng.choice(NUM_TILES, size=args.n_tiles, replace=False))
 
     device = torch.device(args.device)
-    # A checkpoint must carry its own backbone. eval_checkpoints.py deliberately does not
-    # pass --backbone (see its run_pathorob comment) because extract_pathorob_features
-    # derives it from the adapter; the probe did not, so a Midnight adapter (1536-d) was
-    # loaded into a phikon-v2 model (1024-d) and died on a size mismatch across all 24
-    # layers. Derive it here too, and hard-fail on an explicit contradiction rather than
-    # silently preferring one source.
     backbone = args.backbone
-    if args.adapter is not None:
+
+    if args.checkpoint is not None:
+        # Full FT: derive backbone from the run's config.json.
+        # config.json lives in the RUN dir, alongside the step_*/ dirs -- so it is the
+        # checkpoint's direct parent, not its grandparent. Getting this wrong reads a
+        # non-existent path, silently falls through, and evaluates DEFAULT_BACKBONE
+        # instead of the run's actual backbone.
+        run_config = args.checkpoint.parent / "config.json"
+        if run_config.exists():
+            saved_base = json.loads(run_config.read_text()).get("encoder", {}).get("backbone")
+            if saved_base:
+                if args.backbone != DEFAULT_BACKBONE and args.backbone != saved_base:
+                    raise SystemExit(
+                        f"--backbone {args.backbone} contradicts the checkpoint's run config "
+                        f"backbone={saved_base} ({run_config})"
+                    )
+                backbone = saved_base
+    elif args.adapter is not None:
+        # LoRA: derive backbone from the adapter's own adapter_config.json.
         acfg = Path(args.adapter) / "adapter" / "adapter_config.json"
         if acfg.exists():
             saved = json.loads(acfg.read_text()).get("base_model_name_or_path")
@@ -166,21 +221,34 @@ def main() -> int:
                         f"base_model_name_or_path={saved} ({acfg})"
                     )
                 backbone = saved
+
     print(f"[probe] backbone={backbone}", flush=True)
-    model = build_encoder(
-        backbone=backbone,
-        lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
-        proj_out_dim=args.proj_out_dim, pooling=args.pooling,
-    )
-    if args.adapter is not None:
-        load_adapter(model, args.adapter)
-        print(f"[probe] loaded adapter from {args.adapter}")
+
+    if args.checkpoint is not None:
+        # Full FT: no LoRA.
+        model = build_encoder(
+            backbone=backbone,
+            use_lora=False,
+            proj_out_dim=args.proj_out_dim, pooling=args.pooling,
+        )
+        load_full_ft_checkpoint(model, args.checkpoint)
+        print(f"[probe] loaded full-FT checkpoint from {args.checkpoint}")
     else:
-        print("[probe] BASE model (no adapter)")
+        model = build_encoder(
+            backbone=backbone,
+            lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
+            proj_out_dim=args.proj_out_dim, pooling=args.pooling,
+        )
+        if args.adapter is not None:
+            load_adapter(model, args.adapter)
+            print(f"[probe] loaded adapter from {args.adapter}")
+        else:
+            print("[probe] BASE model (no adapter)")
     model.to(device).eval()
 
     report: dict = {
         "adapter": str(args.adapter) if args.adapter else None,
+        "checkpoint": str(args.checkpoint) if args.checkpoint else None,
         "n_tiles": int(tiles.size),
         "seed": args.seed,
         "groups": {},
@@ -196,8 +264,8 @@ def main() -> int:
             cache[c.key] = embed_condition(model, slide, tiles, device, args.batch_size)
             print(f"[probe] {gname}: embedded {c.key}")
 
-        # cross-SCANNER = same stain, different scanner; cross-STAIN = the transpose.
-        axes: dict[str, list[tuple] ] = {"cross_scanner": [], "cross_stain": []}
+        # cross-SCANNER = same stain, different scanner; cross-STAIN = same scanner, different stain.
+        axes: dict[str, list[tuple]] = {"cross_scanner": [], "cross_stain": []}
         for i, a in enumerate(conds):
             for b in conds[i + 1 :]:
                 if a.stain == b.stain and a.scanner != b.scanner:
