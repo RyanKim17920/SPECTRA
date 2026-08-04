@@ -1,539 +1,337 @@
 # waivphaet
 
-Registered-pair contrastive fine-tuning of [`owkin/phikon-v2`](https://huggingface.co/owkin/phikon-v2)
-for scanner/stain robustness. A **PHAET-class reproduction attempt**.
+A reproduction attempt of Waiv's robustness fine-tuning (arXiv:2607.22861), which released
+**Phaet** (from `owkin/phikon-v2`) and **Mascaret** (from `kaiko-ai/midnight`) as gated
+weights with **no method section** — no loss, no algorithm, no corpus, no hyperparameters,
+no code. The recipe here is reconstructed from the one gap their related-work section
+leaves open: they dismiss "contrastive losses over co-registered scanner pairs" because
+"these downstream methods all keep the backbone frozen", so we apply that loss family *to
+the backbone* — masked InfoNCE over PLISM co-registered pairs (positives = same tile index,
+different acquisition condition; negatives drawn from the anchor's own condition), LoRA on
+all transformer blocks. PathoROB is the primary metric and is never seen in training.
+[`PLAN.md`](PLAN.md) is the spec; every module docstring cites its section.
 
-Waiv released PHAET with a paper (arXiv:2607.22861) that has **no method section** — no
-loss, no algorithm, no corpus, no hyperparameters, and no code. The only disclosed
-constraints are "lightweight, label-free fine-tuning" that "instills scanner invariance
-progressively throughout the network", and that it is not teacher distillation.
+---
 
-So this is not a reproduction of a published recipe. It is a bet on the gap their own
-related-work section leaves open: they dismiss "contrastive losses over co-registered
-scanner pairs" with one sentence — *"These downstream methods all keep the backbone
-frozen."* We apply that loss family **to the backbone**.
+## 1. Headline — average level
 
-**Read [`PLAN.md`](PLAN.md) first.** It is the spec; every module docstring cites the
-section it comes from.
-
-## Results vs Waiv — consolidated
-
-Every row is our number against Waiv's published value for the *same* quantity.
 Each backbone's **base** was reproduced against a published reference before any
 fine-tuning, which is what makes the deltas meaningful rather than merely plausible.
 
-### Robustness (PathoROB Avg RI)
+### phikon-v2 → Phaet (ours: LoRA, step 1000)
 
-| model | base (ours) | base (published) | fine-tuned (ours) | Waiv | headroom captured |
-|---|---|---|---|---|---|
-| phikon-v2 → Phaet | 0.468611 | 0.468612 | **0.8080** (step 1000) | 0.806 | ~100% |
-| Midnight-12k → Mascaret | 0.7589 | 0.759 | **0.9080** (step 500) | 0.924 | 90.3% |
+| benchmark | base ours | base published | fine-tuned ours | Waiv Phaet |
+|---|---|---|---|---|
+| PathoROB Avg RI ↑ | 0.4686 | 0.4686 / 0.469 | **0.8080** | 0.806 |
+| THUNDER mean Δ over 4 tasks ↑ | — | — | **+2.24** | +1.35 |
+| HEST Avg Pearson ↑ | 0.3747 | 0.3747 | **0.3794** (s1000) / 0.3825 (s2000) | 0.3943 |
 
-### Retention — THUNDER (phikon-v2, step 1000, same-pipeline)
+### Midnight-12k → Mascaret (ours: LoRA, step 500)
 
-| task | our base | our ft | our Δ | Waiv Δ |
+| benchmark | base ours | base published | fine-tuned ours | Waiv Mascaret |
+|---|---|---|---|---|
+| PathoROB Avg RI ↑ | 0.7589 | 0.759 | **0.9080** | 0.924 |
+| THUNDER mean Δ over 4 tasks ↑ | — | — | **+2.37** | +1.80 |
+| HEST Avg Pearson ↑ | not run | 0.3952 | not run | 0.4167 |
+
+Reading:
+
+- **PathoROB.** phikon-v2 lands *on* Waiv's Phaet number (0.8080 vs 0.806, ~100% of the
+  headroom). Midnight reaches 0.9080 against Mascaret's 0.924 — 90.3% of the headroom, and
+  plainly short.
+- **THUNDER.** Our deltas match or exceed Waiv's on both backbones, but the mean-over-4-tasks
+  figure hides composition: see §2. Our segmentation average is over 2 datasets, Waiv's over 4.
+- **HEST.** We are clearly behind on phikon-v2 (+0.0047 at step 1000, +0.0078 at step 2000,
+  against their +0.0196), and we have no Midnight HEST run at all. Read against the
+  benchmark's dynamic range (0.3252–0.4229, span 0.0977), not against zero.
+
+Per-dataset PathoROB, for completeness:
+
+| model | camelyon | tolkach_esca | tcga | Avg |
+|---|---|---|---|---|
+| phikon-v2 base (ours) | 0.0190 | 0.7681 | 0.6188 | 0.4686 |
+| phikon-v2 base (Waiv T1) | 0.019 | 0.768 | 0.619 | 0.469 |
+| ours step 1000 | **0.7169** | **0.9279** | **0.7791** | **0.8080** |
+| Waiv Phaet | 0.702 | 0.932 | 0.785 | 0.806 |
+| Midnight base (ours) | 0.4780 | 0.9411 | 0.8575 | 0.7589 |
+| Midnight base (Waiv T1) | 0.478 | 0.941 | 0.858 | 0.759 |
+| ours step 500 | **0.8844** | **0.9683** | **0.8712** | **0.9080** |
+| Waiv Mascaret | 0.907 | 0.972 | 0.893 | 0.924 |
+
+---
+
+## 2. Task level — THUNDER
+
+Base and fine-tuned run through identical code, so these deltas carry no cross-study
+assumption. Our base reproduces THUNDER's published phikon-v2 row (mean Δ +0.08 F1 over 12
+datasets on linear probing), which is what makes Δ-vs-Δ against Waiv legitimate despite
+their runs being mixed precision and ours fp32.
+
+### phikon-v2 → Phaet (ours step 1000, `cls` pooling)
+
+| task | our base | our ft | our Δ | Waiv Phaet Δ |
 |---|---|---|---|---|
 | kNN | 70.28 | 75.20 | **+4.92** | +3.7 |
 | linear probing | 76.54 | 79.24 | **+2.70** | +1.4 |
 | few-shot | 69.33 | 70.99 | **+1.66** | +1.5 |
-| segmentation | 70.40 | 70.09 | **−0.31** | −1.2 |
+| segmentation (2/4 sets) | 70.40 | 70.09 | **−0.31** | −1.2 |
 
-### Retention — HEST (phikon-v2, CLS protocol, per cancer type)
+### Midnight-12k → Mascaret (ours step 500, `clsmean` pooling)
 
-Waiv publish the full per-type Phaet row (Table 3), so this is Δ-vs-Δ, not just averages.
+| task | our base | our ft | our Δ | Waiv Mascaret Δ |
+|---|---|---|---|---|
+| kNN | 78.25 | 80.44 | **+2.19** | +1.7 |
+| linear probing | 82.88 | 84.12 | **+1.24** | +0.2 |
+| few-shot | 70.64 | 76.38 | **+5.74** | +3.7 |
+| segmentation (2/4 sets) | 70.12 | 70.42 | **+0.30** | +1.6 |
 
-| task | base | Waiv Phaet | Δ Waiv | ours (s1000) | ours (s2000) | Δ ours (s2000) |
+Waiv publish **both** model pairs in their Table 2; the Midnight row above is compared
+against **Mascaret**, which is its correct counterpart.
+
+One precision note, stated once: Waiv's Table 2 Midnight base is their *mixed-precision*
+rerun (seg 66.0). Table 5's full-precision leaderboard row for the same model is seg 68.8
+and lin 84.7, against which Mascaret's deltas are seg **−1.2** and lin **−0.1** rather than
++1.6 and +0.2. Our runs are fp32. We do not lean on this — the fp32 comparison is the one
+that would favour us, and the mixed-precision Table 2 deltas are what we quote above.
+
+### HEST, per cancer type (phikon-v2, `cls` protocol)
+
+Waiv publish the full per-type Phaet row (Table 3), so this is Δ-vs-Δ.
+
+| task | base | Waiv Phaet | Δ Waiv | ours s1000 | ours s2000 | Δ ours (s2000) |
 |---|---|---|---|---|---|---|
 | IDC | 0.5408 | 0.5630 | +0.0222 | 0.5476 | 0.5491 | +0.0083 |
 | PRAD | 0.3545 | 0.3546 | +0.0001 | 0.3268 | 0.3334 | −0.0211 |
 | PAAD | 0.4455 | 0.4748 | +0.0293 | 0.4627 | 0.4666 | +0.0211 |
 | SKCM | 0.5554 | 0.5985 | +0.0431 | 0.5813 | 0.5880 | +0.0326 |
 | COAD | 0.2500 | 0.2915 | +0.0415 | 0.2907 | 0.2859 | +0.0359 |
-| READ | 0.1749 | 0.1696 | −0.0053 | 0.1455 | 0.1655 | −0.0094 |
-| CCRCC | 0.2659 | 0.2696 | +0.0037 | 0.2681 | 0.2666 | +0.0007 |
+| READ | 0.1749 | 0.1696 | −0.0053 | 0.1455 | 0.1655 | −0.0093 |
+| CCRCC | 0.2659 | 0.2696 | +0.0037 | 0.2681 | 0.2666 | +0.0008 |
 | LUNG | 0.5419 | 0.5622 | +0.0203 | 0.5316 | 0.5299 | −0.0120 |
-| LYMPH_IDC | 0.2437 | 0.2649 | +0.0212 | 0.2600 | 0.2575 | +0.0138 |
+| LYMPH_IDC | 0.2437 | 0.2649 | +0.0212 | 0.2600 | 0.2575 | +0.0139 |
 | **Avg** | **0.3747** | **0.3943** | **+0.0196** | 0.3794 | **0.3825** | **+0.0078** |
 
-**corr(Δ_waiv, Δ_ours) = 0.880.** Their three largest gains (COAD, SKCM, PAAD) are our
-three largest; we regress on READ exactly as they do. The average shortfall is
-**concentrated in LUNG and PRAD**, not spread across tasks — which points at PLISM's
-single-institution tissue coverage rather than at the objective.
+corr(Δ_waiv, Δ_ours) = 0.880 — their three largest gains (COAD, SKCM, PAAD) are our three
+largest, and we regress on READ as they do. The shortfall is concentrated in LUNG and PRAD
+rather than spread across tasks.
 
-### Caveats a reader should carry
+---
 
-- **Checkpoint selection is not neutral.** THUNDER/HEST above use step 1000, chosen because
-  it was the best *PathoROB* checkpoint. Step 2000 is better on HEST (+0.0078 vs +0.0047).
-  Robustness and retention peak at different steps, so any single-checkpoint headline
-  understates one axis.
-- **Midnight has PathoROB only.** No THUNDER or HEST runs for it yet.
-- **`tcga_uniform` regresses** −9.1 kNN / −6.2 linear probing. Consistent across two
-  independent probes, so it is real information loss, not a metric artefact. Unexplained.
-- **Coverage:** Waiv aggregate over 16 THUNDER datasets, we over 14.
-- **Precision:** their THUNDER runs are mixed precision, ours fp32. Each Δ is internally
-  precision-consistent, so Δ-vs-Δ is valid; absolute levels are not comparable.
-- **n=1 seed** throughout. No error bars.
+## 3. Dataset level — THUNDER
 
-## Design in one paragraph
+Waiv publish **no per-dataset THUNDER breakdown**, only the six task averages, so this
+table has no counterpart in their paper and no dataset-level comparison against them is
+possible. It is strictly more granular than what they released.
 
-PLISM (7 scanners × 13 stains × 16,278 Elastix-registered tiles) is our **training** set —
-it is only a qualitative figure in Waiv's paper, so using it does not contaminate the
-headline metric. Tile index *i* is the same tissue location in all 91 slides, so a
-**positive** is free: same tile, different acquisition condition. **Negatives are drawn
-from the anchor's own condition** — the one load-bearing detail (`PLAN.md` §2). LoRA
-adapts all 24 transformer blocks, not the head (`PLAN.md` §2, their Fig 4 rules head-only
-out). **PathoROB** is the primary metric and is never touched in training; PLISM retrieval
-is a diagnostic and is never leaderboard-comparable.
+### phikon-v2, base → step 1000 (F1 ×100)
 
-## Layout
+| dataset | kNN base | ft | Δ | lin base | ft | Δ | few base | ft | Δ | seg base | ft | Δ |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| bach | 57.1 | 61.4 | +4.3 | 63.7 | 67.8 | +4.1 | 54.9 | 58.9 | +4.0 | — | — | — |
+| bracs | 45.2 | 51.3 | +6.1 | 59.9 | 57.6 | −2.3 | 41.3 | 43.5 | +2.3 | — | — | — |
+| break_his | 56.8 | 69.2 | +12.5 | 50.8 | 68.3 | +17.5 | 61.8 | 67.2 | +5.4 | — | — | — |
+| ccrcc | 76.7 | 85.3 | +8.6 | 78.7 | 90.4 | +11.7 | 90.2 | 88.1 | −2.2 | — | — | — |
+| crc | 92.1 | 94.5 | +2.3 | 92.0 | 94.0 | +2.0 | 89.6 | 95.1 | +5.5 | — | — | — |
+| esca | 75.3 | 79.2 | +3.9 | 78.0 | 80.9 | +2.9 | 66.4 | 64.5 | −1.9 | — | — | — |
+| mhist | 66.4 | 70.8 | +4.4 | 79.1 | 77.4 | −1.7 | 55.7 | 60.5 | +4.8 | — | — | — |
+| patch_camelyon | 81.6 | 86.4 | +4.8 | 89.3 | 91.9 | +2.6 | 82.1 | 84.0 | +1.9 | — | — | — |
+| tcga_crc_msi | 56.8 | 61.7 | +4.9 | 62.0 | 62.1 | +0.1 | 56.8 | 57.9 | +1.1 | — | — | — |
+| tcga_tils | 80.6 | 87.9 | +7.3 | 91.0 | 91.0 | +0.0 | 85.7 | 85.7 | −0.0 | — | — | — |
+| **tcga_uniform** | 68.2 | 60.0 | **−8.2** | 77.1 | 71.5 | **−5.7** | 60.0 | 52.7 | **−7.3** | — | — | — |
+| wilds | 86.6 | 95.0 | +8.4 | 96.8 | 97.9 | +1.2 | 87.4 | 93.9 | +6.4 | — | — | — |
+| ocelot | — | — | — | — | — | — | — | — | — | 80.0 | 79.5 | −0.5 |
+| pannuke | — | — | — | — | — | — | — | — | — | 60.8 | 60.6 | −0.2 |
 
-```
-src/waivphaet/
-  data/conditions.py   91 filenames -> (stain, scanner); deterministic held-out split
-  data/repack.py       h5 -> contiguous (16278,224,224,3) uint8 memmap  [throughput]
-  data/pairs.py        registered-pair batch sampler, same-condition negatives
-  models/encoder.py    ANY HF ViT + LoRA on all blocks + 512-d projection head
-  train/contrastive.py masked InfoNCE, AMP, grad accum, checkpointing
-  eval/                thin adapters: PathoROB (primary), plismbench (diagnostic)
-scripts/
-  smoke_test.py        few real steps on the local slides, CPU or 1 GPU
-  train_lora.py        full fine-tune entrypoint
-  train_lora.sbatch    SLURM template (partition main/n, 8xH100)
-third_party/           PathoROB + plism-benchmark clones (gitignored, not vendored)
-```
+### Midnight-12k, base → step 500 (F1 ×100)
 
-## Environment
+| dataset | kNN base | ft | Δ | lin base | ft | Δ | few base | ft | Δ | seg base | ft | Δ |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **bach** | 84.3 | 82.2 | **−2.1** | 87.9 | 82.4 | **−5.6** | 82.5 | 73.9 | **−8.6** | — | — | — |
+| bracs | 50.2 | 53.5 | +3.3 | 63.8 | 63.7 | −0.1 | 49.6 | 52.0 | +2.4 | — | — | — |
+| break_his | 58.1 | 74.2 | +16.1 | 56.7 | 76.1 | +19.4 | 38.5 | 66.5 | +28.0 | — | — | — |
+| ccrcc | 91.6 | 89.6 | −2.0 | 90.8 | 89.5 | −1.3 | 77.5 | 88.6 | +11.1 | — | — | — |
+| crc | 94.2 | 94.7 | +0.5 | 95.4 | 96.2 | +0.8 | 94.7 | 95.6 | +0.9 | — | — | — |
+| esca | 81.4 | 82.4 | +1.0 | 86.2 | 87.0 | +0.8 | 75.0 | 73.9 | −1.1 | — | — | — |
+| mhist | 69.3 | 74.8 | +5.5 | 80.2 | 79.8 | −0.4 | 62.4 | 71.0 | +8.6 | — | — | — |
+| patch_camelyon | 88.0 | 89.3 | +1.2 | 93.5 | 94.2 | +0.6 | 82.8 | 86.4 | +3.6 | — | — | — |
+| tcga_crc_msi | 61.9 | 64.1 | +2.1 | 65.6 | 68.7 | +3.1 | 55.1 | 59.6 | +4.6 | — | — | — |
+| tcga_tils | 87.6 | 89.6 | +2.0 | 91.0 | 91.1 | +0.1 | 76.2 | 89.2 | +13.0 | — | — | — |
+| **tcga_uniform** | 77.5 | 74.9 | **−2.6** | 85.2 | 82.3 | **−2.9** | 63.4 | 66.3 | +2.9 | — | — | — |
+| wilds | 95.0 | 96.2 | +1.2 | 98.3 | 98.5 | +0.2 | 89.9 | 93.6 | +3.6 | — | — | — |
+| ocelot | — | — | — | — | — | — | — | — | — | 78.4 | 79.4 | +0.9 |
+| pannuke | — | — | — | — | — | — | — | — | — | 61.8 | 61.5 | −0.3 |
 
-Phase 1 found no project venv with `h5py`, so this repo carries its own.
+THUNDER pooling is per-backbone and is not our choice: arXiv:2607.22861 §3 uses CLS+mean
+concatenation in THUNDER only for Virchow2, AquaViT, H0-mini and Midnight-12k, so
+phikon-v2 is `cls` and Midnight is `clsmean`. On ViT-g the 3072-d `clsmean` vector crashes
+THUNDER's segmentation decoder, so Midnight's 2 segmentation sets are `cls` while its 12
+classification sets are `clsmean` — a real methodological split, recorded per-row by
+`scripts/collect_thunder.py`.
+
+---
+
+## 4. Caveats
+
+- **n=1 seed** throughout, no error bars, on both backbones and every benchmark.
+- **fp32 vs their mixed precision.** Each Δ is internally precision-consistent, so Δ-vs-Δ
+  is valid; **absolute levels are not comparable** across the two studies.
+- **Checkpoint selection is not neutral.** THUNDER and HEST use step 1000 (phikon-v2),
+  chosen because it was the best *PathoROB* checkpoint. Step 2000 is better on HEST
+  (+0.0078 vs +0.0047). Robustness and retention peak at different steps, so any
+  single-checkpoint headline understates one axis.
+- **Coverage.** THUNDER: 14 of Waiv's 16 datasets (12/12 classification, 2/4 segmentation).
+  HEST: phikon-v2 only, no Midnight run. Patho-Bench dropped (~8 TB of WSIs, no traceable
+  target number).
+- **Regressions.** `tcga_uniform` regresses on both backbones and on every probe
+  (phikon-v2 −8.2 kNN / −5.7 lin / −7.3 few-shot; Midnight −2.6 / −2.9). Consistency
+  across independent probes rules out a local-neighbourhood artefact — information is
+  genuinely lost. `bach` regresses on Midnight only (−2.1 / −5.6 / −8.6) while it *improves*
+  on phikon-v2. Both are unexplained and should be understood before any publication claim.
+- **PathoROB curves are plateaus, not climbs.** Both backbones reach their peak by the
+  first or second checkpoint and then flatten (phikon-v2 0.803–0.808 across steps
+  500–3000; Midnight 0.898–0.908 across 250–1500). Training longer buys nothing on the
+  headline metric.
+- **camelyon's base RI of 0.019** is pathologically low, so its headline jump is the least
+  surprising of the three PathoROB datasets.
+
+---
+
+## 5. In flight (running now — not results)
+
+- **8 segpath THUNDER jobs.** `segpath_epithelial` at 9 epochs and `segpath_lymphocytes`
+  at 21 epochs, per THUNDER's own `docs/guidelines.md`; the generic 200-epoch default is
+  wrong for these two sets and is why earlier attempts were abandoned. Base and fine-tuned
+  × both backbones = 8 jobs. When they land, coverage goes from 14 to Waiv's full 16
+  datasets and the segmentation average becomes a 4-dataset average like theirs (it is
+  currently over 2).
+- **Full fine-tuning pilot**, SLURM job 369922, run dir
+  `/data/ryan.kim/waiv_runs/waiv-fullft-369922`. phikon-v2, `--full-ft` (305,976,832/
+  305,976,832 params trainable), lr 1e-5 (vs LoRA's 1e-4), weight decay 0.02 (vs LoRA's
+  0.05 — decay applied to all 303M backbone weights is itself a forgetting mechanism),
+  600 steps, checkpoints at 25/50/75/100/150/200/300/400/500/600. Hypothesis: full FT beats
+  LoRA's 0.8080. The dense early schedule exists because LoRA had already reached 0.8036 of
+  its 0.8080 peak by step 500 with no visibility below that.
+
+---
+
+## 6. Reproducing
+
+### Environments — four venvs, deliberately separate
+
+`.venv` (training), `.venv-pathorob`, `.venv-hest`, `.venv-thunder`. Each harness hard-pins
+versions that conflict with ours and with each other (PathoROB pins `numpy==2.2.6`,
+`pandas==2.3.2`, `transformers==4.56.1`; we run numpy 2.5 / pandas 3.0 / transformers 5.14).
+Downgrading the training venv to match would be the wrong trade — only their *metrics* need
+those pins.
+
+**`PYTHONNOUSERSITE=1` is required** for every harness call:
+`~/.local/lib/python3.12/site-packages` on this machine holds a pandas that otherwise
+shadows the venv's and makes the pins meaningless. **Always**
+`export HF_HOME=/data/ryan.kim/hf_home` — `/admin` must not fill.
 
 ```bash
-cd /admin/home/ryan.kim/waiv
-
-# uv is on PATH at ~/.local/bin/uv
 export UV_CACHE_DIR=/data/ryan.kim/uv_cache
 uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -e .
-
+uv pip install --python .venv/bin/python -e '.[pathorob]'
 # torch MUST come from the cu128 index: this cluster's driver reports CUDA 12.8 and the
 # default cu130 wheel fails CUDA init with "driver is too old".
 uv pip install --python .venv/bin/python \
   --index-url https://download.pytorch.org/whl/cu128 torch==2.8.0 torchvision==0.23.0
 
-# PathoROB's FeatureDataManager (we call it to write embeddings) needs these:
-uv pip install --python .venv/bin/python -e '.[pathorob]'
-uv pip install --python .venv/bin/python pyarrow   # read their HF parquet directly
-```
-
-Verified imports: `torch 2.8.0+cu128`, `transformers 5.14.1`, `peft 0.20.0`, `h5py 3.16.0`.
-
-### A second venv, on purpose: `.venv-pathorob`
-
-PathoROB hard-pins `numpy==2.2.6`, `pandas==2.3.2`, `transformers==4.56.1`; we run numpy
-2.5 / pandas 3.0 / transformers 5.14. Downgrading ours to match would be the wrong trade —
-their *metric* is the only thing that needs those pins, and it is a pure-numpy kNN.
-
-```bash
 uv venv --python 3.12 .venv-pathorob
 uv pip install --python .venv-pathorob/bin/python \
   --index-url https://download.pytorch.org/whl/cu128 torch==2.8.0 torchvision==0.23.0
 uv pip install --python .venv-pathorob/bin/python -e third_party/PathoROB
 ```
 
-torch 2.8.0 is the one shared pin and it already agreed (fixed here by the CUDA 12.8
-driver, not by them). `run_robustness_index` picks this interpreter up automatically and
-sets `PYTHONNOUSERSITE=1` — `~/.local/lib/python3.12/site-packages` on this machine holds
-a pandas that otherwise shadows the venv's and makes the pins meaningless.
-
-**Always** `export HF_HOME=/data/ryan.kim/hf_home`. `/admin` has ~1.4 TB free and must not
-fill; `/data` has ~7.2 TB (`PLAN.md` §5). All scripts set this default themselves.
-
-### Third-party harnesses
-
-Cloned, not vendored — their source is gitignored:
+Harnesses are cloned, not vendored (their source is gitignored):
 
 ```bash
 git clone --depth 1 https://github.com/bifold-pathomics/PathoROB third_party/PathoROB
 git clone --depth 1 https://github.com/owkin/plism-benchmark third_party/plism-benchmark
 ```
 
-## Data
+### Data
 
-Only 2 of 91 `.h5` are local (`/data/ryan.kim/plism/`, ~2.3 GB each). Do not download the
-rest without a reason — the full set is ~224 GB.
-
-Each `.h5` is *flat*: 16,278 top-level datasets named `tile_{level}_{x}_{y}`, each
-`(224,224,3)` uint8, uncompressed. Key order is byte-identical across all 91 files, which
-is what makes index-aligned positives possible.
-
-### Repack (do this before any training)
+PLISM is 91 `.h5` slides (7 scanners × 13 stains × 16,278 Elastix-registered tiles,
+~224 GB). Each file is flat — 16,278 datasets named `tile_{level}_{x}_{y}`, key order
+byte-identical across all 91, which is what makes index-aligned positives possible. Repack
+before training: 16,278 tiny HDF5 datasets per slide makes random pair sampling I/O bound
+(7.4k tiles/s), and a contiguous memmap turns a tile read into one `pread` (measured
+830k–920k tiles/s, page-cache-warm so treat it as an upper bound).
 
 ```bash
 ./.venv/bin/python -m waivphaet.data.repack \
   --h5-dir /data/ryan.kim/plism --out-dir /data/ryan.kim/plism/repacked --verify --benchmark
 ```
 
-16,278 tiny HDF5 datasets per slide means random pair sampling is I/O bound. Repacking to
-a contiguous `.npy` turns a tile read into one `pread` at a fixed offset.
-
-**Measured on the 2 local slides** (2000 random tile reads each):
-
-| slide | h5 | repacked memmap | speedup |
-|---|---|---|---|
-| `GIVH_AT2` | 7,351 tiles/s | 922,611 tiles/s | **125×** |
-| `GIVH_GT450` | 7,371 tiles/s | 827,660 tiles/s | **112×** |
-
-Repack cost ≈ 14 s and 2.28 GiB per slide (≈ 21 min / 208 GiB for all 91). Byte-exactness
-verified on a random 64-tile sample per slide (0 mismatches).
-
-Caveat: the memmap side is page-cache-warm because it was just written, so 112–125× is an
-upper bound. The *structural* win — one seek instead of a B-tree lookup plus a seek — holds
-cold, and either way the h5 number (7.4k tiles/s) is the one that would have bottlenecked
-an 8×H100 node.
-
 Residual Elastix misregistration is ~5–50 px, so positives are near-identical *shifted*
 crops, never pixel-exact. Do not add augmentations that assume otherwise.
 
-## Run
+### Train
 
 ```bash
-# wiring check (CPU is fine, ~11-17 s/step)
-./.venv/bin/python scripts/smoke_test.py --steps 4 --device cpu
-
-# full run
-sbatch scripts/train_lora.sbatch --lora-rank 16 --temperature 0.07
+./.venv/bin/python scripts/smoke_test.py --steps 4 --device cpu   # wiring check
+sbatch scripts/train_real.sbatch                                  # LoRA, rank 32/alpha 64
+sbatch scripts/train_full_ft.sbatch                               # full FT pilot
 ```
 
-## Second backbone: the pipeline is model-agnostic
+The split holds out scanners `GT450`, `S210` and stains `HRH`, `KR`, `MY` → 50 train / 41
+held-out conditions. It is *named*, not sampled, so it reproduces without a seed.
 
-The recipe is a reconstruction (Waiv published no method), so a single-backbone result is
-weak evidence. `kaiko-ai/midnight` is the second test: **ungated and MIT**, and its Waiv
-counterpart MASCARET carries the *largest* published gain in their Table 1
-(Avg RI 0.759 → **0.924**; THUNDER rank sum 70 → 34). H0-mini / UNI2-h / Virchow2 /
-Prov-GigaPath are all gated and are not options.
-
-`EncoderConfig.backbone` is now a parameter and everything geometric is read off the
-loaded config — nothing about ViT-L/16 survives in the code:
-
-| | phikon-v2 | midnight |
-|---|---|---|
-| arch | Dinov2 ViT-L/16 | Dinov2 ViT-g/14 |
-| hidden / blocks | 1024 / 24 | 1536 / 40 |
-| `embed_dim` cls / clsmean | 1024 / **2048** | 1536 / **3072** |
-| tokens @224 | 196 | 256 |
-| FFN | `mlp.fc1` / `mlp.fc2` | `mlp.weights_in` / `mlp.weights_out` (SwiGLU) |
-| normalisation | ImageNet | **(0.5,0.5,0.5) / (0.5,0.5,0.5)** |
-| LoRA targets | 144 = 6/block × 24 | 240 = 6/block × 40 |
-
-### Two ways this could have failed silently
-
-Both would have produced a running pipeline, plausible numbers, and no warning anywhere.
-They are the reason the refactor is worth more than a `backbone=` kwarg.
-
-1. **SwiGLU FFN.** The old LoRA target list was the fixed tuple
-   `(query, key, value, dense, fc1, fc2)`. Midnight sets `use_swiglu_ffn=True`, so `fc1`
-   and `fc2` match *nothing* — but `query/key/value/dense` still match in every block, so
-   the existing "LoRA covers all blocks" assertion would have **passed** while the entire
-   FFN stayed frozen (4/block instead of 6/block, ~⅓ of each block's parameters adapted).
-   Downstream that reads as "LoRA is just weaker on ViT-g", not as a bug. Targets are now
-   *discovered* by leaf name, and the per-block count is asserted non-empty **and uniform**
-   and printed at build time.
-2. **Normalisation.** Midnight's model card: *"trained on 224x224 images normalized with a
-   mean of (0.5, 0.5, 0.5) and a standard deviation of (0.5, 0.5, 0.5). Please ensure you
-   apply these exact normalization parameters."* Our stack hardcoded ImageNet stats —
-   correct for phikon-v2 (it is what PathoROB's own `Phikonv2ModelWrapper` uses, which is
-   why we reproduce their RI to 6 decimals) and wrong here. It changes no shape and throws
-   no error; it just costs base accuracy. It would have surfaced as our base-Midnight row
-   *disagreeing with Waiv's published 0.759* — i.e. as false evidence that our harness is
-   unfaithful, which is the exact question that comparison exists to answer.
-   `BACKBONE_NORMALIZATION` is now table-driven; an unregistered backbone warns loudly.
-
-### THUNDER pooling is per-backbone and is not our choice
-
-arXiv:2607.22861 §3 (line 106): CLS+mean-pool concatenation was used for **all** models in
-PathoROB, but in THUNDER only for Virchow2, AquaViT, H0-mini and **Midnight-12k**. So
-phikon-v2 is `cls` in THUNDER (which is also THUNDER's own published `phikon2` protocol)
-and midnight is `clsmean`. `thunder_model._default_pooling` resolves it from the backbone;
-`run_thunder.sbatch` takes `auto`. Hardcoding either one makes the base-vs-fine-tuned rank
-sums non-comparable to their table.
-
-### Regression: base phikon-v2 is bit-identical across the refactor
-
-`scripts/regression_bitcheck.py` loads the extractor from two worktrees and compares raw
-feature arrays. Pre-refactor `861cacf` vs post-refactor HEAD, base phikon-v2, 64 camelyon
-patches, fp32 CPU:
-
-| pooling | dim | inputs identical | features identical | max abs delta |
-|---|---|---|---|---|
-| clsmean | 2048 | yes | **yes** | 0.000e+00 |
-| cls | 1024 | yes | **yes** | 0.000e+00 |
-
-`robustness_index` is a deterministic function of the written features, so byte-identical
-features imply a byte-identical RI. That is sharper than the RI comparison itself, which
-has to explain away µ-scale float-summation drift on tolkach and tcga. It does not replace
-the full-benchmark rerun (that also covers the parquet read, the npz layout and the
-metric) — which is why the gate is still rerun end-to-end.
-
-## Evaluation — PathoROB (primary)
-
-Login nodes have no GPU, so extraction goes through SLURM. One H100 does the whole
-benchmark (99,392 patches) in ~5 min at ~340 img/s; the metric itself is a CPU kNN.
+### Evaluate
 
 ```bash
-# 1. features -> third_party/PathoROB/data/features/{model}/{dataset}/{center}.npz
+# PathoROB (primary). Login nodes have no GPU; extraction goes through SLURM.
 sbatch scripts/extract_pathorob.sbatch phikonv2_clsmean_ours "camelyon tolkach_esca tcga"
-# a fine-tuned checkpoint is the same call with a third argument:
-#   sbatch scripts/extract_pathorob.sbatch waiv_step5000 camelyon runs/.../ckpt.pt
-
-# 2. robustness index + the three-way comparison
 PYTHONNOUSERSITE=1 ./.venv-pathorob/bin/python scripts/pathorob_gate.py \
   --model phikonv2_clsmean_ours --datasets camelyon tolkach_esca tcga
+
+# THUNDER
+sbatch scripts/run_thunder.sbatch <dataset> <task> <run_name> [ckpt]
+PYTHONNOUSERSITE=1 THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder \
+  ./.venv-thunder/bin/python scripts/collect_thunder.py --model ft1000_cls
+
+# HEST
+sbatch scripts/run_hest.sbatch <run_name> <pooling> [ckpt]
+PYTHONNOUSERSITE=1 ./.venv-hest/bin/python scripts/collect_hest.py --pooling cls
 ```
 
-The image data streams from the ungated HF parquet repos and is small — 0.47 GB
-(camelyon) + 0.32 GB (tolkach_esca) + 1.12 GB (tcga) = **1.91 GB**, cached under
-`$HF_HOME`. There is no need to stage anything by hand.
+`collect_thunder.py` deliberately does **not** compute THUNDER's rank sum: it is a rank over
+whatever roster is on the leaderboard, and three sources give three different numbers for
+phikon-v2 (Waiv 97, the THUNDER paper 77, the live leaderboard 89). Absolute per-dataset F1
+means the same thing on every run.
 
-### Phase-2 gate: PASS
+---
 
-Base `owkin/phikon-v2`, clsmean 2048-d, fp32, our extractor + their metric. SLURM job
-369018, 1×H100, 10m32s wall for all 99,392 patches; the metric then took ~30 s (camelyon),
-~40 s (tolkach_esca) and 6m49s (tcga, paired, 112,800 rows) on the login node.
+## 7. Verification the numbers rest on
 
-| dataset | ours | PathoROB committed ref | Waiv Table 1 | Δ vs ref |
-|---|---|---|---|---|
-| camelyon | 0.018951 | 0.018951 | 0.019 | **+0.000000** |
-| tolkach_esca | 0.768112 | 0.768114 | 0.768 | −0.000002 |
-| tcga | 0.618771 | 0.618772 | 0.619 | −0.0000005 |
-| **Avg** | **0.468611** | 0.468612 | **0.469** | −0.000001 |
+- **PathoROB harness.** Base phikon-v2 through our extractor + their metric reproduces
+  PathoROB's own committed `phikonv2_clsmean` row to 6+ decimals (camelyon bit-identical;
+  µ-scale drift elsewhere is float summation order), and that committed reference
+  independently agrees with Waiv's Table-1 base row. Two separate sources corroborating.
+  Base Midnight likewise reproduces Waiv's published 0.759 (0.7589).
+- **Backbone-agnostic refactor.** `scripts/regression_bitcheck.py` compares raw feature
+  arrays across worktrees: base phikon-v2 pre- vs post-refactor is bit-identical at both
+  `cls` (1024-d) and `clsmean` (2048-d), max abs delta 0.000e+00.
+- **The adapter is proven applied at every eval**, not assumed: the extractor compares
+  against `disable_adapter()` and exits non-zero below 1e-4. Observed `rel_l2_delta` is
+  0.73–0.93 across all datasets and checkpoints, recorded per-point in `ri_curve.json`.
+- **Two silent-failure modes the Midnight port would have hit.** (1) The old LoRA target
+  list was a fixed tuple containing `fc1`/`fc2`, which match nothing on Midnight's SwiGLU
+  FFN — `query/key/value/dense` still match in every block, so the "LoRA covers all blocks"
+  assertion would have *passed* with the entire FFN frozen. Targets are now discovered by
+  leaf name and the per-block count is asserted non-empty and uniform. (2) Midnight requires
+  (0.5,0.5,0.5) normalization, not ImageNet; the wrong stats change no shape and throw no
+  error, they just cost base accuracy — and would have surfaced as our base-Midnight row
+  disagreeing with Waiv's 0.759, i.e. as false evidence that our harness is unfaithful.
+  `BACKBONE_NORMALIZATION` is now table-driven and warns on unregistered backbones.
 
-Two things worth separating. **(a)** Our pipeline reproduces PathoROB's own committed
-`phikonv2_clsmean` row to 6+ decimals — camelyon is bit-identical, and the µ-scale drift
-on the other two is float summation order, not a pipeline difference. **(b)** PathoROB's
-committed reference independently agrees with Waiv's quoted Table-1 base row to the 3
-decimals Waiv printed. Those are two separate sources and they corroborate each other, so
-the 0.019 / 0.469 targets in `PLAN.md` are sound.
-
-The harness is therefore trustworthy: a Camelyon RI that moves after fine-tuning is a real
-effect, not harness drift.
-
-### First fine-tuned readout: 300-step rank-8 smoke checkpoint
-
-Job 369019 (rank 8, all 24 blocks, 2 groups × 32, 300 steps). Features re-extracted
-through the *identical* pipeline — same Resize(224)→CenterCrop(224)→ToTensor→ImageNet
-Normalize, same clsmean 2048-d, same fp32, same npz layout — with the LoRA adapter as the
-only difference (job 369036, 1×H100, 5m30s for 99,392 patches).
-
-| dataset | base | +LoRA | Δ RI | Waiv T1 target | base bal-acc | +LoRA bal-acc | Δ bal-acc |
-|---|---|---|---|---|---|---|---|
-| camelyon | 0.018951 | **0.525523** | +0.506572 | 0.702 | 0.9536 | 0.9653 | +0.0118 |
-| tolkach_esca | 0.768112 | **0.910295** | +0.142181 | 0.932 | 0.9588 | 0.9684 | +0.0097 |
-| tcga | 0.618771 | **0.772558** | +0.153786 | 0.785 | 0.9202 | 0.9177 | −0.0026 |
-| **Avg** | **0.468611** | **0.736125** | **+0.267514** | **0.806** | 0.9442 | 0.9505 | +0.0063 |
-
-The decomposition says *why*, and it is the mechanism we wanted rather than a shortcut.
-The entire gain lands on `confounder_insensitivity` (camelyon 0.0011→0.0541, tolkach
-0.261→0.729, tcga 0.238→0.532) while `prediction_performance` is flat (0.941→0.954,
-0.929→0.937, 0.873→0.868) and `generalization_index` barely moves. Balanced accuracy is
-flat-to-up on all three, so this is not a robustness gain bought by destroying the
-biological signal. `k_opt` is unchanged per dataset (11 / 46 / 61), so the kNN operating
-point is the same one the base model was scored at.
-
-Read it with three caveats. **(1)** The checkpoint was trained *after* the
-`masked_info_nce` orientation fix (`5907f54`, committed 00:32:45; job started 00:33:20,
-and its artifacts — `embed_probe.py` output, `negatives_per_anchor` in `metrics.json` —
-exist only in post-fix code), so the condition-spanning-negatives shortcut is **not** the
-explanation. **(2)** It is still a 300-step smoke run on a saturated objective (top-1 1.0
-by step 150), single seed, no error bars. **(3)** Camelyon's base RI of 0.019 is
-pathologically low, so its headline jump is the least surprising of the three. The
-movement is far outside harness noise (the Phase-2 gate reproduces to 6 decimals) — but it
-is one run, and the honest claim is "the backbone moved the metric in the right way", not
-"we hit the PHAET targets". Avg is 0.736 against a 0.806 target.
-
-Default split holds out scanners `GT450`, `S210` and stains `HRH`, `KR`, `MY` → 50 train /
-41 held-out conditions (`PLAN.md` §4 phase 7). It is *named*, not sampled, so it is
-reproducible without carrying a seed.
-
-### The first real run: job 369043 — Avg RI plateaus **on** the 0.806 target
-
-`scripts/train_real.sbatch`, 1×H100 for training + 1×H100 running
-`scripts/eval_checkpoints.py` as a live follower. Rank 32 / alpha 64, all 24 blocks,
-**2 groups × 192 = 191 negatives per anchor**, 4000 steps, all **91** slides, lr 1e-4,
-T 0.07, bf16, 1.91 s/step.
-
-Three things changed from the smoke run, each fixing a defect it exposed:
-
-1. **191 negatives, up from 31.** The smoke objective was *solved* — top-1 1.0 by step
-   70, loss 0.038 — so its late gradient was noise. Negatives come only from the
-   anchor's condition-homogeneous group, so more negatives requires a bigger *forward*
-   batch (768 images/step); grad accumulation cannot buy them. At the measured
-   0.21 GiB/image that is ~161 GiB, so this run enables gradient checkpointing
-   (21.77 GiB peak, ~+35% step time). **2 × 192 is not reachable without it.**
-2. **All 91 slides.** The smoke saw 59–72 mid-stream.
-3. **Rank 32 and 4000 steps** vs rank 8 and 300 (3.07M tiles vs 38k).
-
-| step | camelyon | tolkach_esca | tcga | **Avg RI** | Avg bal-acc | sep cross-scanner | top-1 cross-scanner |
-|---|---|---|---|---|---|---|---|
-| base | 0.018951 | 0.768112 | 0.618771 | **0.4686** | 0.9442 | 0.3760 | 0.8579 |
-| 500 | 0.698211 | 0.928967 | 0.783647 | **0.8036** | 0.9454 | 0.3936 | 0.9951 |
-| 1000 | 0.716945 | 0.927932 | 0.779072 | **0.8080** | 0.9437 | 0.4164 | 0.9964 |
-| 1500 | 0.704983 | 0.927470 | 0.777217 | **0.8032** | 0.9425 | 0.4267 | 0.9965 |
-| 2000 | 0.713128 | 0.925482 | 0.776589 | **0.8051** | 0.9418 | 0.4270 | 0.9964 |
-| Waiv T1 | 0.702 | 0.932 | 0.785 | **0.806** | — | — | — |
-
-**The curve is a plateau, not a climb.** Avg RI is 0.803–0.808 across every checkpoint
-from 500 on — it lands on the 0.806 target by step 500 and then does not move. Steps
-500→2000 buy nothing on the headline metric. That is the single most useful result
-here: the next run should sweep *away* from this operating point rather than train
-longer, and the cost of a data point is ~500 steps, not 4000.
-
-**Read the two probe columns separately, because they disagree.** Rank-based top-1
-jumps and stays (0.858 → 0.995); mean-cosine **separation** improves far less
-(0.3760 → 0.4270) because *matched* and *random* rise together — the smoke run's
-"matched up, random up" signature persists. Separation did move monotonically this
-time, which the smoke run could not show: its before/after probes scored *different*
-condition sets (60 vs 67) because the pin landed in `ffc6e4c` after that job's probes
-ran. Both probes here are pinned to the identical 91-condition set. Matched cosine is
-still never the claim — it rises under collapse — but the collapse gauge
-`within_condition_random` *fell* from 500 → 1000 (0.5771 → 0.5535) while separation
-rose, which is the opposite of the collapse signature.
-
-**Objective saturation: fixed, but not eliminated.** Top-1 oscillates 0.90–0.99 through
-step 2000 (held-out-condition top-1 0.949 → 0.965) where the smoke run was pinned at
-1.0 from step 70. There is still gradient signal at step 2000. It is drifting upward
-though, so **2 × 256 (255 negatives) is the next escalation** — measured to fit at
-28.55 GiB, 2.91 s/step.
-
-**Retention:** balanced accuracy 0.9454 → 0.9418 against a 0.9442 base — flat, with a
-slow downward drift worth watching. `k_opt` is unchanged (11 / 46 / 61), so the kNN
-operating point is the base model's. (HEST and THUNDER were wired later; see the
-consolidated results at the top. Patho-Bench was dropped -- ~8 TB of WSIs and no
-traceable target number.) Historical note, kept for provenance:
-so this is the only forgetting detector in play (`PLAN.md` §3 risk 1).
-
-**The adapter is proven applied at every eval**, not assumed: the extractor compares
-against `disable_adapter()` and exits non-zero below 1e-4. Observed `rel_l2_delta` is
-0.73–0.93 across all datasets and checkpoints, recorded per-point in `ri_curve.json`.
-
-Caveats unchanged: one seed, no error bars, and camelyon's 0.019 base is pathologically
-low so its jump is the least surprising of the three.
-
-## Reporting discipline (`PLAN.md` §6)
+## 8. Reporting discipline (`PLAN.md` §6)
 
 - Cross-stain and cross-scanner **separately** — the composite hides the hard axis.
 - Never cosine similarity alone (PLIP: 0.878 cosine at 0.054 top-10).
-- Any PLISM number is a **training diagnostic**. Label it. Never print it next to
-  H0-mini's 0.541.
-- Retention (HEST / THUNDER / Patho-Bench) alongside **every** robustness claim, as a
-  pair. Forgetting is the default outcome here, not a tail risk.
-
-### Note: `adapter_rel_l2_delta` provenance (resolved)
-
-`ri_curve.json` for run `waiv-real-369043` records correct, dataset-distinct
-adapter deltas for steps 500-2500 (camelyon ~0.74-0.76, tolkach ~0.92-0.93,
-tcga ~0.78-0.80). **Step 3000+ is corrupted**: all three datasets read an
-identical 0.2520.
-
-Cause: commit `ea7fa1f` moved the adapter-applied assertion into the shared
-`build_model()` so HEST/THUNDER would inherit it. From that commit on, every
-extraction emits *two* `[adapter-check]` lines -- a deterministic synthetic-batch
-check inside `build_model()`, then the real-tile check in `main()`. The collector's
-`_REL_L2.search()` took the first (synthetic) match. Fixed to `findall()[-1]`.
-
-Identical across datasets because the synthetic batch is fixed (seed 1234);
-different across checkpoints (0.2520 @ 3000, 0.2539 @ 3500) because the weights
-change. **No RI value is affected** -- RI is computed by PathoROB over the written
-.npz features, independent of this diagnostic. All deltas, synthetic or real, are
-orders of magnitude above the 1e-4 abort threshold, so the adapter was applied in
-every extraction.
-
-### THUNDER segmentation coverage (2 of 4 datasets)
-
-THUNDER's 16-dataset suite includes 4 segmentation sets. We can report 2:
-
-| dataset | status |
-|---|---|
-| ocelot | usable |
-| pannuke | usable |
-| segpath_epithelial | **absent** -- not present in any tree on this cluster |
-| segpath_lymphocytes | **infeasible** -- see below |
-
-`segpath_lymphocytes` was measured at **5,048 s/epoch x 200 epochs = ~281 h** (job 369061,
-2/200 epochs in 2h50m) against a 20 h wall limit, so it can only ever be killed having
-produced nothing. Cause: segmentation is forced to `online_loading` -- the decoder needs
-raw masks, so the h5 embedding cache that rescues kNN/linear-probing cannot be used -- and
-this is the largest set (23 GB of raw PNG pairs), so the frozen ViT is re-run over all of
-it every epoch. Both the base and fine-tuned jobs were cancelled.
-
-Consequence: THUNDER's `benchmark_segmentation` aggregate is not reportable, and our
-segmentation numbers cover ocelot + pannuke only. **Classification (12 datasets) is
-unaffected**, which is what Waiv's Table 2 kNN / linear-probe / few-shot columns measure.
-
-## Second model: Midnight-12k (generalization validated)
-
-The recipe was re-run unchanged on `kaiko-ai/midnight` (ViT-g/14, 1.18B, SwiGLU FFN,
-40 blocks, 3072-d clsmean, (0.5,0.5,0.5) normalization) to test whether it is a
-*recipe* rather than a phikon-v2-specific result.
-
-**Harness validated first.** Base Midnight through our pipeline reproduces Waiv's
-published base row: camelyon 0.4780 (0.478), tolkach 0.9411 (0.941), tcga 0.8575
-(0.858), **Avg 0.7589 vs 0.759**. Separately, the backbone-agnostic refactor left
-phikon-v2 bit-identical (Avg RI 0.4686113 vs 0.468611).
-
-**Training.** Identical config to the phikon-v2 run -- rank 32/alpha 64, 2x192 =
-191 negatives/anchor, 768 images/step with gradient checkpointing, all 91 PLISM
-slides, held-out scanners GT450+S210 and stains HRH+KR+MY. LoRA targets 240 =
-6/block x 40 blocks, leaves `[dense, key, query, value, weights_in, weights_out]`
--- the SwiGLU FFN projections are adapted, which the old hardcoded target list
-would have silently skipped while still passing the block-coverage assertion.
-1500 steps, 3h26m on 1xH100. Held-out top-1 rose 0.943 -> 0.972 while train top-1
-stayed flat.
-
-**Result (PathoROB Avg RI):**
-
-| step | Avg RI | bal. acc |
-|---|---|---|
-| base | 0.7589 | -- |
-| 250 | 0.8981 | 0.9652 |
-| **500** | **0.9080** | 0.9663 |
-| 750 | 0.9068 | 0.9664 |
-| 1000 | 0.8996 | 0.9637 |
-| 1250 | 0.8995 | 0.9632 |
-| 1500 | 0.8997 | 0.9633 |
-| MASCARET (Waiv) | 0.924 | -- |
-
-**0.7589 -> 0.9080 = 90.3% of the available headroom**, 0.016 short of MASCARET,
-balanced accuracy flat across all six checkpoints (0.963-0.966).
-
-Same shape as phikon-v2: the gain arrives by the first checkpoint and then
-plateaus (six checkpoints span 0.010). Waiv published no curves, so this
-early-plateau behaviour is not visible in their paper -- and it means their
-"lightweight" claim is, if anything, understated: a few hundred steps suffice.
-
-## THUNDER: complete, same-pipeline (12/12 classification, 2/4 segmentation)
-
-Both base and fine-tuned run through identical code, so these deltas carry no
-cross-study assumption. Our base reproduces THUNDER's published phikon-v2 row
-(mean Δ +0.08 over 12 datasets on linear probing), which is what makes the
-comparison to Waiv's deltas legitimate despite their runs being mixed-precision
-and ours fp32 -- each Δ is internally precision-consistent.
-
-| task | our base | our ft (step 1000) | our Δ | Waiv Δ |
-|---|---|---|---|---|
-| kNN | 70.28 | 75.20 | **+4.92** | +3.7 |
-| linear probing | 76.54 | 79.24 | **+2.70** | +1.4 |
-| few-shot | 69.33 | 70.99 | **+1.66** | +1.5 |
-| segmentation | 70.40 | 70.09 | **-0.31** | -1.2 |
-
-11 of 12 datasets improve on kNN (median Δ +4.8, so not an outlier artefact).
-Waiv's segmentation regression (-1.2, which they flag as a limitation) is
-present but milder here.
-
-**The one clear negative: `tcga_uniform`** regresses on both kNN (-9.1) and
-linear probing (-6.2) against the published base. Consistency across two
-independent probes rules out a local-neighbourhood explanation -- information is
-genuinely lost for that dataset. Unexplained; it is the single result that
-should be understood before any publication claim.
-
-Coverage caveat: Waiv aggregate over 16 datasets, we over 14 (segpath_epithelial
-absent from this cluster, segpath_lymphocytes structurally infeasible -- see
-above). Per-task Δ is therefore the sound comparison, not absolute levels.
+- Any PLISM number is a **training diagnostic**. Label it; never print it next to a
+  leaderboard number.
+- Retention (HEST / THUNDER) alongside **every** robustness claim, as a pair. Forgetting is
+  the default outcome here, not a tail risk.
