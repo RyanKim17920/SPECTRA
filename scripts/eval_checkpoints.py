@@ -144,23 +144,27 @@ def run_pathorob(args, ckpt: Path, step: int, paths: PathoRobPaths) -> dict:
             continue
 
         if is_full_ft_checkpoint(ckpt):
-            proc = subprocess.run(
-                [args.python, "scripts/extract_pathorob_features.py",
-                 "--dataset", ds, "--model-name", model_name,
-                 "--checkpoint", str(ckpt),
-                 "--proj-out-dim", str(args.proj_out_dim),
-                 "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)],
-                cwd=str(REPO), check=True, capture_output=True, text=True,
-            )
+            cmd = [args.python, "scripts/extract_pathorob_features.py",
+                   "--dataset", ds, "--model-name", model_name,
+                   "--checkpoint", str(ckpt),
+                   "--proj-out-dim", str(args.proj_out_dim),
+                   "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)]
         else:
-            proc = subprocess.run(
-                [args.python, "scripts/extract_pathorob_features.py",
-                 "--dataset", ds, "--model-name", model_name, "--adapter", str(ckpt),
-                 "--lora-rank", str(args.lora_rank), "--lora-alpha", str(args.lora_alpha),
-                 "--proj-out-dim", str(args.proj_out_dim),
-                 "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)],
-                cwd=str(REPO), check=True, capture_output=True, text=True,
-            )
+            cmd = [args.python, "scripts/extract_pathorob_features.py",
+                   "--dataset", ds, "--model-name", model_name, "--adapter", str(ckpt),
+                   "--lora-rank", str(args.lora_rank), "--lora-alpha", str(args.lora_alpha),
+                   "--proj-out-dim", str(args.proj_out_dim),
+                   "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)]
+        # capture_output + check=True raises BEFORE anything is written, so a failing
+        # extractor used to leave zero diagnostics in the follower log (job 369922).
+        # Echo both streams on failure, then re-raise.
+        proc = subprocess.run(cmd, cwd=str(REPO), capture_output=True, text=True)
+        if proc.returncode != 0:
+            sys.stdout.write(proc.stdout)
+            sys.stderr.write(proc.stderr)
+            sys.stdout.flush()
+            raise subprocess.CalledProcessError(proc.returncode, cmd,
+                                                output=proc.stdout, stderr=proc.stderr)
         sys.stdout.write(proc.stdout)
         # extract_pathorob_features emits TWO adapter/checkpoint checks per run, by design:
         #   1. inside build_model, on a deterministic *synthetic* batch (seed 1234) -- a cheap

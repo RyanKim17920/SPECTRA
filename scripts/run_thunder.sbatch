@@ -41,6 +41,27 @@ RUN_NAME="${4:-base_${POOLING}}"
 CKPT="${5:-}"
 ADAPTER="${6:-}"
 
+# Optional epochs override, read from the ENVIRONMENT (WAIV_EPOCHS), not a 7th positional.
+# third_party/thunder/docs/guidelines.md:4 mandates overriding the generic frozen.yaml 200
+# epochs for exactly two datasets -- `9` for segpath_epithelial and `21` for
+# segpath_lymphocytes -- because of their size. Without it those runs are both infeasible
+# (200 x 5170 s = 287 h for lymphocytes) and non-comparable to the published leaderboard.
+#
+# Env var, not a positional, deliberately: the positional contract ends in
+# [ckpt] [adapter] and both existing callers (resubmit_thunder.sh,
+# submit_midnight_thunder.sh) *conditionally append* the adapter, so a 7th slot could not
+# be reached by a base job without also inventing a dummy adapter argument. An env var is
+# strictly additive -- every existing call site is untouched and, with WAIV_EPOCHS unset,
+# the thunder command line below is byte-identical to what produced the current results.
+EPOCHS="${WAIV_EPOCHS:-}"
+EPOCH_ARGS=()
+if [ -n "$EPOCHS" ]; then
+  # `thunder benchmark` collects unknown flags pairwise into **kwargs (main.py:83) and
+  # get_config turns them into hydra `++` overrides (utils/config.py:32), so hydra parses
+  # "9" as an int. Format must be two tokens: `--adaptation.epochs 9`.
+  EPOCH_ARGS=(--adaptation.epochs "$EPOCHS")
+fi
+
 export THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder
 export HF_HOME=/data/ryan.kim/hf_home
 export TOKENIZERS_PARALLELISM=false
@@ -77,7 +98,7 @@ fi
 MODEL="custom:${REPO}/src/waivphaet/eval/thunder_model.py"
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} ==="
-echo "dataset=$DATASET tasks='$TASKS' pooling=$POOLING run_name=$RUN_NAME"
+echo "dataset=$DATASET tasks='$TASKS' pooling=$POOLING run_name=$RUN_NAME epochs=${EPOCHS:-<thunder default>}"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || true
 
 # embedding_pre_loading, not the online_loading default. Under online_loading the linear
@@ -117,8 +138,12 @@ for TASK in $TASKS; do
   TASK_MODE="$MODE"
   case "$TASK" in pre_computing_embeddings) TASK_MODE=online_loading ;; esac
   echo "--- $(date) | $DATASET / $TASK (loading-mode=$TASK_MODE) ---"
+  # ${EPOCH_ARGS[@]+...} guard: an unset/empty array expanded as "${A[@]}" is an unbound
+  # variable under `set -u` on some bashes. With WAIV_EPOCHS unset this expands to nothing
+  # at all, so the command line is exactly what it was before this option existed.
   srun --unbuffered "$REPO/.venv-thunder/bin/thunder" benchmark \
-      "$MODEL" "$DATASET" "$TASK" --loading-mode "$TASK_MODE"
+      "$MODEL" "$DATASET" "$TASK" --loading-mode "$TASK_MODE" \
+      ${EPOCH_ARGS[@]+"${EPOCH_ARGS[@]}"}
   rc=$?
   echo "--- done $DATASET / $TASK rc=$rc ---"
   if [ "$rc" -ne 0 ]; then

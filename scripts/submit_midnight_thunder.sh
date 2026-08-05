@@ -34,7 +34,10 @@ export WAIV_BACKBONE=kaiko-ai/midnight
 CLS_TASKS="knn linear_probing simple_shot"
 SEG_TASKS="segmentation"
 CLASSIFICATION="bach bracs break_his ccrcc crc esca mhist patch_camelyon tcga_crc_msi tcga_tils tcga_uniform wilds"
-SEGMENTATION="ocelot pannuke"   # segpath_lymphocytes infeasible, segpath_epithelial absent
+# segpath_lymphocytes and segpath_epithelial are deliberately NOT here: they need the
+# guidelines.md:4 epochs override (21 / 9) and a much longer wall, so they have their own
+# submitter -- scripts/submit_segpath_thunder.sh, which covers both backbones at once.
+SEGMENTATION="ocelot pannuke"
 FT_ADAPTER="runs/waiv-midnight-369159/step_0000500"
 
 ROOT="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"

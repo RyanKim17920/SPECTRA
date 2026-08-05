@@ -300,16 +300,28 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
         # Full-FT checkpoints may not carry encoder_config inside the weight file.
         cfg_from_ckpt = None
 
-        # Check for a parent run config.json (the run_dir's top-level config).
-        run_config = ckpt_path.parent.parent / "config.json"
-        if run_config.exists():
-            run_cfg = json.loads(run_config.read_text())
-            enc_cfg = run_cfg.get("encoder", {})
-            if isinstance(enc_cfg, dict) and enc_cfg:
-                cfg_from_ckpt = EncoderConfig(**enc_cfg)
+        # Check for the run's top-level config.json. For a checkpoint DIR
+        # (step_NNNNNNN/) the run dir is ckpt_path.parent; for a checkpoint FILE it is
+        # ckpt_path.parent.parent. Try both -- getting this wrong used to send a
+        # perfectly good full-FT dir into the torch.load branch below, where
+        # torch.load(<a directory>) raises IsADirectoryError and the bare `except`
+        # reported it as "not a recognised format" (job 369922's follower died here on
+        # its first checkpoint).
+        for run_config in (ckpt_path / "config.json",
+                           ckpt_path.parent / "config.json",
+                           ckpt_path.parent.parent / "config.json"):
+            if run_config.exists():
+                run_cfg = json.loads(run_config.read_text())
+                enc_cfg = run_cfg.get("encoder", {})
+                if isinstance(enc_cfg, dict) and enc_cfg:
+                    cfg_from_ckpt = EncoderConfig(**enc_cfg)
+                    cfg_from_ckpt.pooling = pooling
+                    break
 
         # Try to load as a single torch.load archive containing encoder_config + model.
-        if cfg_from_ckpt is None:
+        # Only meaningful for a checkpoint FILE; a directory is handled by the
+        # safetensors path below.
+        if cfg_from_ckpt is None and ckpt_path.is_file():
             try:
                 raw = torch.load(checkpoint, map_location="cpu", weights_only=False)
                 if isinstance(raw, dict):
@@ -336,9 +348,9 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
                         )
                         model = WaivEncoder(cfg_from_ckpt)
                         model.load_state_dict(raw, strict=False)
-            except Exception:
+            except Exception as e:
                 raise SystemExit(
-                    f"checkpoint {checkpoint} is not a recognised format. "
+                    f"checkpoint {checkpoint} is not a recognised format ({type(e).__name__}: {e}). "
                     "Expected a step_NNNNNNN/ dir containing backbone.safetensors "
                     "(full FT) or an adapter/ dir (LoRA)."
                 )

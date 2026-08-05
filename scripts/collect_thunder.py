@@ -166,7 +166,10 @@ def main() -> None:
     for ds in PAPER_CLS + PAPER_SEG:
         src = f" {source.get(ds, '--')} |" if show_src else ""
         if ds not in table:
-            status = "MISSING (no data on this cluster)" if ds == "segpath_epithelial" else "not run"
+            # segpath_epithelial was absent from this cluster until 2026-08-03, when it was
+            # downloaded from Zenodo record 7412731 into /data/ryan.kim/thunder/datasets.
+            # Both segpath sets are now submittable via scripts/submit_segpath_thunder.sh.
+            status = "not run"
             print(f"| {ds} |{src} " + " | ".join("--" for _ in hdr) + f" | -- |  <!-- {status} -->")
             continue
         cells = []

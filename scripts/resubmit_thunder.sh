@@ -20,11 +20,13 @@ GO=0
 CLS_TASKS="knn linear_probing simple_shot"
 SEG_TASKS="segmentation"
 CLASSIFICATION="bach bracs break_his ccrcc crc esca mhist patch_camelyon tcga_crc_msi tcga_tils tcga_uniform wilds"
-# segpath_lymphocytes removed: 5048 s/epoch x 200 = ~281h vs a 20h wall (job 369061).
-# Structurally infeasible -- segmentation must use online_loading and it is the
-# largest set (23GB), so the frozen ViT is re-run over all of it every epoch.
+# segpath_lymphocytes was removed here because 5048 s/epoch x frozen.yaml's generic 200
+# epochs = ~281 h vs a 12 h wall (job 369061). That was the WRONG protocol, not an
+# impossible dataset: guidelines.md:4 mandates --adaptation.epochs 21 for this set (and 9
+# for segpath_epithelial), which is ~30 h. Both segpath sets are now submitted by
+# scripts/submit_segpath_thunder.sh, which passes that override via WAIV_EPOCHS and a
+# longer --time. Keep them out of THIS script -- it passes no override.
 SEGMENTATION="ocelot pannuke"
-# segpath_epithelial is absent from this cluster -- deliberately not listed.
 
 FT_ADAPTER="runs/waiv-real-369043/step_0001000"
 
