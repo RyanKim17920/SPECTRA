@@ -38,7 +38,7 @@ Reading:
 
 - **PathoROB.** phikon-v2 lands *on* Waiv's Phaet number (0.8080 vs 0.806, ~100% of the
   headroom). Midnight reaches 0.9080 against Mascaret's 0.924 — 90.3% of the headroom, and
-  plainly short.
+  plainly short. A full fine-tuning pilot on phikon-v2 peaked lower, at 0.8007 (§5).
 - **THUNDER.** Our deltas match or exceed Waiv's on both backbones, but the mean-over-4-tasks
   figure hides composition: see §2. Our segmentation average is over 2 datasets, Waiv's over 4.
 - **HEST.** We are clearly behind on phikon-v2 (+0.0047 at step 1000, +0.0078 at step 2000,
@@ -141,6 +141,7 @@ possible. It is strictly more granular than what they released.
 | wilds | 86.6 | 95.0 | +8.4 | 96.8 | 97.9 | +1.2 | 87.4 | 93.9 | +6.4 | — | — | — |
 | ocelot | — | — | — | — | — | — | — | — | — | 80.0 | 79.5 | −0.5 |
 | pannuke | — | — | — | — | — | — | — | — | — | 60.8 | 60.6 | −0.2 |
+| segpath_lymphocytes | — | — | — | — | — | — | — | — | — | 60.6 | 61.3 | +0.7 |
 
 ### Midnight-12k, base → step 500 (F1 ×100)
 
@@ -160,6 +161,11 @@ possible. It is strictly more granular than what they released.
 | wilds | 95.0 | 96.2 | +1.2 | 98.3 | 98.5 | +0.2 | 89.9 | 93.6 | +3.6 | — | — | — |
 | ocelot | — | — | — | — | — | — | — | — | — | 78.4 | 79.4 | +0.9 |
 | pannuke | — | — | — | — | — | — | — | — | — | 61.8 | 61.5 | −0.3 |
+| segpath_lymphocytes | — | — | — | — | — | — | — | — | — | 63.8 | 63.6 | −0.1 |
+
+`segpath_lymphocytes` landed after the §2 task averages were computed and is **not** folded
+into them — those stay 2-of-4-set averages until `segpath_epithelial` completes (§5). Exact
+F1 fractions: phikon-v2 0.6065 → 0.6130, Midnight 0.6375 → 0.6364.
 
 THUNDER pooling is per-backbone and is not our choice: arXiv:2607.22861 §3 uses CLS+mean
 concatenation in THUNDER only for Virchow2, AquaViT, H0-mini and Midnight-12k, so
@@ -179,9 +185,19 @@ classification sets are `clsmean` — a real methodological split, recorded per-
   chosen because it was the best *PathoROB* checkpoint. Step 2000 is better on HEST
   (+0.0078 vs +0.0047). Robustness and retention peak at different steps, so any
   single-checkpoint headline understates one axis.
-- **Coverage.** THUNDER: 14 of Waiv's 16 datasets (12/12 classification, 2/4 segmentation).
-  HEST: phikon-v2 only, no Midnight run. Patho-Bench dropped (~8 TB of WSIs, no traceable
-  target number).
+- **Coverage.** THUNDER: 15 of Waiv's 16 datasets (12/12 classification, 3/4 segmentation);
+  `segpath_epithelial` is the missing one and 3 of its 4 arms are still running (§5). The §2
+  segmentation task averages remain over 2 datasets, Waiv's over 4. HEST: phikon-v2 only, no
+  Midnight run. Patho-Bench dropped (~8 TB of WSIs, no traceable target number).
+- **The Tier-1 probe tripwire is not an early-stopping signal.** `scripts/probe_follow.py`
+  detects collapse; it does not predict PathoROB RI, in either direction. On the full-FT run
+  it fired its scanner-regression signal from step 300 while RI was still climbing — acting on
+  it would have discarded the best checkpoint (0.8007 @ 500). On the LoRA run the opposite
+  held: heldout cross-scanner separation kept rising (base 0.376 → 0.394 @ 500 → 0.439 @ 2500)
+  while RI fell after step 1000. Its thresholds are diagnostics, not actionable. Relatedly, **matched cosine and
+  top-1 mislead under collapse**: full FT drove heldout cross-scanner matched cosine
+  0.741 → 0.963, but the random-pair baseline climbed just as fast, 0.365 → 0.597. Report
+  rank-based top-1 and separation, never matched cosine alone.
 - **Regressions.** `tcga_uniform` regresses on both backbones and on every probe
   (phikon-v2 −8.2 kNN / −5.7 lin / −7.3 few-shot; Midnight −2.6 / −2.9). Consistency
   across independent probes rules out a local-neighbourhood artefact — information is
@@ -196,21 +212,47 @@ classification sets are `clsmean` — a real methodological split, recorded per-
 
 ---
 
-## 5. In flight (running now — not results)
+## 5. Full fine-tuning pilot, and what is still running
 
-- **8 segpath THUNDER jobs.** `segpath_epithelial` at 9 epochs and `segpath_lymphocytes`
-  at 21 epochs, per THUNDER's own `docs/guidelines.md`; the generic 200-epoch default is
-  wrong for these two sets and is why earlier attempts were abandoned. Base and fine-tuned
-  × both backbones = 8 jobs. When they land, coverage goes from 14 to Waiv's full 16
-  datasets and the segmentation average becomes a 4-dataset average like theirs (it is
-  currently over 2).
-- **Full fine-tuning pilot**, SLURM job 369922, run dir
-  `/data/ryan.kim/waiv_runs/waiv-fullft-369922`. phikon-v2, `--full-ft` (305,976,832/
-  305,976,832 params trainable), lr 1e-5 (vs LoRA's 1e-4), weight decay 0.02 (vs LoRA's
-  0.05 — decay applied to all 303M backbone weights is itself a forgetting mechanism),
-  600 steps, checkpoints at 25/50/75/100/150/200/300/400/500/600. Hypothesis: full FT beats
-  LoRA's 0.8080. The dense early schedule exists because LoRA had already reached 0.8036 of
-  its 0.8080 peak by step 500 with no visibility below that.
+### Full FT vs LoRA — done, full FT did not beat LoRA
+
+SLURM job 369922 (COMPLETED, 2075 s) + eval follower 369924 (COMPLETED), run dir
+`/data/ryan.kim/waiv_runs/waiv-fullft-369922`. phikon-v2, `--full-ft` (305,976,832/
+305,976,832 params trainable), 600 steps, checkpoints at 25/50/75/100/150/200/300/400/500/600.
+The dense early schedule exists because LoRA had already reached 0.8036 of its 0.8080 peak
+by step 500 with no visibility below that.
+
+| step | 25 | 50 | 75 | 100 | 150 | 200 | 300 | 400 | 500 | 600 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Avg RI | 0.4853 | 0.5392 | 0.6374 | 0.7174 | 0.7667 | 0.7682 | 0.7938 | 0.7991 | **0.8007** | 0.8002 |
+| Avg bal. acc | 0.9464 | 0.9501 | 0.9529 | 0.9513 | 0.9498 | 0.9487 | 0.9484 | 0.9477 | 0.9477 | 0.9479 |
+
+Best full FT is **0.8007 @ step 500**, against LoRA's **0.8080 @ step 1000**. RI climbs
+monotonically to step 500 and then plateaus; balanced accuracy is flat at 0.946–0.953
+throughout, so this is not a collapse. The checkpoint costs ~18× the disk (3.42 GiB vs
+193 MiB per step dir) and the deployable artefact ~21× (1.13 GiB backbone vs a 54 MiB adapter).
+
+**The A/B is not clean and the conclusion must be read narrowly.** Full FT ran at lr 1e-5 /
+weight decay 0.02; the LoRA run was lr 1e-4 / decay 0.05. So more than `--full-ft` differs,
+and at n=1 seed a 0.007 gap is not decisive in either direction. The supportable claim is
+"full FT did not beat LoRA here", **not** "LoRA wins".
+
+### Still running — `segpath_epithelial`, 3 of 4 arms
+
+`segpath_epithelial` runs at 9 epochs and `segpath_lymphocytes` at 21, per THUNDER's own
+`docs/guidelines.md`; the generic 200-epoch default is wrong for these two sets and is why
+earlier attempts were abandoned. `segpath_lymphocytes` is complete (all 4 arms, §3), and
+`segpath_epithelial`'s Midnight fine-tuned arm finished (job 369916, F1 0.6912).
+
+The other three — 369913 (phikon-v2 `base_cls`), 369914 (phikon-v2 `ft1000_cls`), 369915
+(Midnight `mbase_cls`) — were preempted and **restarted from scratch** on 2026-08-05
+(369913/369915 at 02:32 UTC, 369914 at 04:00 UTC), because THUNDER does not checkpoint
+segmentation training. As of 2026-08-05 18:34 UTC they are at epoch 4–5 of 9 at
+~11,500 s/epoch, i.e. roughly 13–16 h of training left plus eval.
+
+Coverage is therefore 15 of Waiv's 16 datasets. The full 16-dataset like-for-like against
+their Table 2 — and a 4-dataset segmentation average matching theirs — is still blocked on
+these three jobs.
 
 ---
 
