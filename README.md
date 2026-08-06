@@ -23,7 +23,7 @@ fine-tuning, which is what makes the deltas meaningful rather than merely plausi
 | benchmark | base ours | base published | fine-tuned ours | Waiv Phaet |
 |---|---|---|---|---|
 | PathoROB Avg RI ↑ | 0.4686 | 0.4686 / 0.469 | **0.8080** | 0.806 |
-| THUNDER mean Δ over 4 tasks ↑ | — | — | **+2.24** | +1.35 |
+| THUNDER mean Δ over 4 tasks ↑ | — | — | **+2.29** | +1.35 |
 | HEST Avg Pearson ↑ | 0.3747 | 0.3747 | **0.3794** (s1000) / 0.3825 (s2000) | 0.3943 |
 
 ### Midnight-12k → Mascaret (ours: LoRA, step 500)
@@ -31,7 +31,7 @@ fine-tuning, which is what makes the deltas meaningful rather than merely plausi
 | benchmark | base ours | base published | fine-tuned ours | Waiv Mascaret |
 |---|---|---|---|---|
 | PathoROB Avg RI ↑ | 0.7589 | 0.759 | **0.9080** | 0.924 |
-| THUNDER mean Δ over 4 tasks ↑ | — | — | **+2.37** | +1.80 |
+| THUNDER mean Δ over 4 tasks ↑ | — | — | **+2.21** | +1.80 |
 | HEST Avg Pearson ↑ | not run | 0.3952 | not run | 0.4167 |
 
 Reading:
@@ -39,8 +39,11 @@ Reading:
 - **PathoROB.** phikon-v2 lands *on* Waiv's Phaet number (0.8080 vs 0.806, ~100% of the
   headroom). Midnight reaches 0.9080 against Mascaret's 0.924 — 90.3% of the headroom, and
   plainly short. A full fine-tuning pilot on phikon-v2 peaked lower, at 0.8007 (§5).
-- **THUNDER.** Our deltas match or exceed Waiv's on both backbones, but the mean-over-4-tasks
-  figure hides composition: see §2. Our segmentation average is over 2 datasets, Waiv's over 4.
+- **THUNDER.** All 16 of Waiv's datasets are now covered, so every task average — segmentation
+  included — is over the same sets as theirs. We match or beat Waiv on **7 of the 8
+  model × task pairs** (§2). The sole loss is Midnight segmentation (−0.33 vs their +1.6);
+  phikon-v2 segmentation is a win in the sense that we regress less (−0.12 vs their −1.2).
+  The mean-over-4-tasks figure still hides composition: see §2.
 - **HEST.** We are clearly behind on phikon-v2 (+0.0047 at step 1000, +0.0078 at step 2000,
   against their +0.0196), and we have no Midnight HEST run at all. Read against the
   benchmark's dynamic range (0.3252–0.4229, span 0.0977), not against zero.
@@ -72,9 +75,9 @@ their runs being mixed precision and ours fp32.
 | task | our base | our ft | our Δ | Waiv Phaet Δ |
 |---|---|---|---|---|
 | kNN | 70.28 | 75.20 | **+4.92** | +3.7 |
-| linear probing | 76.54 | 79.24 | **+2.70** | +1.4 |
+| linear probing | 76.54 | 79.24 | **+2.69** | +1.4 |
 | few-shot | 69.33 | 70.99 | **+1.66** | +1.5 |
-| segmentation (2/4 sets) | 70.40 | 70.09 | **−0.31** | −1.2 |
+| segmentation | 67.73 | 67.61 | **−0.12** | −1.2 |
 
 ### Midnight-12k → Mascaret (ours step 500, `clsmean` pooling)
 
@@ -83,7 +86,11 @@ their runs being mixed precision and ours fp32.
 | kNN | 78.25 | 80.44 | **+2.19** | +1.7 |
 | linear probing | 82.88 | 84.12 | **+1.24** | +0.2 |
 | few-shot | 70.64 | 76.38 | **+5.74** | +3.7 |
-| segmentation (2/4 sets) | 70.12 | 70.42 | **+0.30** | +1.6 |
+| segmentation | 68.73 | 68.40 | **−0.33** | +1.6 |
+
+All four task averages are now over the same datasets Waiv used — 12 classification, 4
+segmentation — so these are like-for-like. We match or beat Waiv on 7 of the 8 model × task
+pairs; the exception is Midnight segmentation.
 
 Waiv publish **both** model pairs in their Table 2; the Midnight row above is compared
 against **Mascaret**, which is its correct counterpart.
@@ -127,20 +134,21 @@ possible. It is strictly more granular than what they released.
 
 | dataset | kNN base | ft | Δ | lin base | ft | Δ | few base | ft | Δ | seg base | ft | Δ |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| bach | 57.1 | 61.4 | +4.3 | 63.7 | 67.8 | +4.1 | 54.9 | 58.9 | +4.0 | — | — | — |
+| bach | 57.2 | 61.4 | +4.3 | 63.7 | 67.8 | +4.1 | 54.9 | 58.9 | +4.0 | — | — | — |
 | bracs | 45.2 | 51.3 | +6.1 | 59.9 | 57.6 | −2.3 | 41.3 | 43.5 | +2.3 | — | — | — |
 | break_his | 56.8 | 69.2 | +12.5 | 50.8 | 68.3 | +17.5 | 61.8 | 67.2 | +5.4 | — | — | — |
 | ccrcc | 76.7 | 85.3 | +8.6 | 78.7 | 90.4 | +11.7 | 90.2 | 88.1 | −2.2 | — | — | — |
 | crc | 92.1 | 94.5 | +2.3 | 92.0 | 94.0 | +2.0 | 89.6 | 95.1 | +5.5 | — | — | — |
 | esca | 75.3 | 79.2 | +3.9 | 78.0 | 80.9 | +2.9 | 66.4 | 64.5 | −1.9 | — | — | — |
 | mhist | 66.4 | 70.8 | +4.4 | 79.1 | 77.4 | −1.7 | 55.7 | 60.5 | +4.8 | — | — | — |
-| patch_camelyon | 81.6 | 86.4 | +4.8 | 89.3 | 91.9 | +2.6 | 82.1 | 84.0 | +1.9 | — | — | — |
+| patch_camelyon | 81.6 | 86.4 | +4.8 | 89.4 | 91.9 | +2.6 | 82.1 | 84.0 | +1.9 | — | — | — |
 | tcga_crc_msi | 56.8 | 61.7 | +4.9 | 62.0 | 62.1 | +0.1 | 56.8 | 57.9 | +1.1 | — | — | — |
-| tcga_tils | 80.6 | 87.9 | +7.3 | 91.0 | 91.0 | +0.0 | 85.7 | 85.7 | −0.0 | — | — | — |
+| tcga_tils | 80.6 | 87.9 | +7.3 | 91.0 | 91.0 | +0.0 | 85.7 | 85.6 | −0.0 | — | — | — |
 | **tcga_uniform** | 68.2 | 60.0 | **−8.2** | 77.1 | 71.5 | **−5.7** | 60.0 | 52.7 | **−7.3** | — | — | — |
 | wilds | 86.6 | 95.0 | +8.4 | 96.8 | 97.9 | +1.2 | 87.4 | 93.9 | +6.4 | — | — | — |
 | ocelot | — | — | — | — | — | — | — | — | — | 80.0 | 79.5 | −0.5 |
 | pannuke | — | — | — | — | — | — | — | — | — | 60.8 | 60.6 | −0.2 |
+| segpath_epithelial | — | — | — | — | — | — | — | — | — | 69.5 | 68.9 | −0.5 |
 | segpath_lymphocytes | — | — | — | — | — | — | — | — | — | 60.6 | 61.3 | +0.7 |
 
 ### Midnight-12k, base → step 500 (F1 ×100)
@@ -150,27 +158,33 @@ possible. It is strictly more granular than what they released.
 | **bach** | 84.3 | 82.2 | **−2.1** | 87.9 | 82.4 | **−5.6** | 82.5 | 73.9 | **−8.6** | — | — | — |
 | bracs | 50.2 | 53.5 | +3.3 | 63.8 | 63.7 | −0.1 | 49.6 | 52.0 | +2.4 | — | — | — |
 | break_his | 58.1 | 74.2 | +16.1 | 56.7 | 76.1 | +19.4 | 38.5 | 66.5 | +28.0 | — | — | — |
-| ccrcc | 91.6 | 89.6 | −2.0 | 90.8 | 89.5 | −1.3 | 77.5 | 88.6 | +11.1 | — | — | — |
+| ccrcc | 91.6 | 89.6 | −1.9 | 90.8 | 89.5 | −1.3 | 77.5 | 88.6 | +11.1 | — | — | — |
 | crc | 94.2 | 94.7 | +0.5 | 95.4 | 96.2 | +0.8 | 94.7 | 95.6 | +0.9 | — | — | — |
-| esca | 81.4 | 82.4 | +1.0 | 86.2 | 87.0 | +0.8 | 75.0 | 73.9 | −1.1 | — | — | — |
-| mhist | 69.3 | 74.8 | +5.5 | 80.2 | 79.8 | −0.4 | 62.4 | 71.0 | +8.6 | — | — | — |
+| esca | 81.4 | 82.4 | +1.0 | 86.2 | 87.0 | +0.8 | 75.0 | 73.9 | −1.2 | — | — | — |
+| mhist | 69.3 | 74.8 | +5.5 | 80.2 | 79.8 | −0.4 | 62.4 | 71.1 | +8.6 | — | — | — |
 | patch_camelyon | 88.0 | 89.3 | +1.2 | 93.5 | 94.2 | +0.6 | 82.8 | 86.4 | +3.6 | — | — | — |
 | tcga_crc_msi | 61.9 | 64.1 | +2.1 | 65.6 | 68.7 | +3.1 | 55.1 | 59.6 | +4.6 | — | — | — |
-| tcga_tils | 87.6 | 89.6 | +2.0 | 91.0 | 91.1 | +0.1 | 76.2 | 89.2 | +13.0 | — | — | — |
+| tcga_tils | 87.6 | 89.6 | +2.0 | 91.0 | 91.1 | +0.2 | 76.2 | 89.2 | +13.0 | — | — | — |
 | **tcga_uniform** | 77.5 | 74.9 | **−2.6** | 85.2 | 82.3 | **−2.9** | 63.4 | 66.3 | +2.9 | — | — | — |
-| wilds | 95.0 | 96.2 | +1.2 | 98.3 | 98.5 | +0.2 | 89.9 | 93.6 | +3.6 | — | — | — |
+| wilds | 95.0 | 96.2 | +1.2 | 98.3 | 98.4 | +0.2 | 89.9 | 93.6 | +3.6 | — | — | — |
 | ocelot | — | — | — | — | — | — | — | — | — | 78.4 | 79.4 | +0.9 |
 | pannuke | — | — | — | — | — | — | — | — | — | 61.8 | 61.5 | −0.3 |
+| segpath_epithelial | — | — | — | — | — | — | — | — | — | 70.9 | 69.1 | −1.8 |
 | segpath_lymphocytes | — | — | — | — | — | — | — | — | — | 63.8 | 63.6 | −0.1 |
 
-`segpath_lymphocytes` landed after the §2 task averages were computed and is **not** folded
-into them — those stay 2-of-4-set averages until `segpath_epithelial` completes (§5). Exact
-F1 fractions: phikon-v2 0.6065 → 0.6130, Midnight 0.6375 → 0.6364.
+All 16 datasets are present and all four are folded into the §2 segmentation averages.
+Exact segpath F1 fractions: lymphocytes phikon-v2 0.6065 → 0.6130, Midnight 0.6375 → 0.6364;
+epithelial phikon-v2 0.694590 → 0.689437, Midnight 0.709486 → 0.691234.
+
+Midnight's `segpath_epithelial` regression (−1.8) is the largest single-dataset segmentation
+move on either backbone, and its confidence intervals do not overlap ([0.7071, 0.7120] base
+vs [0.6888, 0.6937] fine-tuned). It is the reason Midnight's segmentation task average is
+negative.
 
 THUNDER pooling is per-backbone and is not our choice: arXiv:2607.22861 §3 uses CLS+mean
 concatenation in THUNDER only for Virchow2, AquaViT, H0-mini and Midnight-12k, so
 phikon-v2 is `cls` and Midnight is `clsmean`. On ViT-g the 3072-d `clsmean` vector crashes
-THUNDER's segmentation decoder, so Midnight's 2 segmentation sets are `cls` while its 12
+THUNDER's segmentation decoder, so Midnight's 4 segmentation sets are `cls` while its 12
 classification sets are `clsmean` — a real methodological split, recorded per-row by
 `scripts/collect_thunder.py`.
 
@@ -185,9 +199,8 @@ classification sets are `clsmean` — a real methodological split, recorded per-
   chosen because it was the best *PathoROB* checkpoint. Step 2000 is better on HEST
   (+0.0078 vs +0.0047). Robustness and retention peak at different steps, so any
   single-checkpoint headline understates one axis.
-- **Coverage.** THUNDER: 15 of Waiv's 16 datasets (12/12 classification, 3/4 segmentation);
-  `segpath_epithelial` is the missing one and 3 of its 4 arms are still running (§5). The §2
-  segmentation task averages remain over 2 datasets, Waiv's over 4. HEST: phikon-v2 only, no
+- **Coverage.** THUNDER: 16 of Waiv's 16 datasets (12/12 classification, 4/4 segmentation),
+  so the §2 segmentation average is like-for-like against theirs. HEST: phikon-v2 only, no
   Midnight run. Patho-Bench dropped (~8 TB of WSIs, no traceable target number).
 - **The Tier-1 probe tripwire is not an early-stopping signal.** `scripts/probe_follow.py`
   detects collapse; it does not predict PathoROB RI, in either direction. On the full-FT run
@@ -212,7 +225,7 @@ classification sets are `clsmean` — a real methodological split, recorded per-
 
 ---
 
-## 5. Full fine-tuning pilot, and what is still running
+## 5. Full fine-tuning pilot
 
 ### Full FT vs LoRA — done, full FT did not beat LoRA
 
@@ -236,23 +249,6 @@ throughout, so this is not a collapse. The checkpoint costs ~18× the disk (3.42
 weight decay 0.02; the LoRA run was lr 1e-4 / decay 0.05. So more than `--full-ft` differs,
 and at n=1 seed a 0.007 gap is not decisive in either direction. The supportable claim is
 "full FT did not beat LoRA here", **not** "LoRA wins".
-
-### Still running — `segpath_epithelial`, 3 of 4 arms
-
-`segpath_epithelial` runs at 9 epochs and `segpath_lymphocytes` at 21, per THUNDER's own
-`docs/guidelines.md`; the generic 200-epoch default is wrong for these two sets and is why
-earlier attempts were abandoned. `segpath_lymphocytes` is complete (all 4 arms, §3), and
-`segpath_epithelial`'s Midnight fine-tuned arm finished (job 369916, F1 0.6912).
-
-The other three — 369913 (phikon-v2 `base_cls`), 369914 (phikon-v2 `ft1000_cls`), 369915
-(Midnight `mbase_cls`) — were preempted and **restarted from scratch** on 2026-08-05
-(369913/369915 at 02:32 UTC, 369914 at 04:00 UTC), because THUNDER does not checkpoint
-segmentation training. As of 2026-08-05 18:34 UTC they are at epoch 4–5 of 9 at
-~11,500 s/epoch, i.e. roughly 13–16 h of training left plus eval.
-
-Coverage is therefore 15 of Waiv's 16 datasets. The full 16-dataset like-for-like against
-their Table 2 — and a 4-dataset segmentation average matching theirs — is still blocked on
-these three jobs.
 
 ---
 
@@ -329,7 +325,8 @@ sbatch scripts/extract_pathorob.sbatch phikonv2_clsmean_ours "camelyon tolkach_e
 PYTHONNOUSERSITE=1 ./.venv-pathorob/bin/python scripts/pathorob_gate.py \
   --model phikonv2_clsmean_ours --datasets camelyon tolkach_esca tcga
 
-# THUNDER
+# THUNDER. segpath_epithelial runs at 9 epochs and segpath_lymphocytes at 21, per THUNDER's
+# own docs/guidelines.md — the generic 200-epoch default is wrong for these two sets.
 sbatch scripts/run_thunder.sbatch <dataset> <task> <run_name> [ckpt]
 PYTHONNOUSERSITE=1 THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder \
   ./.venv-thunder/bin/python scripts/collect_thunder.py --model ft1000_cls
@@ -353,6 +350,11 @@ means the same thing on every run.
   µ-scale drift elsewhere is float summation order), and that committed reference
   independently agrees with Waiv's Table-1 base row. Two separate sources corroborating.
   Base Midnight likewise reproduces Waiv's published 0.759 (0.7589).
+- **THUNDER segmentation harness.** With all 4 segmentation sets in, our **base** runs
+  cross-check against THUNDER's own published leaderboard (arXiv:2507.07860v3): phikon-v2
+  base mean Δ **+0.30** (max |Δ| +1.3), Midnight base mean Δ **+1.31** (max +2.9). Our
+  harness reproduces published numbers on exactly the sets Waiv used, independently of any
+  fine-tuning claim. `scripts/collect_thunder.py` prints these as `# cross-check` lines.
 - **Backbone-agnostic refactor.** `scripts/regression_bitcheck.py` compares raw feature
   arrays across worktrees: base phikon-v2 pre- vs post-refactor is bit-identical at both
   `cls` (1024-d) and `clsmean` (2048-d), max abs delta 0.000e+00.
