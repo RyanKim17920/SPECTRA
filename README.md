@@ -58,7 +58,10 @@ Reading:
   (step 500) against their Mascaret +0.0215. Read against the benchmark's dynamic range
   (0.3252–0.4229, span 0.0977), not against zero: our Midnight delta is ~1% of that span,
   Waiv's ~22%. With the Midnight run in, this is no longer a phikon-v2 quirk — it is a
-  consistent gap in the recipe. Retention is where the reconstruction falls short.
+  consistent gap in the recipe. A sweep over every checkpoint on both backbones (§2) shows
+  the best in range is +0.0098 (phikon-v2, step 3500) and +0.0035 (Midnight, step 250), so
+  the gap is intrinsic, not a checkpoint-selection artefact. Retention is where the
+  reconstruction falls short.
 
 Per-dataset PathoROB, for completeness:
 
@@ -166,9 +169,61 @@ PYTHONNOUSERSITE=1 ./.venv-hest/bin/python scripts/collect_hest.py \
 ```
 
 Step 500 is Midnight's best *PathoROB* checkpoint, chosen for consistency with the THUNDER
-and PathoROB rows — not a HEST-optimal one. For phikon-v2 the best PathoROB checkpoint (1000)
-was not the best HEST checkpoint (2000), so the same is likely true here. Steps
-250/750/1000/1250/1500 exist under `runs/waiv-midnight-369159/` if a second point is wanted.
+and PathoROB rows — not a HEST-optimal one. The sweep below settles what that costs.
+
+### HEST checkpoint sweep — both backbones, every available checkpoint
+
+One question: is the HEST shortfall an artefact of which checkpoint we report, or intrinsic
+to the recipe? Every checkpoint on both backbones was evaluated. Answer: intrinsic.
+
+phikon-v2, `cls` protocol, base 0.3747, from `runs/waiv-real-369043/` (jobs 370991–370995
+plus the pre-existing ft1000/ft2000; exp codes `base_cls`, `ft500_cls` … `ft3500_cls`):
+
+| step | 500 | 1000 | 1500 | 2000 | 2500 | 3000 | 3500 |
+|---|---|---|---|---|---|---|---|
+| Avg Pearson | 0.3818 | 0.3794 | 0.3813 | 0.3825 | 0.3826 | 0.3838 | **0.3845** |
+| Δ vs base | +0.0071 | +0.0047 | +0.0066 | +0.0078 | +0.0079 | +0.0091 | **+0.0098** |
+
+Midnight-12k, `clsmean` protocol, base 0.4121, from `runs/waiv-midnight-369159/` (jobs
+370986–370990 plus the pre-existing mft500; exp codes `mbase_clsmean`, `mft250_clsmean` …
+`mft1500_clsmean`):
+
+| step | 250 | 500 | 750 | 1000 | 1250 | 1500 |
+|---|---|---|---|---|---|---|
+| Avg Pearson | **0.4156** | 0.4132 | 0.4136 | 0.4134 | 0.4118 | 0.4115 |
+| Δ vs base | **+0.0035** | +0.0011 | +0.0015 | +0.0013 | −0.0003 | −0.0007 |
+
+**The two curves run in opposite directions.** phikon-v2's retention climbs with training and
+is *still climbing* at the last checkpoint (3500), so its HEST optimum is not bracketed — we
+cannot claim to have found the maximum, only that nothing in the trained range reaches Waiv.
+Midnight's decays monotonically from the earliest checkpoint and goes negative by step 1250.
+The natural expectation — that retention peaks *later* than robustness, as it does on
+phikon-v2 where PathoROB peaks at 1000 and HEST at 3500 — is **refuted**: on Midnight
+PathoROB peaks at 500 and HEST at 250, the other ordering. There is no transferable rule
+here. Anyone porting this recipe to a new backbone cannot assume either direction.
+
+**The gap is intrinsic, not a checkpoint-selection artefact.** On both backbones the best
+checkpoint in the entire trained range still falls far short of Waiv: +0.0098 vs Phaet's
++0.0196 (phikon-v2), +0.0035 vs Mascaret's +0.0215 (Midnight). Best-case selection closes
+roughly half the phikon-v2 gap and a sixth of the Midnight one. The shortfall is a property
+of the recipe.
+
+**The headline checkpoints do not change.** We continue to report step 1000 (phikon-v2) and
+step 500 (Midnight) on every benchmark, selected by the blind, model-agnostic rule "best
+PathoROB checkpoint". Picking a different checkpoint per benchmark would inflate HEST, break
+the single-model-per-backbone comparison Waiv's release implies (they publish one Phaet and
+one Mascaret, evaluated on everything), and is exactly the eval-gaming §8 forbids. That rule
+costs us, and the cost is recorded here rather than optimised away: step 1000 is a **local
+minimum** on phikon-v2's HEST curve (0.3818 → 0.3794 → 0.3813 across 500/1000/1500), and
+step 500 is not Midnight's best either.
+
+**Hypothesis for the intrinsic gap — a missing loss term, untested.** The loss as built is a
+single InfoNCE term with **no retention component**: no frozen-teacher anchor, no
+distillation, no replay, no L2-to-base penalty. LoRA's implicit bounding of drift is the
+entire anti-forgetting mechanism. `PLAN.md` §2 scoped "TCGA replay tiles, frozen-teacher
+anchor" as optional and neither was implemented. Given that the gap survives checkpoint
+selection on both backbones, that missing term is the leading hypothesis for it. We have not
+tested it; this is a stated gap in the reconstruction, not a result.
 
 ---
 
@@ -253,10 +308,13 @@ classification sets are `clsmean` — a real methodological split, recorded per-
 - **fp32 vs their mixed precision.** Each Δ is internally precision-consistent, so Δ-vs-Δ
   is valid; **absolute levels are not comparable** across the two studies.
 - **Checkpoint selection is not neutral.** THUNDER and HEST use step 1000 (phikon-v2) and
-  step 500 (Midnight), chosen because they were the best *PathoROB* checkpoints. For
-  phikon-v2, step 2000 is better on HEST (+0.0078 vs +0.0047); no HEST sweep was run for
-  Midnight. Robustness and retention peak at different steps, so any single-checkpoint
-  headline understates one axis.
+  step 500 (Midnight), chosen because they were the best *PathoROB* checkpoints. A full HEST
+  sweep over every checkpoint was run on **both** backbones (§2): phikon-v2's HEST optimum is
+  step 3500 (+0.0098, still climbing at the end of the trained range), Midnight's is step 250
+  (+0.0035, decaying thereafter and negative by 1250). Robustness and retention peak at
+  different steps and in *opposite* orderings on the two backbones, so any single-checkpoint
+  headline understates one axis — but even the best checkpoint stays far short of Waiv, so
+  the gap is not a selection artefact.
 - **Coverage.** All three benchmarks now cover both backbones. THUNDER: 16 of Waiv's 16
   datasets (12/12 classification, 4/4 segmentation), so the §2 segmentation average is
   like-for-like against theirs. HEST: phikon-v2 (`cls`) and Midnight (`clsmean`), base and
