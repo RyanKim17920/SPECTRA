@@ -32,7 +32,16 @@ fine-tuning, which is what makes the deltas meaningful rather than merely plausi
 |---|---|---|---|---|
 | PathoROB Avg RI ↑ | 0.7589 | 0.759 | **0.9080** | 0.924 |
 | THUNDER mean Δ over 4 tasks ↑ | — | — | **+2.21** | +1.80 |
-| HEST Avg Pearson ↑ | not run | 0.3952 | not run | 0.4167 |
+| HEST Avg Pearson ↑ | 0.4121 | 0.3952 | **0.4132** (s500) | 0.4167 |
+
+The Midnight HEST columns are **not** on a common scale: ours is `clsmean` fp32, and both
+summary files carry the harness's own note — *"backbone=kaiko-ai/midnight pooling=clsmean has
+NO published counterpart here — this is our own reference for checkpoint-to-checkpoint
+retention only."* Waiv state no pooling protocol for their Midnight HEST number, so 0.3952
+may be CLS-only against our CLS+mean, and their runs are mixed precision. Our base 0.4121 is
+already **above** their reported base (+0.0169) and just under their fine-tuned Mascaret
+0.4167; that is a protocol artefact, not evidence we are near Mascaret. Only the base→FT
+delta is a valid comparison.
 
 Reading:
 
@@ -44,9 +53,12 @@ Reading:
   model × task pairs** (§2). The sole loss is Midnight segmentation (−0.33 vs their +1.6);
   phikon-v2 segmentation is a win in the sense that we regress less (−0.12 vs their −1.2).
   The mean-over-4-tasks figure still hides composition: see §2.
-- **HEST.** We are clearly behind on phikon-v2 (+0.0047 at step 1000, +0.0078 at step 2000,
-  against their +0.0196), and we have no Midnight HEST run at all. Read against the
-  benchmark's dynamic range (0.3252–0.4229, span 0.0977), not against zero.
+- **HEST is the weak axis of the reconstruction, on both backbones, 2 of 2.** phikon-v2
+  +0.0047 (step 1000) / +0.0078 (step 2000) against Waiv's Phaet +0.0196; Midnight +0.0011
+  (step 500) against their Mascaret +0.0215. Read against the benchmark's dynamic range
+  (0.3252–0.4229, span 0.0977), not against zero: our Midnight delta is ~1% of that span,
+  Waiv's ~22%. With the Midnight run in, this is no longer a phikon-v2 quirk — it is a
+  consistent gap in the recipe. Retention is where the reconstruction falls short.
 
 Per-dataset PathoROB, for completeness:
 
@@ -122,6 +134,42 @@ corr(Δ_waiv, Δ_ours) = 0.880 — their three largest gains (COAD, SKCM, PAAD) 
 largest, and we regress on READ as they do. The shortfall is concentrated in LUNG and PRAD
 rather than spread across tasks.
 
+### HEST, per cancer type (Midnight-12k, `clsmean` protocol)
+
+Jobs 370850 (base, 3978 s) and 370855 (step 500, 4298 s), both COMPLETED, fp32. Waiv publish
+no per-type row for Midnight, so this is base→FT only — Δ, not Δ-vs-Δ.
+
+| task | base | ours s500 | Δ ours |
+|---|---|---|---|
+| IDC | 0.5991 | 0.5898 | −0.0093 |
+| PRAD | 0.3715 | 0.3481 | −0.0234 |
+| PAAD | 0.5020 | 0.5166 | +0.0146 |
+| SKCM | 0.6484 | 0.6506 | +0.0022 |
+| COAD | 0.3182 | 0.3109 | −0.0073 |
+| READ | 0.2033 | 0.1887 | −0.0146 |
+| CCRCC | 0.2093 | 0.2660 | +0.0567 |
+| LUNG | 0.5826 | 0.5750 | −0.0076 |
+| LYMPH_IDC | 0.2746 | 0.2731 | −0.0015 |
+| **Avg** | **0.4121** | **0.4132** | **+0.0011** |
+
+Six of nine tasks regress; the average is held positive by CCRCC alone (+0.0567). Against
+Mascaret's +0.0215 this is ~1/20th of the movement, and ~1% of the benchmark's 0.0977 dynamic
+range against Waiv's ~22%.
+
+`scripts/collect_hest.py` defaults to `--base base_<pooling>`, which for `clsmean` would diff
+Midnight against phikon-v2's baseline. The Midnight table above must be regenerated with the
+flags explicit:
+
+```bash
+PYTHONNOUSERSITE=1 ./.venv-hest/bin/python scripts/collect_hest.py \
+  --pooling clsmean --base mbase_clsmean --runs mft500_clsmean
+```
+
+Step 500 is Midnight's best *PathoROB* checkpoint, chosen for consistency with the THUNDER
+and PathoROB rows — not a HEST-optimal one. For phikon-v2 the best PathoROB checkpoint (1000)
+was not the best HEST checkpoint (2000), so the same is likely true here. Steps
+250/750/1000/1250/1500 exist under `runs/waiv-midnight-369159/` if a second point is wanted.
+
 ---
 
 ## 3. Dataset level — THUNDER
@@ -192,16 +240,28 @@ classification sets are `clsmean` — a real methodological split, recorded per-
 
 ## 4. Caveats
 
-- **n=1 seed** throughout, no error bars, on both backbones and every benchmark.
+- **n=1 seed** throughout, no error bars — but this is **protocol parity with Waiv, not a
+  shortfall against them**. Per their §3.3 (arXiv:2607.22861), THUNDER is "evaluated on frozen
+  features following the default protocol" with no seed repetition, HEST follows "the default
+  protocol and implementation", and PathoROB states no repetition at all. Patho-Bench is the
+  only benchmark where they repeat — "Each task is run three times, and we report the mean
+  over all data folds and random seeds" — and that is precisely the benchmark we dropped. So
+  n=1 matches their protocol on all three benchmarks we run. The real asymmetry is **model
+  count, not seed count**: their significance claims (e.g. p=7.5e-3, one-sided Wilcoxon
+  signed-rank on THUNDER rank sums) aggregate across 10 model pairs, which we cannot replicate
+  at 2 backbones no matter how many seeds we ran. We make no significance claim.
 - **fp32 vs their mixed precision.** Each Δ is internally precision-consistent, so Δ-vs-Δ
   is valid; **absolute levels are not comparable** across the two studies.
-- **Checkpoint selection is not neutral.** THUNDER and HEST use step 1000 (phikon-v2),
-  chosen because it was the best *PathoROB* checkpoint. Step 2000 is better on HEST
-  (+0.0078 vs +0.0047). Robustness and retention peak at different steps, so any
-  single-checkpoint headline understates one axis.
-- **Coverage.** THUNDER: 16 of Waiv's 16 datasets (12/12 classification, 4/4 segmentation),
-  so the §2 segmentation average is like-for-like against theirs. HEST: phikon-v2 only, no
-  Midnight run. Patho-Bench dropped (~8 TB of WSIs, no traceable target number).
+- **Checkpoint selection is not neutral.** THUNDER and HEST use step 1000 (phikon-v2) and
+  step 500 (Midnight), chosen because they were the best *PathoROB* checkpoints. For
+  phikon-v2, step 2000 is better on HEST (+0.0078 vs +0.0047); no HEST sweep was run for
+  Midnight. Robustness and retention peak at different steps, so any single-checkpoint
+  headline understates one axis.
+- **Coverage.** All three benchmarks now cover both backbones. THUNDER: 16 of Waiv's 16
+  datasets (12/12 classification, 4/4 segmentation), so the §2 segmentation average is
+  like-for-like against theirs. HEST: phikon-v2 (`cls`) and Midnight (`clsmean`), base and
+  fine-tuned. PathoROB: both. The only benchmark dropped is Patho-Bench (~8 TB of WSIs, no
+  traceable target number).
 - **The Tier-1 probe tripwire is not an early-stopping signal.** `scripts/probe_follow.py`
   detects collapse; it does not predict PathoROB RI, in either direction. On the full-FT run
   it fired its scanner-regression signal from step 300 while RI was still climbing — acting on
@@ -334,6 +394,10 @@ PYTHONNOUSERSITE=1 THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder \
 # HEST
 sbatch scripts/run_hest.sbatch <run_name> <pooling> [ckpt]
 PYTHONNOUSERSITE=1 ./.venv-hest/bin/python scripts/collect_hest.py --pooling cls
+# Midnight: --base/--runs are MANDATORY. The default --base base_<pooling> would silently
+# diff Midnight's clsmean run against phikon-v2's baseline.
+PYTHONNOUSERSITE=1 ./.venv-hest/bin/python scripts/collect_hest.py \
+  --pooling clsmean --base mbase_clsmean --runs mft500_clsmean
 ```
 
 `collect_thunder.py` deliberately does **not** compute THUNDER's rank sum: it is a rank over
