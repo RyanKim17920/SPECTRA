@@ -10,7 +10,9 @@ Used as::
 
 **Do not hardcode ``WAIV_POOLING`` in a sweep script.** The correct THUNDER pooling
 depends on the backbone (see ``THUNDER_CLSMEAN_BACKBONES`` below): cls for phikon-v2,
-clsmean for midnight. Leaving it unset picks the right one.
+clsmean for midnight. Leaving it unset picks the right one. For any backbone not in
+those tables there is no right one to pick, so an unset ``WAIV_POOLING`` is a hard error
+rather than a silent ``cls``.
 
 Why a module of its own rather than a function in ``thunder_adapter``
 ----------------------------------------------------------------------
@@ -71,11 +73,29 @@ from thunder.models import PretrainedModel  # noqa: E402
 #: this backwards and the base-vs-fine-tuned rank sums are not comparable to their table.
 THUNDER_CLSMEAN_BACKBONES = frozenset({"kaiko-ai/midnight"})
 
+#: The other half of the same published table: backbones Waiv scored CLS-only.
+#: Both sets are transcriptions of a paper, so membership cannot be inferred for a
+#: backbone that is not in the paper -- which is why an unlisted backbone is an error
+#: below rather than a default. Silently taking "cls" would produce a number that looks
+#: like a THUNDER result and is not comparable to their table.
+THUNDER_CLS_BACKBONES = frozenset({"owkin/phikon-v2"})
+
 
 def _default_pooling(backbone: str | None) -> str:
     from waivphaet.models.encoder import DEFAULT_BACKBONE
 
-    return "clsmean" if (backbone or DEFAULT_BACKBONE) in THUNDER_CLSMEAN_BACKBONES else "cls"
+    backbone = backbone or DEFAULT_BACKBONE
+    if backbone in THUNDER_CLSMEAN_BACKBONES:
+        return "clsmean"
+    if backbone in THUNDER_CLS_BACKBONES:
+        return "cls"
+    raise RuntimeError(
+        f"no published THUNDER pooling protocol for backbone {backbone!r}. "
+        "Set WAIV_POOLING=cls|mean|clsmean explicitly for this run, and if the choice is "
+        "a protocol decision (i.e. it comes from arXiv:2607.22861 3), record it by adding "
+        "the backbone to THUNDER_CLSMEAN_BACKBONES or THUNDER_CLS_BACKBONES in "
+        "src/waivphaet/eval/thunder_model.py."
+    )
 
 
 def _is_segmentation_run(argv: list[str] | None = None) -> bool:

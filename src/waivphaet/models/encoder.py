@@ -75,28 +75,65 @@ HALF_STD = (0.5, 0.5, 0.5)
 #: our base-midnight row disagree with Waiv's published 0.759 for a reason that has
 #: nothing to do with the harness being faithful -- i.e. exactly the check we are running
 #: it for. So it is table-driven and travels with the backbone id.
+#:
+#: This table is an **override**, not the only source: it wins over whatever the backbone's
+#: own HF preprocessor says. These two entries are the ones our published numbers were
+#: produced with, and they must never move because a hub config was re-uploaded.
 BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float, float, float]]] = {
     "owkin/phikon-v2": (IMAGENET_MEAN, IMAGENET_STD),
     "kaiko-ai/midnight": (HALF_MEAN, HALF_STD),
 }
 
 
-def normalization_for(backbone: str | None) -> tuple[tuple[float, ...], tuple[float, ...]]:
-    """Mean/std for ``backbone``. Unknown ids fall back to ImageNet, loudly.
+def _hf_preprocessor_normalization(
+    backbone: str,
+) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
+    """``(mean, std)`` read off the backbone's own HF image processor, or ``None``.
 
-    A wrong-but-plausible normalisation is invisible in every log and every shape check,
-    so a new backbone must not get one silently.
+    Most model repos publish ``image_mean``/``image_std`` in ``preprocessor_config.json``,
+    which is the same thing the model card states -- so for a new backbone this is the
+    authoritative value, not a guess. Any failure (no processor, offline hub, missing
+    fields) returns ``None`` so the caller can still fall through to the override or to a
+    hard error; a hub blip must not crash a run whose stats are already pinned above.
+    """
+    try:
+        from transformers import AutoImageProcessor
+
+        proc = AutoImageProcessor.from_pretrained(backbone)
+        mean, std = getattr(proc, "image_mean", None), getattr(proc, "image_std", None)
+    except Exception as exc:  # noqa: BLE001 -- any hub/config failure is just "not derivable"
+        print(f"[encoder] AutoImageProcessor lookup failed for {backbone!r}: {exc}", flush=True)
+        return None
+    if mean is None or std is None or len(mean) != 3 or len(std) != 3:
+        return None
+    return tuple(float(v) for v in mean), tuple(float(v) for v in std)
+
+
+def normalization_for(backbone: str | None) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    """Mean/std for ``backbone``: explicit override, else derived from HF, else refuse.
+
+    A wrong-but-plausible normalisation is invisible in every log and every shape check --
+    the old ImageNet fallback only printed a warning, which is unreadable in a 90k-line
+    SLURM log. So there is no fallback any more: either we know the stats or we stop.
     """
     backbone = backbone or DEFAULT_BACKBONE
-    if backbone not in BACKBONE_NORMALIZATION:
+    if backbone in BACKBONE_NORMALIZATION:
+        return BACKBONE_NORMALIZATION[backbone]
+    derived = _hf_preprocessor_normalization(backbone)
+    if derived is not None:
         print(
-            f"[encoder] WARNING: no normalisation registered for {backbone!r}; falling "
-            "back to ImageNet stats. Check the model card -- e.g. kaiko-ai/midnight "
-            "requires (0.5,0.5,0.5)/(0.5,0.5,0.5) and ImageNet stats silently cost it "
-            "accuracy. Add an entry to BACKBONE_NORMALIZATION.",
+            f"[encoder] normalisation for {backbone!r} derived from its HF image processor: "
+            f"mean={derived[0]} std={derived[1]} (no BACKBONE_NORMALIZATION override)",
             flush=True,
         )
-    return BACKBONE_NORMALIZATION.get(backbone, (IMAGENET_MEAN, IMAGENET_STD))
+        return derived
+    raise RuntimeError(
+        f"no normalisation for backbone {backbone!r}: it has no BACKBONE_NORMALIZATION "
+        "entry and its HF image processor did not yield image_mean/image_std. Read the "
+        "model card and add an explicit entry to BACKBONE_NORMALIZATION in "
+        "src/waivphaet/models/encoder.py -- defaulting to ImageNet stats here would "
+        "silently cost accuracy (e.g. kaiko-ai/midnight needs (0.5,0.5,0.5))."
+    )
 
 #: Superset of leaf module names that carry the bulk of a transformer block's parameters,
 #: across the ViT namings we care about. This is a *candidate* set: the actual target set

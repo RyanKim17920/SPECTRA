@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -106,7 +107,12 @@ class TrainConfig:
     """Every value here is a guess. PLAN.md 3 risk 4: "no recipe means hyperparameter
     search, not a single run" -- LR / steps / LoRA rank / temperature are all unknown."""
 
-    packed_dir: str = "/data/ryan.kim/plism/repacked"
+    #: ``$WAIV_PACKED_DIR``, read per-instantiation rather than at import so the library
+    #: carries no machine-specific path; the fallback is this cluster's repacked PLISM so
+    #: every existing launcher keeps working unchanged.
+    packed_dir: str = field(
+        default_factory=lambda: os.environ.get("WAIV_PACKED_DIR", "/data/ryan.kim/plism/repacked")
+    )
     out_dir: str = "runs/dev"
     # optimisation
     lr: float = 1e-4

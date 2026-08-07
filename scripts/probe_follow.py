@@ -8,7 +8,9 @@ too slow to *stop* a run. Full fine-tuning can destroy a representation in tens 
 reports on step 50 the run is already at step 400.
 
 This is Tier 1: probe only, ~30 s per checkpoint, evaluated against three hard kill signals
-taken from the LoRA control run (``runs/waiv-real-369043``, base = ``probe_before.json``):
+defined relative to the run's OWN pre-training probe (``<run-dir>/probe_before.json``). The
+numbers quoted below are the phikon-v2 LoRA control run (``runs/waiv-real-369043``), which
+is also the fallback base when a run dir has no probe_before.json:
 
 1. ``heldout.within_condition_random > 0.70``, or a rise of ``+0.10`` between consecutive
    checkpoints. This is the collapse detector proper: it is the mean cosine between tiles
@@ -54,20 +56,33 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-#: Base (un-fine-tuned phikon-v2) values, measured on the pinned condition set of the LoRA
-#: control run: runs/waiv-real-369043/probe_before.json, groups.heldout. Not hand-copied
-#: from the paper -- these are this repo's own numbers on this repo's own condition set,
-#: which is the only way the comparison means anything.
+#: **Reference** base (un-fine-tuned phikon-v2) values, measured on the pinned condition
+#: set of the LoRA control run: runs/waiv-real-369043/probe_before.json, groups.heldout.
+#: Not hand-copied from the paper -- these are this repo's own numbers on this repo's own
+#: condition set, which is the only way the comparison means anything.
+#:
+#: They are NOT the operative thresholds. Signals 2 and 3 ask "is the fine-tune now worse
+#: than the backbone we started from", which is only a question about *this* run's own
+#: backbone -- on anything but phikon-v2 these numbers fire spurious aborts or miss real
+#: collapse. ``resolve_baselines`` reads the run's own probe_before.json instead and falls
+#: back here only for old runs that have none.
 BASE_WITHIN_CONDITION_RANDOM = 0.4701
 BASE_CROSS_SCANNER_SEPARATION = 0.3760
 BASE_CROSS_STAIN_TOP1 = 0.6958
 
-#: Signal thresholds. See the module docstring for why each one is here.
+#: Signal thresholds for the phikon-v2 reference base above. See the module docstring for
+#: why each one is here. Used verbatim on the fallback path only.
 WCR_ABS_MAX = 0.70          # signal 1, absolute
 WCR_STEP_RISE = 0.10        # signal 1, inter-checkpoint
 SCANNER_SEP_MIN = 0.376     # signal 2, absolute (== base)
 STAIN_TOP1_MIN = 0.696      # signal 3, absolute (== base)
 STAIN_TOP1_FALL = 0.05      # signal 3, inter-checkpoint
+
+#: How the absolute thresholds sit relative to a base: collapse fires at base + margin,
+#: the two retention floors at base itself. That relation is what generalises to another
+#: backbone; the numbers above do not. The two inter-checkpoint deltas are rates of change
+#: and stay backbone-independent.
+WCR_ABS_MARGIN = round(WCR_ABS_MAX - BASE_WITHIN_CONDITION_RANDOM, 4)  # 0.2299
 
 
 def discover(run_dir: Path) -> list[tuple[int, Path]]:
@@ -139,27 +154,73 @@ def digest(p: dict) -> dict:
     }
 
 
-def check_signals(step: int, cur: dict, prev: dict | None, warmup_steps: int) -> list[str]:
+#: The three digest keys the absolute signals are defined on.
+_BASE_KEYS = ("within_condition_random", "cross_scanner.separation", "cross_stain.top1")
+
+
+def resolve_baselines(run_dir: Path) -> tuple[dict, dict, str]:
+    """``(base, thresholds, source)`` for this run.
+
+    Preferred source is the run's OWN ``probe_before.json`` -- written by the sbatch before
+    step 0 with the same probe, the same pinned condition set and, crucially, the same
+    backbone. "Worse than what we started from" is only meaningful against that.
+
+    The module constants are used only when no probe_before.json exists (old runs), and the
+    fallback is stated in the output and recorded in collapse_watch.json, because on a
+    non-phikon backbone it is the thing most likely to be silently wrong.
+    """
+    p = run_dir / "probe_before.json"
+    if p.exists():
+        try:
+            d = digest(json.loads(p.read_text()))
+        except (json.JSONDecodeError, OSError) as exc:
+            d = {}
+            print(f"[probe-follow] {p} unreadable ({exc}); using phikon-v2 reference base")
+        if all(d.get(k) is not None for k in _BASE_KEYS):
+            base = {k: float(d[k]) for k in _BASE_KEYS}
+            return base, {
+                "wcr_abs_max": round(base["within_condition_random"] + WCR_ABS_MARGIN, 4),
+                "wcr_step_rise": WCR_STEP_RISE,
+                "scanner_sep_min": base["cross_scanner.separation"],
+                "stain_top1_min": base["cross_stain.top1"],
+                "stain_top1_fall": STAIN_TOP1_FALL,
+            }, f"{p} :: groups.heldout"
+        if d:
+            print(f"[probe-follow] {p} lacks a heldout digest; using phikon-v2 reference base")
+    return {
+        "within_condition_random": BASE_WITHIN_CONDITION_RANDOM,
+        "cross_scanner.separation": BASE_CROSS_SCANNER_SEPARATION,
+        "cross_stain.top1": BASE_CROSS_STAIN_TOP1,
+    }, {
+        "wcr_abs_max": WCR_ABS_MAX, "wcr_step_rise": WCR_STEP_RISE,
+        "scanner_sep_min": SCANNER_SEP_MIN,
+        "stain_top1_min": STAIN_TOP1_MIN, "stain_top1_fall": STAIN_TOP1_FALL,
+    }, ("phikon-v2 reference constants (no probe_before.json in this run dir) :: "
+        "runs/waiv-real-369043/probe_before.json")
+
+
+def check_signals(step: int, cur: dict, prev: dict | None, warmup_steps: int,
+                  base: dict, th: dict) -> list[str]:
     """Return a list of tripped-signal descriptions; empty means clean."""
     trips: list[str] = []
 
     # --- signal 1: representation collapse -------------------------------------------
     wcr = cur.get("within_condition_random")
     if wcr is not None:
-        if wcr > WCR_ABS_MAX:
+        if wcr > th["wcr_abs_max"]:
             trips.append(
                 f"SIGNAL 1 (collapse): heldout.within_condition_random={wcr:.4f} "
-                f"> {WCR_ABS_MAX} (base {BASE_WITHIN_CONDITION_RANDOM:.4f}). Different "
-                f"conditions are converging on one vector."
+                f"> {th['wcr_abs_max']} (base {base['within_condition_random']:.4f}). "
+                f"Different conditions are converging on one vector."
             )
         if prev is not None and prev.get("within_condition_random") is not None:
             rise = wcr - prev["within_condition_random"]
-            if rise > WCR_STEP_RISE:
+            if rise > th["wcr_step_rise"]:
                 trips.append(
                     f"SIGNAL 1 (collapse rate): heldout.within_condition_random rose "
                     f"{rise:+.4f} since step {prev['step']} "
                     f"({prev['within_condition_random']:.4f} -> {wcr:.4f}), "
-                    f"> +{WCR_STEP_RISE} in one checkpoint."
+                    f"> +{th['wcr_step_rise']} in one checkpoint."
                 )
 
     # --- signal 2: scanner invariance worse than the backbone we started from ---------
@@ -167,50 +228,42 @@ def check_signals(step: int, cur: dict, prev: dict | None, warmup_steps: int) ->
     if sep is not None:
         if step <= warmup_steps:
             pass  # the LR ramp moves this legitimately; not a signal yet
-        elif sep < SCANNER_SEP_MIN:
+        elif sep < th["scanner_sep_min"]:
             trips.append(
                 f"SIGNAL 2 (scanner regression): heldout.cross_scanner.separation="
-                f"{sep:.4f} < {SCANNER_SEP_MIN} (base "
-                f"{BASE_CROSS_SCANNER_SEPARATION:.4f}), past warmup step {warmup_steps}. "
+                f"{sep:.4f} < {th['scanner_sep_min']} (base "
+                f"{base['cross_scanner.separation']:.4f}), past warmup step {warmup_steps}. "
                 f"The fine-tune is now WORSE than base at the thing it is for."
             )
 
     # --- signal 3: stain retention ----------------------------------------------------
     t1 = cur.get("cross_stain.top1")
     if t1 is not None:
-        if t1 < STAIN_TOP1_MIN:
+        if t1 < th["stain_top1_min"]:
             trips.append(
                 f"SIGNAL 3 (stain forgetting): heldout.cross_stain.top1={t1:.4f} "
-                f"< {STAIN_TOP1_MIN} (base {BASE_CROSS_STAIN_TOP1:.4f})."
+                f"< {th['stain_top1_min']} (base {base['cross_stain.top1']:.4f})."
             )
         if prev is not None and prev.get("cross_stain.top1") is not None:
             fall = prev["cross_stain.top1"] - t1
-            if fall > STAIN_TOP1_FALL:
+            if fall > th["stain_top1_fall"]:
                 trips.append(
                     f"SIGNAL 3 (stain forgetting rate): heldout.cross_stain.top1 fell "
                     f"{fall:.4f} since step {prev['step']} "
                     f"({prev['cross_stain.top1']:.4f} -> {t1:.4f}), "
-                    f"> {STAIN_TOP1_FALL} in one checkpoint."
+                    f"> {th['stain_top1_fall']} in one checkpoint."
                 )
     return trips
 
 
-def write_watch(run_dir: Path, records: list[dict]) -> None:
+def write_watch(run_dir: Path, records: list[dict],
+                base: dict, thresholds: dict, base_source: str) -> None:
     out = run_dir / "collapse_watch.json"
     tmp = out.with_suffix(".json.tmp")
     tmp.write_text(json.dumps({
         "run_dir": str(run_dir),
-        "base": {
-            "within_condition_random": BASE_WITHIN_CONDITION_RANDOM,
-            "cross_scanner.separation": BASE_CROSS_SCANNER_SEPARATION,
-            "cross_stain.top1": BASE_CROSS_STAIN_TOP1,
-            "source": "runs/waiv-real-369043/probe_before.json :: groups.heldout",
-        },
-        "thresholds": {
-            "wcr_abs_max": WCR_ABS_MAX, "wcr_step_rise": WCR_STEP_RISE,
-            "scanner_sep_min": SCANNER_SEP_MIN,
-            "stain_top1_min": STAIN_TOP1_MIN, "stain_top1_fall": STAIN_TOP1_FALL,
-        },
+        "base": {**base, "source": base_source},
+        "thresholds": thresholds,
         "points": records,
     }, indent=2))
     os.replace(tmp, out)
@@ -274,6 +327,10 @@ def main() -> int:
             print("[probe-follow] existing collapse_watch.json unreadable, starting over")
     done = {r["step"] for r in records}
 
+    base, thresholds, base_source = resolve_baselines(args.run_dir)
+    print(f"[probe-follow] base {base} from {base_source}", flush=True)
+    print(f"[probe-follow] thresholds {thresholds}", flush=True)
+
     t0 = time.time()
     total_trips = 0
     while True:
@@ -283,7 +340,7 @@ def main() -> int:
             t = time.time()
             cur = digest(run_probe(args, ckpt, step))
             prev = records[-1] if records else None
-            trips = check_signals(step, cur, prev, args.warmup_steps)
+            trips = check_signals(step, cur, prev, args.warmup_steps, base, thresholds)
             total_trips += len(trips)
             report(step, cur, trips)
             records.append({"step": step, "checkpoint": str(ckpt),
@@ -291,7 +348,7 @@ def main() -> int:
                             "signals": trips, **cur})
             records.sort(key=lambda r: r["step"])
             done.add(step)
-            write_watch(args.run_dir, records)
+            write_watch(args.run_dir, records, base, thresholds, base_source)
 
         stopped = args.stop_file is not None and args.stop_file.exists()
         if stopped and not [s for s, _ in discover(args.run_dir) if s not in done]:
