@@ -11,6 +11,7 @@ import importlib.util
 import json
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 import numpy as np
@@ -273,6 +274,209 @@ def test_lora_discovery_is_unchanged_on_the_phikon_v2_naming():
         model, EncoderConfig(lora_target_modules=LORA_TARGET_MODULES)
     )
     assert discovered == fixed
+
+
+# --------------------------------------------------------------------------------------
+# timm-native backbones (paige-ai/Virchow2) -- and the guards that the two PUBLISHED
+# backbones did not move an inch while they were added.
+#
+# Three things can silently change a published number here:
+#   1. the loader branch mis-routing owkin/phikon-v2 or kaiko-ai/midnight to timm;
+#   2. `_pool` slicing patch tokens from a different offset once register tokens exist;
+#   3. LORA_CANDIDATE_MODULES growing a name generic enough to catch a Linear on an
+#      existing backbone that was previously not adapted.
+# Each has a test below. All of them are offline: they exercise pure functions and fake
+# module trees, so the suite does not need the hub or a 2.5 GB download to protect the
+# invariant.
+
+
+def _timm_style_config():
+    """paige-ai/Virchow2's real config.json, trimmed. No model_type; timm's own shape."""
+    return {
+        "architecture": "vit_huge_patch14_224",
+        "model_args": {
+            "img_size": 224, "init_values": 1e-5, "num_classes": 0,
+            "reg_tokens": 4, "mlp_ratio": 5.3375, "global_pool": "",
+            "dynamic_img_size": True,
+        },
+        "pretrained_cfg": {
+            "tag": "virchow_v2", "input_size": [3, 224, 224],
+            "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225],
+            "num_classes": 0,
+        },
+    }
+
+
+def test_loader_is_chosen_from_the_config_shape_not_a_model_name_list():
+    """A name list would mean every future timm checkpoint takes the HF path and dies with
+    an unrelated 'Unrecognized model' error. It would also mean a re-tagged repo keeps
+    taking the wrong path forever. The config file is the source of truth."""
+    from waivphaet.models.encoder import _is_timm_config
+
+    assert _is_timm_config(_timm_style_config()) is True
+    # The two PUBLISHED backbones: transformers configs, must stay on AutoModel.
+    assert _is_timm_config({"model_type": "dinov2", "hidden_size": 1024}) is False   # phikon-v2
+    assert _is_timm_config({"model_type": "dinov2", "hidden_size": 1536}) is False   # midnight
+    assert _is_timm_config({"model_type": "vit", "hidden_size": 768}) is False       # phikon
+    # A transformers config that ALSO happens to carry an architectures list is still HF:
+    # model_type is decisive, and it is checked first.
+    assert _is_timm_config(
+        {"model_type": "dinov2", "architectures": ["Dinov2Model"], "architecture": "x"}
+    ) is False
+    # Unreadable config (offline, gated, 404) => not timm => AutoModel, i.e. the old
+    # behaviour. A hub blip must never silently re-route a published backbone.
+    assert _is_timm_config(None) is False
+    assert _is_timm_config({}) is False
+
+
+def test_packed_gated_ffn_is_detected_from_checkpoint_shapes():
+    """Virchow2 needs mlp_layer=SwiGLUPacked; that is not expressible in config.json, and
+    keying it off the repo id is the per-model dispatch this module refuses. The
+    checkpoint says it: fc1 packs gate+value, so fc1.out == 2 * fc2.in."""
+    from waivphaet.models.encoder import _needs_packed_gated_mlp
+
+    assert _needs_packed_gated_mlp(6832, 3416) is True    # Virchow2, measured
+    assert _needs_packed_gated_mlp(4096, 4096) is False   # plain MLP
+    assert _needs_packed_gated_mlp(0, 0) is False         # probe found nothing
+
+
+def test_normalization_override_still_wins_for_both_published_backbones(monkeypatch):
+    """The precedence gained a timm branch. The override must still short-circuit FIRST --
+    before any hub lookup at all -- or midnight's (0.5,0.5,0.5) could be replaced by
+    whatever a re-uploaded config says, and every published number moves."""
+    from waivphaet.models import encoder as enc
+
+    def _boom(*a, **k):  # any hub access at all is a failure of precedence
+        raise AssertionError("normalization_for consulted the hub for a pinned backbone")
+
+    monkeypatch.setattr(enc, "_hub_config", _boom)
+    monkeypatch.setattr(enc, "_hf_preprocessor_normalization", _boom)
+
+    assert enc.normalization_for("owkin/phikon-v2") == (enc.IMAGENET_MEAN, enc.IMAGENET_STD)
+    assert enc.normalization_for("kaiko-ai/midnight") == (enc.HALF_MEAN, enc.HALF_STD)
+    assert enc.normalization_for(None) == (enc.IMAGENET_MEAN, enc.IMAGENET_STD)
+
+
+def test_timm_normalization_is_read_from_pretrained_cfg(monkeypatch):
+    """timm repos have no preprocessor_config.json, so AutoImageProcessor cannot answer
+    for them -- timm publishes mean/std under pretrained_cfg instead."""
+    from waivphaet.models import encoder as enc
+
+    monkeypatch.setattr(enc, "_hub_config", lambda b: _timm_style_config())
+    monkeypatch.setattr(
+        enc, "_hf_preprocessor_normalization",
+        lambda b: (_ for _ in ()).throw(AssertionError("HF processor consulted for a timm repo")),
+    )
+    mean, std = enc.normalization_for("paige-ai/Virchow2")
+    assert mean == enc.IMAGENET_MEAN and std == enc.IMAGENET_STD
+
+
+def _fake_timm_vit(n_blocks: int):
+    """timm ViT module *paths*: fused qkv attention + a packed-SwiGLU FFN's leaf names."""
+    import torch.nn as nn
+
+    def block():
+        b = nn.Module()
+        b.attn = nn.Module()
+        b.attn.qkv = nn.Linear(8, 24)
+        b.attn.proj = nn.Linear(8, 8)
+        b.mlp = nn.Module()
+        b.mlp.fc1 = nn.Linear(8, 16)
+        b.mlp.fc2 = nn.Linear(8, 8)
+        return b
+
+    m = nn.Module()
+    m.blocks = nn.ModuleList([block() for _ in range(n_blocks)])
+    m.patch_embed = nn.Module()
+    m.patch_embed.proj = nn.Conv2d(3, 8, 14, 14)  # decoy: leaf "proj", and NOT a Linear
+    m.head = nn.Linear(8, 8)                      # decoy: outside every block
+    return m
+
+
+def test_lora_discovery_on_a_timm_vit_needs_no_new_candidate_names():
+    """Virchow2's in-block Linears are qkv / proj / fc1 / fc2 -- all four are already in
+    LORA_CANDIDATE_MODULES, so nothing had to be added and nothing on the existing two
+    backbones could change. 4/block x 32 blocks = 128 targets."""
+    from waivphaet.models.encoder import EncoderConfig, _lora_target_names
+
+    model = _fake_timm_vit(32)
+    names, per_block, leaves = _lora_target_names(model, EncoderConfig())
+
+    assert len(names) == 128, "4 linears x 32 blocks"
+    assert set(per_block) == set(range(32))
+    assert set(per_block.values()) == {4}, per_block
+    assert set(leaves) == {"qkv", "proj", "fc1", "fc2"}
+    assert not any(n.startswith(("patch_embed.", "head")) for n in names)
+
+
+def test_candidate_module_list_is_frozen_for_the_published_backbones():
+    """The third guard in WaivEncoder raises when an in-block Linear matched nothing, so
+    adding a name is safe; *removing* or over-generalising one is not. This pins the exact
+    counts the published runs used: phikon-v2 6/block, midnight 6/block."""
+    from waivphaet.models.encoder import LORA_CANDIDATE_MODULES, EncoderConfig, _lora_target_names
+
+    assert set(LORA_CANDIDATE_MODULES) == {
+        "query", "key", "value", "dense", "fc1", "fc2",
+        "weights_in", "weights_out",
+        "qkv", "proj",
+        "q_proj", "k_proj", "v_proj", "out_proj", "o_proj",
+    }
+    phikon_v2 = _fake_vit(24, ("fc1", "fc2"))
+    names, per_block, _ = _lora_target_names(phikon_v2, EncoderConfig())
+    assert len(names) == 144 and set(per_block.values()) == {6}
+
+    midnight = _fake_vit(40, ("weights_in", "weights_out"))
+    names, per_block, _ = _lora_target_names(midnight, EncoderConfig())
+    assert len(names) == 240 and set(per_block.values()) == {6}
+
+
+class _PoolOnly:
+    """Just enough of WaivEncoder to call the real, unbound ``_pool``."""
+
+    def __init__(self, pooling, num_prefix_tokens):
+        self.cfg = types.SimpleNamespace(pooling=pooling)
+        self.num_prefix_tokens = num_prefix_tokens
+
+    def pool(self, tokens):
+        from waivphaet.models.encoder import WaivEncoder
+
+        return WaivEncoder._pool(self, tokens)
+
+
+@pytest.mark.parametrize("pooling", ["cls", "mean", "clsmean"])
+def test_pool_is_bit_identical_for_single_prefix_token_backbones(pooling):
+    """`_pool` gained a ``num_prefix_tokens`` slice. On every HF backbone that value is 1,
+    so it must reduce EXACTLY to the old ``tokens[:, 1:, :]`` -- not approximately."""
+    torch.manual_seed(0)
+    tokens = torch.randn(4, 197, 1024, dtype=torch.float64)
+
+    cls, patches = tokens[:, 0, :], tokens[:, 1:, :]          # the pre-change expression
+    expected = {
+        "cls": cls,
+        "mean": patches.mean(dim=1),
+        "clsmean": torch.cat([cls, patches.mean(dim=1)], dim=1),
+    }[pooling]
+
+    got = _PoolOnly(pooling, 1).pool(tokens)
+    assert got.shape == expected.shape
+    assert torch.equal(got, expected), "bitwise inequality on a published backbone's pooling"
+
+
+def test_pool_drops_virchow2_register_tokens():
+    """Virchow2 emits [CLS] + 4 registers + 256 patches. The model card: "tokens 1-4 are
+    register tokens so we ignore those". Averaging them in is right-shape, right-dtype,
+    no-warning, just a worse number -- so it gets a numerical test, not a comment."""
+    torch.manual_seed(0)
+    tokens = torch.randn(3, 261, 1280, dtype=torch.float64)
+
+    official = torch.cat([tokens[:, 0], tokens[:, 5:].mean(1)], dim=-1)   # the model card
+    got = _PoolOnly("clsmean", 5).pool(tokens)
+    assert got.shape == (3, 2560), got.shape
+    assert torch.equal(got, official)
+
+    # And the wrong-but-plausible version is genuinely different, i.e. the test has teeth.
+    naive = torch.cat([tokens[:, 0], tokens[:, 1:].mean(1)], dim=-1)
+    assert not torch.allclose(got, naive)
 
 
 def test_thunder_pooling_is_resolved_per_backbone_not_hardcoded():

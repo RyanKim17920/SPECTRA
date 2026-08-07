@@ -25,6 +25,11 @@ dependencies = [
     "einops>=0.8",
     "tqdm>=4.66",
     "safetensors>=0.4",
+    # Required only for timm-native backbones (paige-ai/Virchow2 and friends), which
+    # AutoModel cannot load at all -- their config.json has no model_type. Not optional:
+    # the loader branch in models/encoder.py imports it, so a venv built without it
+    # ModuleNotFoundErrors the moment a timm backbone is named.
+    "timm>=1.0.20",
 ]
 
 [project.optional-dependencies]

@@ -12,6 +12,16 @@ Design choices and where they come from
   Nothing about ViT-L/16 is baked in. Second validated backbone: ``kaiko-ai/midnight``
   (Dinov2 ViT-g/14, 40 blocks, 1536-d, SwiGLU FFN, MIT, 4.55 GB).
 
+* **The loader is a branch, chosen by reading the repo's config.json.** Not every
+  pathology foundation model is a ``transformers`` checkpoint. ``paige-ai/Virchow2`` is a
+  *timm* one: its config.json carries ``architecture: vit_huge_patch14_224`` +
+  ``model_args`` + ``pretrained_cfg`` and **no** ``model_type``, so ``AutoModel`` has
+  nothing to dispatch on and cannot load it at all. ``is_timm_backbone`` reads that file
+  and picks ``timm.create_model("hf-hub:...")`` instead -- by config *shape*, never by a
+  model-name list, so the two published backbones cannot be re-routed by accident.
+  Virchow2 is ViT-H/14, 32 blocks, 1280-d, packed-SwiGLU FFN, and carries **4 register
+  tokens** on top of CLS -- see ``num_prefix_tokens`` and ``_pool``.
+
 * **LoRA on every block, not head-only.** PLAN.md 2 + 0 (their Fig 4): base H-Optimus-0
   only develops cross-scanner matching in the last few blocks, and fine-tuning pushes
   that ~8 blocks earlier. Invariance has to build *across depth*, so head-only tuning is
@@ -42,6 +52,7 @@ Design choices and where they come from
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 
@@ -85,6 +96,140 @@ BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float,
 }
 
 
+# ======================================================================================
+# Which loader? -- answered by the REPO'S OWN config.json, never by a model-name list.
+# ======================================================================================
+#
+# ``paige-ai/Virchow2`` is a *timm* checkpoint published on the HF hub. Its config.json
+# has no ``model_type``, so ``transformers`` has nothing to dispatch on and
+# ``AutoModel.from_pretrained`` cannot load it at all. What it has instead is timm's
+# shape: a top-level ``architecture`` ("vit_huge_patch14_224"), a ``model_args`` block
+# and a ``pretrained_cfg``.
+#
+# So the loader is chosen by *reading that file*, not by matching the repo id against a
+# hardcoded list. A name list would mean every new timm backbone silently takes the HF
+# path and dies with an unrelated "Unrecognized model" error -- and, worse, that a repo
+# re-tagged upstream keeps taking the wrong path forever. The config is the source of
+# truth for what the checkpoint *is*.
+
+_HUB_CONFIG_CACHE: dict[str, dict | None] = {}
+
+
+def _hub_config(backbone: str) -> dict | None:
+    """The backbone repo's raw ``config.json`` as a dict, or ``None`` if unreadable.
+
+    Cached per process: it is consulted by both the loader and ``normalization_for``,
+    and both may be called several times per run (scripts resolve normalisation before
+    they build the model).
+    """
+    if backbone in _HUB_CONFIG_CACHE:
+        return _HUB_CONFIG_CACHE[backbone]
+    cfg: dict | None = None
+    try:
+        from huggingface_hub import hf_hub_download
+
+        with open(hf_hub_download(backbone, "config.json"), encoding="utf-8") as fh:
+            loaded = json.load(fh)
+        cfg = loaded if isinstance(loaded, dict) else None
+    except Exception as exc:  # noqa: BLE001 -- offline/gated/missing is just "unknown"
+        print(f"[encoder] config.json lookup failed for {backbone!r}: {exc}", flush=True)
+    _HUB_CONFIG_CACHE[backbone] = cfg
+    return cfg
+
+
+def _is_timm_config(cfg: dict | None) -> bool:
+    """``True`` when a raw hub config.json describes a **timm** checkpoint.
+
+    Pure function of the config so it is testable without the network.
+
+    * ``model_type`` present  -> a ``transformers`` architecture. ``owkin/phikon-v2`` and
+      ``owkin/phikon`` say ``"vit"``/``"dinov2"``, ``kaiko-ai/midnight`` says ``"dinov2"``.
+      These MUST keep taking the ``AutoModel`` path -- every published number came from it.
+    * no ``model_type`` but an ``architecture`` / ``model_args`` / ``pretrained_cfg``
+      -> timm's own config format.
+    """
+    if not isinstance(cfg, dict):
+        return False
+    if cfg.get("model_type"):
+        return False
+    return any(k in cfg for k in ("architecture", "model_args", "pretrained_cfg"))
+
+
+def is_timm_backbone(backbone: str) -> bool:
+    """Does ``backbone`` need ``timm.create_model`` rather than ``AutoModel``?"""
+    return _is_timm_config(_hub_config(backbone))
+
+
+def _needs_packed_gated_mlp(fc1_out: int, fc2_in: int) -> bool:
+    """Does this block's FFN pack a *gate* and a *value* projection into one ``fc1``?
+
+    timm reads ``model_args`` out of config.json, but the MLP **class** is not expressible
+    there -- Virchow2's model card constructs it by hand with
+    ``mlp_layer=SwiGLUPacked, act_layer=torch.nn.SiLU``. Keying that off the repo id would
+    reintroduce exactly the per-model dispatch this module refuses, so we derive it from
+    the checkpoint's own shapes instead:
+
+    * plain MLP        -> ``fc1: [h, d]``, ``fc2: [d, h]``      i.e. ``fc1_out == fc2_in``
+    * packed gated MLP -> ``fc1: [2h, d]``, ``fc2: [d, h]``     i.e. ``fc1_out == 2*fc2_in``
+
+    Virchow2 measures 6832 and 3416 -> packed. Loading it without ``SwiGLUPacked`` raises
+    a size mismatch on every one of its 32 blocks, so this is not a soft preference.
+    """
+    return fc2_in > 0 and fc1_out == 2 * fc2_in
+
+
+def _timm_extra_kwargs(backbone: str) -> dict:
+    """``timm.create_model`` kwargs that config.json cannot express, derived from weights."""
+    fc1_out = fc2_in = 0
+    try:
+        from huggingface_hub import hf_hub_download
+        from safetensors import safe_open
+
+        path = hf_hub_download(backbone, "model.safetensors")
+        with safe_open(path, framework="pt") as f:
+            keys = list(f.keys())
+            k1 = next((k for k in keys if k.endswith("blocks.0.mlp.fc1.weight")), None)
+            k2 = next((k for k in keys if k.endswith("blocks.0.mlp.fc2.weight")), None)
+            if k1 is not None and k2 is not None:
+                fc1_out = int(f.get_slice(k1).get_shape()[0])
+                fc2_in = int(f.get_slice(k2).get_shape()[1])
+    except Exception as exc:  # noqa: BLE001 -- no safetensors / no such key => plain MLP
+        print(f"[encoder] FFN-shape probe failed for {backbone!r}: {exc}", flush=True)
+        return {}
+    if not _needs_packed_gated_mlp(fc1_out, fc2_in):
+        return {}
+    from timm.layers import SwiGLUPacked
+
+    print(
+        f"[encoder] {backbone!r}: blocks.0.mlp fc1_out={fc1_out} == 2 x fc2_in={fc2_in} "
+        "-> packed gated FFN; building with mlp_layer=SwiGLUPacked, act_layer=SiLU",
+        flush=True,
+    )
+    return {"mlp_layer": SwiGLUPacked, "act_layer": nn.SiLU}
+
+
+def _timm_config_normalization(
+    backbone: str,
+) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
+    """``(mean, std)`` off a timm repo's ``pretrained_cfg``, or ``None``.
+
+    A timm repo has no ``preprocessor_config.json``, so ``AutoImageProcessor`` cannot
+    answer for it -- but timm publishes the same information under ``pretrained_cfg``.
+    Virchow2 carries ImageNet stats there, which is what its model card's
+    ``resolve_data_config`` transform resolves to.
+    """
+    cfg = _hub_config(backbone)
+    if not _is_timm_config(cfg):
+        return None
+    pc = cfg.get("pretrained_cfg") if isinstance(cfg, dict) else None
+    if not isinstance(pc, dict):
+        return None
+    mean, std = pc.get("mean"), pc.get("std")
+    if mean is None or std is None or len(mean) != 3 or len(std) != 3:
+        return None
+    return tuple(float(v) for v in mean), tuple(float(v) for v in std)
+
+
 def _hf_preprocessor_normalization(
     backbone: str,
 ) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
@@ -117,8 +262,22 @@ def normalization_for(backbone: str | None) -> tuple[tuple[float, ...], tuple[fl
     SLURM log. So there is no fallback any more: either we know the stats or we stop.
     """
     backbone = backbone or DEFAULT_BACKBONE
+    # The override wins, unconditionally and FIRST. Both published backbones are in it,
+    # so nothing added below can ever be reached for them -- not even a hub lookup.
     if backbone in BACKBONE_NORMALIZATION:
         return BACKBONE_NORMALIZATION[backbone]
+    # timm repos have no preprocessor_config.json, so AutoImageProcessor cannot answer for
+    # them; timm publishes the same fields under pretrained_cfg instead. Tried before the
+    # HF processor because for a timm repo the HF lookup can only fail.
+    derived = _timm_config_normalization(backbone)
+    if derived is not None:
+        print(
+            f"[encoder] normalisation for {backbone!r} derived from its timm "
+            f"pretrained_cfg: mean={derived[0]} std={derived[1]} "
+            "(no BACKBONE_NORMALIZATION override)",
+            flush=True,
+        )
+        return derived
     derived = _hf_preprocessor_normalization(backbone)
     if derived is not None:
         print(
@@ -129,7 +288,8 @@ def normalization_for(backbone: str | None) -> tuple[tuple[float, ...], tuple[fl
         return derived
     raise RuntimeError(
         f"no normalisation for backbone {backbone!r}: it has no BACKBONE_NORMALIZATION "
-        "entry and its HF image processor did not yield image_mean/image_std. Read the "
+        "entry, no timm pretrained_cfg mean/std, and its HF image processor did not "
+        "yield image_mean/image_std. Read the "
         "model card and add an explicit entry to BACKBONE_NORMALIZATION in "
         "src/waivphaet/models/encoder.py -- defaulting to ImageNet stats here would "
         "silently cost accuracy (e.g. kaiko-ai/midnight needs (0.5,0.5,0.5))."
@@ -290,19 +450,49 @@ class WaivEncoder(nn.Module):
     def __init__(self, cfg: EncoderConfig | None = None):
         super().__init__()
         self.cfg = cfg = cfg or EncoderConfig()
-        backbone = AutoModel.from_pretrained(cfg.backbone)
-        # Everything geometric is READ OFF THE LOADED CONFIG. Nothing here may be a
-        # literal: phikon-v2 is 1024/24/patch16, midnight is 1536/40/patch14.
-        bc = backbone.config
-        self.hidden_size = int(bc.hidden_size)
-        self.num_blocks = int(bc.num_hidden_layers)
-        self.patch_size = int(getattr(bc, "patch_size", 0)) or None
-        #: Tokens the backbone emits at ``image_size``, per its own config. We feed 224px
-        #: everywhere (PathoROB/HEST/THUNDER/PLISM all resize to 224), and Dinov2
-        #: interpolates its position embeddings, so the *runtime* patch count is
-        #: ``(224/patch_size)**2`` -- 196 on phikon-v2 (16), 256 on midnight (14).
-        self.config_image_size = int(getattr(bc, "image_size", 0)) or None
-        self.model_type = str(getattr(bc, "model_type", "unknown"))
+        self.is_timm = is_timm_backbone(cfg.backbone)
+        if self.is_timm:
+            import timm
+
+            backbone = timm.create_model(
+                f"hf-hub:{cfg.backbone}", pretrained=True, **_timm_extra_kwargs(cfg.backbone)
+            )
+            # Geometry off the BUILT timm model -- same rule as the HF branch, no literals.
+            self.hidden_size = int(backbone.embed_dim)
+            self.num_blocks = len(backbone.blocks)
+            ps = backbone.patch_embed.patch_size
+            self.patch_size = int(ps[0] if isinstance(ps, (tuple, list)) else ps) or None
+            pc = getattr(backbone, "pretrained_cfg", {}) or {}
+            insize = pc.get("input_size") or (0, 0, 0)
+            self.config_image_size = int(insize[-1]) or None
+            arch = (_hub_config(cfg.backbone) or {}).get("architecture") or pc.get(
+                "architecture", "vit"
+            )
+            self.model_type = f"timm:{arch}"
+            #: **Register tokens.** Virchow2 is ``reg_tokens=4``, so its 261-token output is
+            #: ``[CLS] [reg x4] [patch x256]`` and positions 1..4 are NOT image content --
+            #: the model card is explicit ("tokens 1-4 are register tokens so we ignore
+            #: those"). Averaging them in is the classic silent-wrong-embedding bug: right
+            #: shape, right dtype, no warning, just a worse number. timm tracks the count
+            #: itself, so we read it rather than assuming.
+            self.num_prefix_tokens = int(getattr(backbone, "num_prefix_tokens", 1))
+        else:
+            backbone = AutoModel.from_pretrained(cfg.backbone)
+            # Everything geometric is READ OFF THE LOADED CONFIG. Nothing here may be a
+            # literal: phikon-v2 is 1024/24/patch16, midnight is 1536/40/patch14.
+            bc = backbone.config
+            self.hidden_size = int(bc.hidden_size)
+            self.num_blocks = int(bc.num_hidden_layers)
+            self.patch_size = int(getattr(bc, "patch_size", 0)) or None
+            #: Tokens the backbone emits at ``image_size``, per its own config. We feed
+            #: 224px everywhere (PathoROB/HEST/THUNDER/PLISM all resize to 224), and Dinov2
+            #: interpolates its position embeddings, so the *runtime* patch count is
+            #: ``(224/patch_size)**2`` -- 196 on phikon-v2 (16), 256 on midnight (14).
+            self.config_image_size = int(getattr(bc, "image_size", 0)) or None
+            self.model_type = str(getattr(bc, "model_type", "unknown"))
+            #: Every HF ViT/Dinov2 we run emits exactly one prefix token, the CLS. Fixed at
+            #: 1 so ``_pool`` is bit-identical to what produced the published numbers.
+            self.num_prefix_tokens = 1
         self.norm_mean, self.norm_std = normalization_for(cfg.backbone)
 
         if cfg.freeze_backbone:
@@ -394,10 +584,18 @@ class WaivEncoder(nn.Module):
             # so the reentrant path silently produces *no* gradient for the early blocks.
             target = getattr(backbone, "base_model", backbone)
             target = getattr(target, "model", target)
-            target.gradient_checkpointing_enable(
-                gradient_checkpointing_kwargs={"use_reentrant": False}
-            )
-            if not getattr(target, "is_gradient_checkpointing", False):
+            if self.is_timm:
+                # timm has its own switch; it has no gradient_checkpointing_enable at all,
+                # so the HF call below would AttributeError. timm's blocks use
+                # torch.utils.checkpoint with use_reentrant=False internally.
+                target.set_grad_checkpointing(True)
+                took = bool(getattr(target, "grad_checkpointing", False))
+            else:
+                target.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs={"use_reentrant": False}
+                )
+                took = bool(getattr(target, "is_gradient_checkpointing", False))
+            if not took:
                 raise RuntimeError(
                     "gradient checkpointing did not take on the backbone; refusing to run "
                     "with the batch size it was requested for"
@@ -412,7 +610,11 @@ class WaivEncoder(nn.Module):
     # --- pooling ------------------------------------------------------------------
 
     def _pool(self, tokens: torch.Tensor) -> torch.Tensor:
-        cls, patches = tokens[:, 0, :], tokens[:, 1:, :]
+        # ``num_prefix_tokens`` is 1 on every HF backbone (CLS only), so this slice is
+        # ``tokens[:, 1:, :]`` there -- bit-identical to what it always was. It is 5 on
+        # Virchow2 ([CLS] + 4 registers), which is precisely the model card's
+        # ``cat([output[:, 0], output[:, 5:].mean(1)])``.
+        cls, patches = tokens[:, 0, :], tokens[:, self.num_prefix_tokens :, :]
         if self.cfg.pooling == "cls":
             return cls
         if self.cfg.pooling == "mean":
@@ -427,8 +629,23 @@ class WaivEncoder(nn.Module):
         """uint8 NHWC (or normalised float NCHW) -> pooled embedding ``(B, embed_dim)``."""
         if images.dtype == torch.uint8 or images.shape[-1] == 3:
             images = normalize_uint8(images, self.norm_mean, self.norm_std)
-        out = self.backbone(pixel_values=images)
-        return self._pool(out.last_hidden_state)
+        if self.is_timm:
+            # Built with global_pool="" and num_classes=0 (config.json model_args), so the
+            # head is a no-op and forward() returns the raw token sequence. Going through
+            # forward() rather than forward_features() keeps the PEFT wrapper in the path.
+            tokens = self.backbone(images)
+            if not isinstance(tokens, torch.Tensor) or tokens.ndim != 3:
+                raise RuntimeError(
+                    f"timm backbone {self.cfg.backbone!r} returned "
+                    f"{type(tokens).__name__} shape "
+                    f"{tuple(getattr(tokens, 'shape', ()))}, not a (B, T, D) token "
+                    "sequence -- its config.json model_args must set global_pool='' and "
+                    "num_classes=0, otherwise the head has already pooled and our "
+                    "pooling/register-token handling is silently bypassed"
+                )
+        else:
+            tokens = self.backbone(pixel_values=images).last_hidden_state
+        return self._pool(tokens)
 
     def forward(self, images: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         emb = self.embed(images)
@@ -452,6 +669,8 @@ class WaivEncoder(nn.Module):
             "hidden_size": self.hidden_size,
             "embed_dim": self.embed_dim,
             "patch_size": self.patch_size,
+            "num_prefix_tokens": self.num_prefix_tokens,
+            "loader": "timm" if self.is_timm else "transformers.AutoModel",
             "total": total,
             "trainable": trainable,
             "trainable_pct": 100.0 * trainable / max(total, 1),
