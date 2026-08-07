@@ -23,18 +23,39 @@ Design notes
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
 
-USER = "ryan.kim"
+# The account whose queue is piloted. Env-derived so the script is not pinned to one
+# operator; the literal is only a fallback for cron/systemd contexts with no USER set.
+USER = os.environ.get("USER") or os.environ.get("LOGNAME") or "ryan.kim"
+
 # Job-name prefixes for the THUNDER sweep: `thd-` = base phikon-v2, `thdft1k-` =
 # fine-tuned step-1000 adapter. Anything else in the queue (hest, speedlm, qwen,
 # other users' work) is deliberately untouched.
 #: phikon-v2 sweep = thd-/thdft1k-, Midnight sweep = mthd-/mthdft-. A prefix missing here
 #: makes the pilot see an empty queue and declare DONE while jobs sit held forever, which
 #: is exactly what happened on the first Midnight submission.
-PREFIXES = ("thd-", "thdft1k-", "mthd-", "mthdft-")
+#:
+#: A THIRD backbone would reproduce that bug verbatim, so the tuple is overridable without
+#: editing this file: `--prefixes thd-,thdft1k-,xthd-` or THUNDER_PREFIXES=thd-,xthd-.
+#: The default is the four the two live sweeps use, so existing invocations are unchanged.
+DEFAULT_PREFIXES = ("thd-", "thdft1k-", "mthd-", "mthdft-")
+
+
+def _parse_prefixes(spec: str | None) -> tuple[str, ...]:
+    """Comma/space separated -> tuple. Empty/blank spec falls back to the default rather
+    than to (), because () makes str.startswith match NOTHING -- the pilot would print
+    DONE against a full held queue, the precise failure this knob exists to prevent."""
+    if not spec:
+        return DEFAULT_PREFIXES
+    parts = tuple(p.strip() for p in spec.replace(",", " ").split() if p.strip())
+    return parts or DEFAULT_PREFIXES
+
+
+PREFIXES = _parse_prefixes(os.environ.get("THUNDER_PREFIXES"))
 
 
 def emit(msg: str) -> None:
@@ -99,6 +120,7 @@ def fast_failures(since: str = "today", max_seconds: int = 150) -> list[str]:
 
 
 def main() -> int:
+    global PREFIXES
     ap = argparse.ArgumentParser()
     ap.add_argument("--cap", type=int, default=4,
                     help="max concurrent THUNDER jobs (running + runnable-pending)")
@@ -107,11 +129,17 @@ def main() -> int:
                     help="seconds between heartbeats when nothing changes")
     ap.add_argument("--max-fast-failures", type=int, default=3,
                     help="halt releases after this many sub-150s THUNDER failures")
+    ap.add_argument("--prefixes", default=None,
+                    help="comma-separated job-name prefixes to pilot; overrides "
+                         "THUNDER_PREFIXES. Default: " + ",".join(DEFAULT_PREFIXES))
     args = ap.parse_args()
+    if args.prefixes:
+        PREFIXES = _parse_prefixes(args.prefixes)
 
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     seen_bad: set[str] = set()
-    emit(f"START pilot cap={args.cap} interval={args.interval}s "
+    emit(f"START pilot user={USER} prefixes={','.join(PREFIXES)} "
+         f"cap={args.cap} interval={args.interval}s "
          f"breaker={args.max_fast_failures} since={started_at}")
     last_beat = 0.0
     last_sig = None
@@ -148,7 +176,12 @@ def main() -> int:
             # are a nice-to-have control: THUNDER publishes per-dataset phikon-v2 values
             # and our mhist base already reproduced them (66.4 vs 66.1), so `base_cls`
             # runs can be backfilled later or substituted with the published row.
-            held.sort(key=lambda j: 0 if j["name"].startswith("thdft1k-") else 1)
+            # Derived from PREFIXES rather than the literal "thdft1k-" that used to be
+            # here: that literal silently de-prioritised nothing on the Midnight sweep
+            # (mthdft- never matched), and a third backbone would inherit the same
+            # no-op. Convention: a fine-tuned prefix contains "ft".
+            ft_prefixes = tuple(p for p in PREFIXES if "ft" in p)
+            held.sort(key=lambda j: 0 if j["name"].startswith(ft_prefixes) else 1)
             batch = [j["id"] for j in held[:slots]]
             names = ", ".join(j["name"] for j in held[:slots])
             r = subprocess.run(["scontrol", "release", ",".join(batch)],
