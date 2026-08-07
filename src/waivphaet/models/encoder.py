@@ -143,11 +143,12 @@ def normalization_for(backbone: str | None) -> tuple[tuple[float, ...], tuple[fl
 #:   SwiGLU FFN (ViT-g)     : weights_in, weights_out
 #:   timm / fused-qkv ViTs  : qkv, proj
 #:   HF CLIP-style attn     : q_proj, k_proj, v_proj, out_proj
+#:   HF ViT, transformers>=5: q_proj, k_proj, v_proj, o_proj  (note o_proj, NOT out_proj)
 LORA_CANDIDATE_MODULES: tuple[str, ...] = (
     "query", "key", "value", "dense", "fc1", "fc2",
     "weights_in", "weights_out",
     "qkv", "proj",
-    "q_proj", "k_proj", "v_proj", "out_proj",
+    "q_proj", "k_proj", "v_proj", "out_proj", "o_proj",
 )
 
 #: Backwards-compatible alias. The old fixed phikon-v2 list; kept so that an explicit
@@ -347,6 +348,27 @@ class WaivEncoder(nn.Module):
                 ragged = {b: c for b, c in sorted(self.lora_per_block.items())}
                 raise RuntimeError(
                     f"LoRA match count is not uniform across blocks: {ragged}"
+                )
+            # Third guard: an in-block Linear that matched NOTHING. Neither check above
+            # can see this -- a leaf dropped uniformly from every block leaves the target
+            # set non-empty and the per-block count uniform, so the adapter looks healthy
+            # and is quietly missing a whole projection. owkin/phikon under transformers>=5
+            # names its attention output o_proj while the candidate list had only out_proj,
+            # which would have skipped all 12 attention outputs with no error at all.
+            in_block_leaves = {
+                n.rsplit(".", 1)[-1]
+                for n, m in backbone.named_modules()
+                if isinstance(m, nn.Linear) and _block_index(n) is not None
+            }
+            dropped = in_block_leaves - set(self.lora_target_leaves)
+            if dropped:
+                raise RuntimeError(
+                    f"LoRA silently skipped in-block Linears on {cfg.backbone!r} "
+                    f"(model_type={self.model_type}): {sorted(dropped)} matched no "
+                    f"candidate. Targeted {sorted(self.lora_target_leaves)}. Add the "
+                    "missing names to LORA_CANDIDATE_MODULES, or pass an explicit "
+                    "lora_target_modules to state that skipping them is intended -- "
+                    "a partly-adapted block reads downstream as a weak method, not a bug."
                 )
             print(
                 f"[encoder] backbone={cfg.backbone} type={self.model_type} "
