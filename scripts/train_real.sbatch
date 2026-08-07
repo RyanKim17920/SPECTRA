@@ -65,12 +65,19 @@ OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"
 
-LORA_RANK=32
-LORA_ALPHA=64
-N_GROUPS=2
-GROUP_SIZE=192
-MAX_STEPS=4000
-CKPT_EVERY=500
+# Defaults reproduce job 369043 exactly; the env overrides exist so a sweep can vary one
+# knob without forking this file (PLAN.md 3 risk 4 phase 8). Rank/alpha MUST come from
+# here rather than through the trailing "$@", because embed_probe.py and the eval follower
+# below are also given $LORA_RANK -- passing --lora-rank as an extra arg would train one
+# rank and evaluate at another, and build_model hard-fails on that mismatch.
+LORA_RANK="${WAIV_LORA_RANK:-32}"
+LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
+N_GROUPS="${WAIV_N_GROUPS:-2}"
+GROUP_SIZE="${WAIV_GROUP_SIZE:-192}"
+MAX_STEPS="${WAIV_MAX_STEPS:-4000}"
+CKPT_EVERY="${WAIV_CKPT_EVERY:-500}"
+LR="${WAIV_LR:-1e-4}"
+TEMPERATURE="${WAIV_TEMPERATURE:-0.07}"
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | run $RUN_NAME ==="
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
@@ -129,8 +136,8 @@ CUDA_VISIBLE_DEVICES=0 "$PY" scripts/train_lora.py \
   --heldout-stains HRH KR MY \
   --lora-rank "$LORA_RANK" \
   --lora-alpha "$LORA_ALPHA" \
-  --temperature 0.07 \
-  --lr 1e-4 \
+  --temperature "$TEMPERATURE" \
+  --lr "$LR" \
   --max-steps "$MAX_STEPS" \
   --warmup-steps 200 \
   --n-groups "$N_GROUPS" \
