@@ -22,6 +22,11 @@ as more than one run name is given the table grows a `run_name` column (and the 
 `run_name` field) naming the run that supplied each row, plus a provenance footnote.
 
     python scripts/collect_thunder.py --model mbase_clsmean mbase_cls
+
+The published columns and the `# cross-check` line are BACKBONE-GATED: they appear only for
+a backbone this file actually holds published numbers for (today: phikon-v2). See PUBLISHED
+and BACKBONE_RUN_PREFIXES below for how the backbone is determined and how to override it
+with --backbone / WAIV_BACKBONE.
 """
 
 from __future__ import annotations
@@ -42,31 +47,86 @@ PAPER_SEG = ["ocelot", "pannuke", "segpath_epithelial", "segpath_lymphocytes"]
 
 TASKS = ["knn", "linear_probing", "simple_shot", "segmentation"]
 
-# Published phikon2 absolutes, for cross-checking our base run. No one on this cluster has
-# ever run phikon-v2 through THUNDER -- /data/vbelagali, /data/eva-data and /data/anis hold
-# only in-house DINOv2/I-JEPA runs and OpenMidnight -- so the external reference is the
-# paper appendix, not a neighbouring results tree.
+PHIKONV2 = "owkin/phikon-v2"
+MIDNIGHT = "kaiko-ai/midnight"
+
+# Published absolutes, KEYED BY BACKBONE, for cross-checking our base run. The key is the
+# whole point: a published row belongs to one encoder, and a column headed "pub" next to a
+# different encoder's F1 is not a cross-check, it is a backbone comparison wearing a
+# reproduction's clothes. Only a backbone that has an entry here gets pub/delta columns.
+#
+# phikon-v2 only, today. No one on this cluster has ever run phikon-v2 through THUNDER --
+# /data/vbelagali, /data/eva-data and /data/anis hold only in-house DINOv2/I-JEPA runs and
+# OpenMidnight -- so the external reference is the paper appendix, not a neighbouring
+# results tree.
 #   knn            arXiv:2507.07860v3 Table S37   (12-dataset mean 70.1 = Table 4 KNN col)
 #   linear_probing arXiv:2507.07860v3 Table S39   (also on the live leaderboard, identical)
 #   segmentation   arXiv:2507.07860v3 Table S50, reported as Dice; binary Dice == F1
 # Tolerance: Waiv's own mixed-precision re-run of phikon-v2 moves lin-probe ~-0.4 and
 # segmentation ~-0.9 against these, so treat ~1 point as agreement, not a regression.
+#
+# THUNDER's leaderboard DOES carry a Midnight-12k row, but nobody has transcribed it into
+# this file, so there is deliberately no MIDNIGHT key below. Adding one (same task ->
+# dataset -> percent shape, plus a PUBLISHED_SOURCE entry) is all that is needed to turn
+# the Midnight cross-check back on; until then Midnight runs print an explicit
+# "NO published counterpart" note rather than a comparison against phikon-v2's numbers.
 PUBLISHED = {
-    "knn": {
-        "bach": 53.1, "bracs": 45.9, "break_his": 51.6, "ccrcc": 77.2, "crc": 92.1,
-        "esca": 75.8, "mhist": 66.1, "patch_camelyon": 82.2, "tcga_crc_msi": 56.8,
-        "tcga_tils": 80.8, "tcga_uniform": 69.1, "wilds": 91.0,
-    },
-    "linear_probing": {
-        "bach": 64.7, "bracs": 58.2, "break_his": 53.0, "ccrcc": 76.7, "crc": 92.0,
-        "esca": 77.3, "mhist": 79.2, "patch_camelyon": 90.8, "tcga_crc_msi": 61.1,
-        "tcga_tils": 91.0, "tcga_uniform": 77.7, "wilds": 95.8,
-    },
-    "segmentation": {
-        "ocelot": 78.7, "pannuke": 61.0, "segpath_epithelial": 69.1,
-        "segpath_lymphocytes": 60.9,
+    PHIKONV2: {
+        "knn": {
+            "bach": 53.1, "bracs": 45.9, "break_his": 51.6, "ccrcc": 77.2, "crc": 92.1,
+            "esca": 75.8, "mhist": 66.1, "patch_camelyon": 82.2, "tcga_crc_msi": 56.8,
+            "tcga_tils": 80.8, "tcga_uniform": 69.1, "wilds": 91.0,
+        },
+        "linear_probing": {
+            "bach": 64.7, "bracs": 58.2, "break_his": 53.0, "ccrcc": 76.7, "crc": 92.0,
+            "esca": 77.3, "mhist": 79.2, "patch_camelyon": 90.8, "tcga_crc_msi": 61.1,
+            "tcga_tils": 91.0, "tcga_uniform": 77.7, "wilds": 95.8,
+        },
+        "segmentation": {
+            "ocelot": 78.7, "pannuke": 61.0, "segpath_epithelial": 69.1,
+            "segpath_lymphocytes": 60.9,
+        },
     },
 }
+
+# Citation printed on the `# cross-check` line, per backbone.
+PUBLISHED_SOURCE = {PHIKONV2: "arXiv:2507.07860v3"}
+
+# HOW THE BACKBONE IS DETERMINED, and why it is not read from metadata.
+#
+# There is no metadata to read. THUNDER writes nothing about the encoder into its results
+# tree: outputs/res/<ds>/<run>/<task>/frozen/config.json carries exactly
+#   adaptation, ckpt_saving, dataset, data_loading, task, wandb, embedding_recomputing,
+#   model_retraining
+# and not one of those mentions the model -- THUNDER only ever sees `custom:<path>.py`, and
+# thunder_model.py resolves WAIV_BACKBONE internally at import time. run_thunder.sbatch's
+# banner echoes dataset/tasks/pooling/run_name/epochs but NOT WAIV_BACKBONE, so the slurm
+# logs do not carry it either (checked: no hit for backbone/midnight/phikon in the
+# mbase_clsmean job logs). The only physical trace is the embedding cache's width
+# (phikon-v2 ViT-L: 1024 cls / 2048 clsmean; Midnight ViT-g: 1536 / 3072), which lives
+# inside embeddings.h5 -- unreadable without h5py, which is not in the interpreter this
+# script is normally run with, and absent entirely for segmentation-only runs.
+#
+# So the backbone is an INPUT: --backbone is authoritative, and the prefix table below is
+# the documented default for the run names this repo actually produces
+# (scripts/submit_midnight_thunder.sh and scripts/submit_segpath_thunder.sh name Midnight
+# runs mbase_*/mft*_* and phikon-v2 runs base_*/ft*_*). A run name matching NO prefix
+# resolves to None -- unknown, no published columns -- which is the safe answer for a third
+# backbone, rather than defaulting it into phikon-v2's table.
+BACKBONE_RUN_PREFIXES = (
+    ("mbase", MIDNIGHT),
+    ("mft", MIDNIGHT),
+    ("base", PHIKONV2),
+    ("ft", PHIKONV2),
+)
+
+
+def infer_backbone(run_name: str) -> str | None:
+    """Map a WAIV_RUN_NAME to its backbone, or None when the convention does not cover it."""
+    for prefix, backbone in BACKBONE_RUN_PREFIXES:
+        if run_name.startswith(prefix):
+            return backbone
+    return None
 
 
 def _score(blob: dict, task: str) -> tuple[float | None, float | None]:
@@ -108,8 +168,27 @@ def main() -> None:
                     help="one or more PretrainedModel.name (WAIV_RUN_NAME), searched in order; "
                          "the first with results on disk supplies each dataset row")
     ap.add_argument("--adaptation", default="frozen")
+    ap.add_argument("--backbone", default=os.environ.get("WAIV_BACKBONE"),
+                    help="encoder these runs were produced with, e.g. owkin/phikon-v2 or "
+                         "kaiko-ai/midnight. Decides whether published columns are shown. "
+                         "Defaults to WAIV_BACKBONE, else inferred from the run name "
+                         "prefix (see BACKBONE_RUN_PREFIXES)")
     ap.add_argument("--csv", action="store_true")
     args = ap.parse_args()
+
+    # Resolve once, up front: every --model name is merged into ONE table, so they had
+    # better be one encoder. Disagreement is a bookkeeping error, not something to average.
+    if args.backbone:
+        backbone = args.backbone
+    else:
+        guesses = {m: infer_backbone(m) for m in args.model}
+        distinct = {b for b in guesses.values() if b is not None}
+        if len(distinct) > 1:
+            ap.error("--model names map to more than one backbone "
+                     + ", ".join(f"{m}->{b}" for m, b in guesses.items())
+                     + "; they cannot share one table. Pass --backbone if this is wrong.")
+        backbone = next(iter(distinct)) if distinct else None
+    pub_tbl: dict[str, dict[str, float]] = PUBLISHED.get(backbone or "", {})
 
     res = Path(args.root) / "outputs" / "res"
     table: dict[str, dict[str, tuple]] = {}
@@ -158,7 +237,7 @@ def main() -> None:
     hdr = []
     for c in cols:
         hdr.append(f"{c} F1")
-        if c in PUBLISHED:
+        if c in pub_tbl:
             hdr += [f"{c} pub", f"{c} Δ"]
     print(f"| dataset |{' run_name |' if show_src else ''} {' | '.join(hdr)} | LP ECE |")
     print("|" + "---|" * (len(hdr) + 2 + (1 if show_src else 0)))
@@ -178,8 +257,8 @@ def main() -> None:
             # THUNDER stores fractions, the paper prints percentages.
             pct = None if f1 is None else f1 * 100
             cells.append("--" if pct is None else f"{pct:.1f}")
-            if t in PUBLISHED:
-                pub = PUBLISHED[t].get(ds)
+            if t in pub_tbl:
+                pub = pub_tbl[t].get(ds)
                 cells.append("--" if pub is None else f"{pub:.1f}")
                 if pub is None or pct is None:
                     cells.append("--")
@@ -196,10 +275,29 @@ def main() -> None:
         for m in args.model:
             if m in by:
                 print(f"# provenance {m}: {len(by[m])} rows -- {', '.join(by[m])}")
+    src_cite = PUBLISHED_SOURCE.get(backbone or "", "published")
     for t, ds_ in deltas.items():
         worst = max(ds_, key=abs)
         print(f"# cross-check {t}: n={len(ds_)} meanΔ={sum(ds_)/len(ds_):+.2f} "
-              f"max|Δ|={worst:+.1f} vs arXiv:2507.07860v3")
+              f"max|Δ|={worst:+.1f} vs {src_cite}")
+    if not pub_tbl:
+        # Say it out loud. Silently dropping the columns would read as "the cross-check was
+        # forgotten"; silently keeping them would be the bug this guard exists to stop.
+        # Wording mirrors scripts/run_hest.py's own NO-published-counterpart note.
+        if backbone:
+            print(f"# backbone={backbone} has NO published counterpart here -- this table is "
+                  "our own reference for")
+            print("# checkpoint-to-checkpoint retention only, so no published columns and no "
+                  "cross-check are")
+            print(f"# emitted. arXiv:2507.07860v3's rows in this script are "
+                  f"{PHIKONV2} and nothing else.")
+        else:
+            print(f"# backbone UNKNOWN for run name(s) {', '.join(args.model)} -- no prefix in "
+                  "BACKBONE_RUN_PREFIXES")
+            print("# matches, so published columns and the cross-check are withheld rather "
+                  "than guessed. Pass")
+            print("# --backbone (or set WAIV_BACKBONE) to name the encoder these results "
+                  "came from.")
 
     # A mean over a partial roster is not the paper's mean; label it so nobody quotes it.
     for grp, names in (("classification", PAPER_CLS), ("segmentation", PAPER_SEG)):

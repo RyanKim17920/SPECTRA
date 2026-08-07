@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -37,7 +38,38 @@ from waivphaet.eval.hest_adapter import (  # noqa: E402
     WAIV_PHIKONV2_HEST,
 )
 
-DEFAULT_RESULTS = Path("/data/ryan.kim/hest_work/results")
+# Env-overridable, same shape as collect_thunder.py's THUNDER_BASE_DATA_FOLDER default.
+# WAIV_HEST_RESULTS points straight at the results dir; WAIV_HEST_WORK_DIR mirrors
+# hest_adapter.DEFAULT_WORK_DIR and gets "/results" appended, so whichever of the two the
+# caller already exports works. Value with neither set is the previous hardcoded path.
+DEFAULT_RESULTS = Path(
+    os.environ.get("WAIV_HEST_RESULTS")
+    or (Path(os.environ.get("WAIV_HEST_WORK_DIR", "/data/ryan.kim/hest_work")) / "results")
+)
+
+PHIKONV2 = "owkin/phikon-v2"
+
+# Summaries written before run_hest.py started recording "backbone" (base_cls, base_clsmean,
+# ft2000_*, smoke_skcm) have no field to read. Their embed_dim is still a witness: phikon-v2
+# is a ViT-L, so cls is 1024-d and clsmean 2048-d, while Midnight's ViT-g is 1536/3072 and
+# no other backbone in this repo shares the ViT-L widths. A legacy summary matching this
+# signature is treated as phikon-v2; anything else is left unknown, which withholds the
+# published column rather than guessing it.
+LEGACY_PHIKONV2_DIMS = {"cls": 1024, "clsmean": 2048}
+
+
+def resolve_backbone(blob: dict | None, pooling: str, override: str | None) -> str | None:
+    """Backbone of a run: explicit flag > recorded field > legacy embed_dim signature."""
+    if override:
+        return override
+    if blob is None:
+        return None
+    recorded = blob.get("backbone")
+    if recorded:
+        return str(recorded)
+    if blob.get("embed_dim") == LEGACY_PHIKONV2_DIMS.get(pooling):
+        return PHIKONV2
+    return None
 
 
 def load(results_dir: Path, exp_code: str) -> dict | None:
@@ -71,6 +103,9 @@ def main() -> int:
     ap.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS)
     ap.add_argument("--pooling", default="cls", choices=("cls", "clsmean"))
     ap.add_argument("--base", default=None, help="default base_<pooling>")
+    ap.add_argument("--backbone", default=os.environ.get("WAIV_BACKBONE"),
+                    help="override the backbone recorded in the base run's summary JSON; "
+                         "only owkin/phikon-v2 has a published HEST row")
     ap.add_argument("--runs", nargs="*", default=None,
                     help="exp_codes to compare; default: auto-discover all non-base "
                          "*_<pooling>_summary.json")
@@ -99,7 +134,12 @@ def main() -> int:
         v = blob.get("results", {}).get(task)
         return None if v is None else float(v)
 
-    show_published = args.pooling == "cls"
+    # BOTH halves gate the published column. Pooling alone is not enough: 0.3747 is
+    # phikon-v2's CLS row, so a Midnight (or any third backbone) run with cls pooling --
+    # `--base mbase_cls` -- would otherwise print it and diff against it, which compares two
+    # different encoders and calls the result a reproduction.
+    backbone = resolve_backbone(base_blob, args.pooling, args.backbone)
+    show_published = args.pooling == "cls" and backbone == PHIKONV2
 
     if args.csv:
         head = ["task", f"base:{base_code}"]
@@ -129,9 +169,14 @@ def main() -> int:
         print("# no fine-tuned runs found yet -- base row only")
     if show_published:
         print("# 'published' is HEST's own phikon_v2 row (CLS, fp32); Waiv Table 1 quotes it verbatim.")
-    else:
+    elif args.pooling != "cls":
         print("# clsmean has NO published counterpart. The base column is OUR OWN reference,")
         print("# valid only for checkpoint-to-checkpoint retention. Do not compare it to 0.3747.")
+    else:
+        # cls pooling, wrong (or unrecorded) backbone -- wording mirrors run_hest.py's note.
+        print(f"# backbone={backbone or 'UNKNOWN'} pooling=cls has NO published counterpart here --")
+        print("# this is our own reference for checkpoint-to-checkpoint retention only.")
+        print("# 0.3747 is phikon-v2 CLS and nothing else.")
     print(f"# benchmark dynamic range across all encoders: {HEST_RANGE[0]:.4f} - {HEST_RANGE[1]:.4f} "
           f"(span {HEST_RANGE[1] - HEST_RANGE[0]:.4f})")
     print()
