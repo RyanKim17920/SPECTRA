@@ -79,6 +79,22 @@ def parse_args():
     ap.add_argument("--symmetric", action="store_true",
                     help="ABLATION ONLY: adds the anchor->positive direction, whose candidate "
                          "row spans conditions and reintroduces the acquisition shortcut")
+    # Retention term (PLAN.md 2 "frozen-teacher anchor"). Both are ALSO unknown
+    # hyperparameters (PLAN.md 3 risk 4), same class as --lr / --temperature / --lora-rank.
+    # Default 0.0 == OFF == the exact training path every published number was produced on.
+    ap.add_argument("--retention-kl-weight", type=float, default=0.0,
+                    help="lambda for the relational-KL retention term: "
+                         "total = infonce + lambda * KL(P_base || P_lora) over the pairwise "
+                         "similarity matrix of the batch's anchor embeddings. 0.0 = off "
+                         "(default, bit-identical to the pre-retention loss). Requires LoRA: "
+                         "under --full-ft there is no adapter to disable, so the teacher "
+                         "would be the student and the KL identically 0 -- that combination "
+                         "is an error, not a warning.")
+    ap.add_argument("--retention-kl-temperature", type=float, default=0.07,
+                    help="distillation temperature for the retention KL. Defaults to the "
+                         "contrastive --temperature: the similarity matrix is cosine, so at "
+                         "tau=1 the row softmax over ~group_size candidates is near-uniform "
+                         "and the term mostly measures noise.")
     ap.add_argument("--grad-checkpointing", action="store_true",
                     help="recompute block activations in backward. The negative count is "
                          "group_size-1, so more negatives means a bigger forward batch; "
@@ -106,6 +122,20 @@ def main() -> int:
     torch.manual_seed(args.seed)
 
     use_lora = not args.full_ft
+
+    # --- Retention term requires a frozen teacher, which only LoRA gives us for free ---
+    # Under --full-ft the "frozen base" and the student are the same weights, so the KL
+    # would be identically 0: a run that looks retention-regularised but regularises
+    # nothing. Refuse rather than compute the degenerate loss. Checked here (before the
+    # backbone download / build) as well as in train(), so the failure is instant.
+    if args.retention_kl_weight > 0 and args.full_ft:
+        raise SystemExit(
+            "--retention-kl-weight > 0 is incompatible with --full-ft: there is no adapter "
+            "to disable, so the frozen teacher would BE the student and the relational KL "
+            "would be identically 0. Drop --full-ft, or set --retention-kl-weight 0."
+        )
+    if args.retention_kl_weight < 0:
+        raise SystemExit("--retention-kl-weight must be >= 0")
 
     # --- LR warning for full FT ---
     if args.full_ft and args.lr >= 5e-5:
@@ -228,6 +258,8 @@ def main() -> int:
         grad_accum=args.grad_accum, num_workers=args.workers, amp_dtype=args.amp,
         ckpt_every=args.ckpt_every, eval_every=args.eval_every, seed=args.seed,
         weight_decay=args.weight_decay, log_every=args.log_every, symmetric=args.symmetric,
+        retention_kl_weight=args.retention_kl_weight,
+        retention_kl_temperature=args.retention_kl_temperature,
         encoder={"backbone": args.backbone, "use_lora": use_lora,
                  "lora_rank": args.lora_rank, "lora_alpha": args.lora_alpha,
                  "pooling": args.pooling, "proj_out_dim": args.proj_out_dim,

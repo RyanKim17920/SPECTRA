@@ -43,6 +43,7 @@ import json
 import math
 import os
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -102,6 +103,192 @@ def masked_info_nce(
     return loss, {"loss": float(loss.detach()), "top1": acc, "negatives_per_anchor": n_neg}
 
 
+# --------------------------------------------------------------------------------------
+# Retention term: relational KL against the frozen base model (PLAN.md 2, "frozen-teacher
+# anchor" -- scoped there as optional, never built until now). OFF by default.
+#
+# Why RELATIONAL and not an L2/cosine pull toward the base embedding
+# ------------------------------------------------------------------
+# The robustness gain this repo reproduces comes precisely from MOVING embeddings: the
+# fine-tune collapses the scanner/stain directions that the base model happily encodes.
+# A pull toward the frozen base embedding opposes that move directly -- it would buy
+# retention by giving back robustness, which is the one trade PLAN.md 6 forbids.
+#
+# So we constrain the RELATIVE geometry instead of the absolute position. Take the
+# pairwise similarity matrix over the batch's anchors under the student and under the
+# frozen base, softmax each row, and penalise KL(P_base || P_student). A global rotation,
+# translation or rescaling of the embedding space leaves both distributions untouched and
+# costs nothing; deleting a whole confounder direction is also (near) free, because it
+# moves all tiles in a group the same way. What it DOES punish is shredding the
+# tile-to-tile ordering that the downstream HEST/THUNDER probes read.
+#
+# Which embeddings
+# ----------------
+# BACKBONE POOLED output (``WaivEncoder.embed`` / the first element of ``forward``), NOT
+# the projector output. The projector is randomly initialised and discarded at eval time
+# -- PathoROB, HEST and THUNDER all read the pooled embedding -- so "preserve the
+# projector's geometry" would be preserving the geometry of a random map. It is also the
+# SAME projector on both sides here (only the backbone carries adapters), which would make
+# the teacher/student comparison partly an artefact of that shared random head.
+#
+# Diagonal / masking
+# ------------------
+# * Self-similarity is REMOVED from both distributions. After L2 normalisation S_ii == 1
+#   exactly for teacher and student alike, so it carries zero information -- but at a
+#   distillation temperature of 0.07, exp(1/0.07) swamps every off-diagonal term, both
+#   rows become ~one-hot on the diagonal, and the KL would collapse to ~0 no matter what
+#   the model did to the geometry. Masking it is what keeps the term from being inert.
+# * Candidates are restricted to the anchor's own group (the same ``same_group`` mask
+#   InfoNCE uses), when ``group_id`` is supplied. Within a group every anchor shares one
+#   (scanner, stain), so the relative geometry there is pure tissue signal with the
+#   acquisition variable held constant. Letting the KL span groups would ask the student
+#   to preserve teacher similarities that are partly acquisition-driven -- i.e. it would
+#   quietly reintroduce the confounder the InfoNCE term exists to remove.
+# * Teacher and student are masked identically, always.
+
+
+def relational_kl(
+    student_emb: torch.Tensor,
+    teacher_emb: torch.Tensor,
+    group_id: torch.Tensor | None = None,
+    temperature: float = 0.07,
+) -> tuple[torch.Tensor, dict[str, float]]:
+    """KL(P_teacher || P_student) over row-wise softmaxed cosine-similarity matrices.
+
+    Equations (``s`` = student, ``t`` = teacher, both L2-normalised, tau = temperature)::
+
+        S^s_ij = <s_i, s_j> / tau        S^t_ij = <t_i, t_j> / tau
+        valid_ij = (i != j) and (group_id[i] == group_id[j] if group_id is given)
+        P^x_i.   = softmax_j( S^x_ij )   over valid j only
+        L        = mean_i  sum_j P^t_ij * ( log P^t_ij - log P^s_ij )
+
+    Non-negative by Gibbs' inequality, and exactly 0 iff every row distribution matches
+    (in particular whenever ``student_emb`` and ``teacher_emb`` agree up to a global
+    rotation/scale).
+
+    Args:
+        student_emb: ``(B, D)`` pooled backbone embeddings from the adapted model.
+        teacher_emb: ``(B, D)`` pooled backbone embeddings from the frozen base model.
+        group_id: optional ``(B,)`` group membership; restricts candidates to the anchor's
+            own condition-homogeneous group. ``None`` = whole batch.
+        temperature: distillation temperature. Unknown hyperparameter (PLAN.md 3 risk 4).
+
+    Returns:
+        (loss, metrics). ``loss`` is a 0-dim tensor carrying gradient only through
+        ``student_emb``.
+    """
+    if temperature <= 0.0:
+        raise ValueError(f"retention_kl_temperature must be > 0, got {temperature}")
+
+    s = F.normalize(student_emb.float(), dim=-1)
+    t = F.normalize(teacher_emb.float(), dim=-1)
+    if s.shape != t.shape:
+        raise ValueError(f"teacher/student embedding shape mismatch: {t.shape} vs {s.shape}")
+
+    n = s.shape[0]
+    valid = ~torch.eye(n, dtype=torch.bool, device=s.device)
+    if group_id is not None:
+        valid = valid & (group_id[:, None] == group_id[None, :])
+    # A row with no candidate left (group of one) has no relational content and would
+    # softmax to NaN. Drop such rows rather than poisoning the batch mean.
+    keep = valid.any(dim=1)
+    if not bool(keep.any()):
+        zero = student_emb.sum() * 0.0
+        return zero, {"loss_retention_kl": 0.0, "retention_kl_neighbours": 0.0}
+
+    s_logits = ((s @ s.t()) / temperature).masked_fill(~valid, NEG_INF)[keep]
+    t_logits = ((t @ t.t()) / temperature).masked_fill(~valid, NEG_INF)[keep]
+
+    log_p_student = F.log_softmax(s_logits, dim=-1)
+    log_p_teacher = F.log_softmax(t_logits, dim=-1)
+    p_teacher = log_p_teacher.exp()
+    # masked_fill'd entries give p=0 and log_p=-inf; 0 * -inf is NaN, so zero them out
+    # explicitly instead of relying on the product.
+    per_row = torch.where(
+        valid[keep], p_teacher * (log_p_teacher - log_p_student), torch.zeros_like(p_teacher)
+    ).sum(dim=-1)
+    loss = per_row.mean()
+
+    with torch.no_grad():
+        n_neigh = float(valid[keep].sum(dim=1).float().mean().item())
+    return loss, {
+        "loss_retention_kl": float(loss.detach()),
+        "retention_kl_neighbours": n_neigh,
+    }
+
+
+def assert_retention_teacher_available(model) -> None:
+    """Fail loudly when the retention term is requested but there is no frozen teacher.
+
+    Under full fine-tuning there is no adapter to switch off, so "the frozen base model"
+    and "the student" are the same weights: the KL would be identically 0 and the run
+    would look like a clean retention-regularised fine-tune while regularising nothing.
+    That is a silent-degenerate-result failure of exactly the kind this repo's guards
+    exist to prevent, so it is an error, not a warning.
+    """
+    cfg = getattr(model, "cfg", None)
+    if cfg is not None and not getattr(cfg, "use_lora", True):
+        raise ValueError(
+            "retention_kl_weight > 0 requires LoRA: with --full-ft there is no adapter to "
+            "disable, so the frozen teacher would be the student itself and the KL would "
+            "be identically 0. Either drop --full-ft or set --retention-kl-weight 0."
+        )
+    backbone = getattr(model, "backbone", None)
+    if not callable(getattr(backbone, "disable_adapter", None)):
+        raise ValueError(
+            "retention_kl_weight > 0 requires a PEFT-wrapped backbone exposing "
+            "`disable_adapter()` (the frozen teacher is the adapter-disabled student). "
+            f"Got backbone of type {type(backbone).__name__}."
+        )
+
+
+@contextmanager
+def frozen_teacher(model):
+    """Run the SAME model as the frozen base: adapters off, no grad, eval mode, RNG-neutral.
+
+    Deliberately does NOT load a second copy of the backbone (~1.2 GB for ViT-L) -- the
+    teacher is free under LoRA, exactly the idiom ``assert_adapter_applied`` uses in
+    ``scripts/extract_pathorob_features.py``.
+
+    Three properties this has to guarantee:
+
+    * **No gradient.** ``torch.no_grad()`` -- the teacher must be a constant target.
+    * **Deterministic.** ``eval()`` for the duration, so dropout / stochastic depth are
+      identity and the target does not jitter step to step.
+    * **RNG-neutral.** The global CPU and CUDA RNG states are saved and restored, so
+      adding this forward pass cannot shift the random stream that the InfoNCE path (or
+      any sampler seeded from it) consumes. Combined with eval() this is belt and braces,
+      but it makes the guarantee independent of whether the backbone happens to have a
+      non-zero dropout rate.
+
+    Caveat, same one ``evaluate_heldout`` already carries: restoring the mode calls
+    ``model.train()`` on the whole module, so a submodule deliberately pinned to eval
+    would be un-pinned.
+    """
+    was_training = model.training
+    cpu_rng = torch.get_rng_state()
+    cuda_rng = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    model.eval()
+    try:
+        with torch.no_grad(), model.backbone.disable_adapter():
+            yield
+    finally:
+        if was_training:
+            model.train()
+        torch.set_rng_state(cpu_rng)
+        if cuda_rng is not None:
+            torch.cuda.set_rng_state_all(cuda_rng)
+
+
+def retention_teacher_embed(model, images: torch.Tensor) -> torch.Tensor:
+    """Pooled backbone embedding of ``images`` under the frozen base model.
+
+    Returned tensor is detached: it is a target, never a path to gradients.
+    """
+    with frozen_teacher(model):
+        return model.embed(images).detach()
+
+
 @dataclass
 class TrainConfig:
     """Every value here is a guess. PLAN.md 3 risk 4: "no recipe means hyperparameter
@@ -145,6 +332,18 @@ class TrainConfig:
     #: A robustness win that costs retention is a failed reproduction (risk 1). Point this
     #: at a callable (or leave None and let the caller hook `on_checkpoint`).
     eval_heldout: bool = True
+    #: Retention term (PLAN.md 2 "frozen-teacher anchor", optional). 0.0 = OFF and the
+    #: training path is bit-identical to the pre-retention implementation -- the published
+    #: numbers are all at 0.0. Lambda in ``total = infonce + lambda * relational_kl``.
+    #: Unknown hyperparameter (PLAN.md 3 risk 4), same class as lr / temperature / rank.
+    retention_kl_weight: float = 0.0
+    #: Distillation temperature for the relational KL. Defaults to the CONTRASTIVE
+    #: temperature rather than 1.0: the similarity matrix is cosine, so it lives in
+    #: [-1, 1], and at tau=1 a softmax over ~30-60 candidates is nearly uniform -- the
+    #: term would mostly measure noise. Matching ``temperature`` makes the retention term
+    #: resolve neighbourhood structure at the same scale as the objective it trades
+    #: against, and avoids inventing a second arbitrary constant. Also unknown (risk 4).
+    retention_kl_temperature: float = 0.07
     encoder: dict = field(default_factory=dict)
 
 
@@ -241,6 +440,13 @@ def train(
     robustness claim, always as a pair.
     """
     device = torch.device(device)
+    if cfg.retention_kl_weight < 0.0:
+        raise ValueError(f"retention_kl_weight must be >= 0, got {cfg.retention_kl_weight}")
+    use_retention = cfg.retention_kl_weight > 0.0
+    if use_retention:
+        # Fail here, before any compute, rather than silently optimising a KL that is
+        # structurally 0 (see assert_retention_teacher_available).
+        assert_retention_teacher_available(model)
     model.to(device).train()
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -285,9 +491,31 @@ def train(
             with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
                 # one forward per view; both views must see the same weights, so this is
                 # a single graph, not two independent steps
-                _, az = model(anchor)
+                anchor_emb, az = model(anchor)
                 _, pz = model(positive)
+                # Frozen-teacher forward for the retention term. Guarded so that at the
+                # default weight of 0.0 NOTHING here runs -- no extra forward, no extra
+                # tensor, no RNG touched -- and the step stays bit-identical.
+                teacher_emb = (
+                    retention_teacher_embed(model, anchor)
+                    if use_retention else None
+                )
             loss, metrics = masked_info_nce(az, pz, gid, cfg.temperature, cfg.symmetric)
+            if teacher_emb is not None:
+                # Same embeddings the model exports at eval time (pooled backbone), and
+                # the same group mask InfoNCE uses -- see the relational_kl block comment.
+                kl, kl_metrics = relational_kl(
+                    anchor_emb, teacher_emb, group_id=gid,
+                    temperature=cfg.retention_kl_temperature,
+                )
+                # total = infonce + lambda * kl
+                loss = loss + cfg.retention_kl_weight * kl
+                # Log the two terms SEPARATELY so the trade-off is visible, not just the
+                # sum. "loss" keeps its pre-retention meaning (the InfoNCE term) so
+                # history.json stays comparable across runs.
+                metrics["loss_infonce"] = metrics["loss"]
+                metrics.update(kl_metrics)
+                metrics["loss_total"] = float(loss.detach())
 
             scaler.scale(loss / cfg.grad_accum).backward()
             if (step + 1) % cfg.grad_accum == 0:
