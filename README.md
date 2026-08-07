@@ -61,8 +61,9 @@ a sweep over every checkpoint shows that is intrinsic to the recipe, not a check
 artefact. Full FT did not beat LoRA. n=1 seed throughout, matching each benchmark's own
 protocol; our runs are fp32 against Waiv's mixed precision, so deltas compare but absolute
 levels do not, and the Midnight HEST columns are not on a common scale at all. A LoRA rank
-sweep over ranks 8–128 finds no systematic effect on PathoROB (plateau means 0.797–0.803,
-within-arm scatter 0.002–0.003); its HEST retention pass is still pending.
+sweep over ranks 8–128 finds no systematic effect on either axis — PathoROB plateau means
+0.797–0.803 and HEST mean Δ +0.003 to +0.009, both spreads no larger than one arm's own
+checkpoint-to-checkpoint scatter. Capacity is not the lever.
 
 Read the numbers with [`docs/CAVEATS.md`](docs/CAVEATS.md) open.
 

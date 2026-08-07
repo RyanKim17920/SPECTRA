@@ -321,8 +321,10 @@ and at n=1 seed a 0.007 gap is not decisive in either direction. The supportable
 ## 5. LoRA rank sweep
 
 Does LoRA rank matter for robustification? Four new arms (ranks 8 / 16 / 64 / 128) against the
-rank-32 reference that every published number in §1–§4 comes from. PathoROB pass is complete;
-the HEST retention pass over the same arms is queued and not run.
+rank-32 reference that every published number in §1–§4 comes from. Both passes are complete.
+The answer is no on both axes: rank moves neither PathoROB nor HEST retention beyond the scatter
+a single arm shows between neighbouring checkpoints. What rank changes is *when* an arm peaks,
+not how high.
 
 ### Design
 
@@ -405,11 +407,40 @@ This sweep measures the **robustness** axis only. The eval follower in `train_re
 computes PathoROB, not HEST, so nothing here says whether rank trades robustness against
 retention differently. That question is **not answered by this section**.
 
-### HEST retention over the rank arms — queued, not run
+### HEST retention over the rank arms — rank moves this axis no more than the other
 
-A HEST retention pass over the four sweep arms (ranks 8 / 16 / 64 / 128, at steps 2000 and 3000)
-is queued and has not been run. No numbers exist yet. This subsection will be filled in from
-that pass; until then, nothing about rank-vs-retention should be inferred from §5.
+SLURM jobs 372192–372199, all COMPLETED, `cls` protocol, phikon-v2 base 0.3747. Steps 2000 and
+3000 were chosen because both fall inside the plateau and both already exist for the rank-32
+reference, making the comparison like-for-like.
+
+| rank | s2000 | Δ | s3000 | Δ | mean Δ |
+|---|---|---|---|---|---|
+| 8 | 0.3790 | +0.0043 | 0.3774 | +0.0027 | +0.0035 |
+| 16 | 0.3774 | +0.0027 | 0.3780 | +0.0033 | +0.0030 |
+| 32 (ref) | 0.3825 | +0.0078 | 0.3838 | +0.0091 | **+0.0084** |
+| 64 | 0.3846 | +0.0099 | 0.3823 | +0.0076 | **+0.0088** |
+| 128 | 0.3785 | +0.0038 | 0.3765 | +0.0018 | +0.0028 |
+
+**Non-monotone, and inside the noise.** Ranks 8 and 16 sit low, 32 and 64 high, and 128 lowest
+of all — no trend in capacity. The spread of mean deltas across ranks is 0.0060, against a
+within-arm step-to-step range of 0.0051 for rank 32 alone (0.3794–0.3845 over steps 500–3500,
+§2). Between-rank variation is the same size as the variation a single arm shows across
+neighbouring checkpoints, so at n=1 these ranks are not distinguishable on retention either.
+
+**This closes the frontier question.** Rank does not move robustness (§5 above) and does not
+move retention (here). Capacity is not the lever on either axis, so the robustness/retention
+frontier this reconstruction sits on is not reachable by re-tuning rank. Read with §2's
+checkpoint sweep — which showed the retention shortfall survives every checkpoint on both
+backbones — the deficiency is a property of the objective, not of its hyperparameters.
+
+The magnitudes make the point independently of any ranking. The best arm here is +0.0088
+(rank 64) against Waiv's Phaet **+0.0196**: less than half, from the most favourable rank at
+its most favourable checkpoint. No rank closes the gap.
+
+The standing hypothesis is therefore unchanged and still untested: the loss is a single InfoNCE
+term with no retention component — no frozen-teacher anchor, no distillation, no replay, no
+L2-to-base penalty — and `PLAN.md` §2 scoped exactly those as optional and never built them.
+Adding one is a method change, not a sweep, and nothing here tests it.
 
 ### Method notes
 
