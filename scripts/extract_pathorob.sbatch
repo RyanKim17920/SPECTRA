@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=200G
 #SBATCH --time=04:00:00
-#SBATCH --output=slurm-%x-%j.out
-#SBATCH --error=slurm-%x-%j.err
+#SBATCH --output=logs/slurm-%x-%j.out
+#SBATCH --error=logs/slurm-%x-%j.err
 #
 # PathoROB feature extraction (PLAN.md §4 phase 5 -- the Phase-2 gate).
 #
@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
 MODEL_NAME="${1:-phikonv2_clsmean_ours}"
@@ -28,7 +28,7 @@ DATASETS="${2:-camelyon}"
 CKPT="${3:-}"
 ADAPTER="${4:-}"
 
-export HF_HOME=/data/ryan.kim/hf_home
+export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8

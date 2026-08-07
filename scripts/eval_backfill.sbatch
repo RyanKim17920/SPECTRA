@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=200G
 #SBATCH --time=03:00:00
-#SBATCH --output=slurm-%x-%j.out
-#SBATCH --error=slurm-%x-%j.err
+#SBATCH --output=logs/slurm-%x-%j.out
+#SBATCH --error=logs/slurm-%x-%j.err
 #
 # Finish the RI-vs-step curve for a run whose in-job follower did not drain.
 #
@@ -26,14 +26,14 @@
 
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
 RUN_DIR="${1:?usage: sbatch scripts/eval_backfill.sbatch <run-dir> [lora-rank] [lora-alpha]}"
 LORA_RANK="${2:-32}"
 LORA_ALPHA="${3:-64}"
 
-export HF_HOME=/data/ryan.kim/hf_home
+export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8

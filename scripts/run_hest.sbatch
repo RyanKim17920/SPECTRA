@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
 #SBATCH --time=08:00:00
-#SBATCH --output=slurm-%x-%j.out
-#SBATCH --error=slurm-%x-%j.err
+#SBATCH --output=logs/slurm-%x-%j.out
+#SBATCH --error=logs/slurm-%x-%j.err
 #
 # HEST-Benchmark retention eval (PLAN.md §3 risk 1, §4 phase 11).
 #
@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
 POOLING="${1:-cls}"
@@ -28,7 +28,7 @@ EXP_CODE="${2:-base_${POOLING}}"
 CKPT="${3:-}"
 ADAPTER="${4:-}"
 
-export HF_HOME=/data/ryan.kim/hf_home
+export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 # A broken pandas in ~/.local shadowed a venv earlier on this box; isolate or the pins

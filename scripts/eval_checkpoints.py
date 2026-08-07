@@ -111,6 +111,12 @@ def run_probe(args, ckpt: Path, step: int) -> dict:
                 "--lora-rank", args.lora_rank, "--lora-alpha", args.lora_alpha,
                 "--proj-out-dim", args.proj_out_dim, "--n-tiles", args.probe_tiles,
             ]
+        # Only appended when explicitly asked for. embed_probe.py's own default is
+        # DEFAULT_BACKBONE, and for a checkpoint/adapter it cross-checks the value against
+        # the one recorded at train time and hard-fails on a mismatch -- so passing nothing
+        # keeps the pre-existing behaviour exactly.
+        if args.backbone:
+            cmd += ["--backbone", args.backbone]
         if args.conditions_file:
             cmd += ["--conditions-file", args.conditions_file]
         sh(cmd)
@@ -155,6 +161,12 @@ def run_pathorob(args, ckpt: Path, step: int, paths: PathoRobPaths) -> dict:
                    "--lora-rank", str(args.lora_rank), "--lora-alpha", str(args.lora_alpha),
                    "--proj-out-dim", str(args.proj_out_dim),
                    "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)]
+        # Same rule as run_probe: only appended when explicitly asked for.
+        # extract_pathorob_features.py already falls back to $WAIV_BACKBONE and then to the
+        # checkpoint's own recorded backbone, and refuses an override that contradicts the
+        # checkpoint -- so passing nothing keeps the pre-existing behaviour exactly.
+        if args.backbone:
+            cmd += ["--backbone", str(args.backbone)]
         # capture_output + check=True raises BEFORE anything is written, so a failing
         # extractor used to leave zero diagnostics in the follower log (job 369922).
         # Echo both streams on failure, then re-raise.
@@ -230,12 +242,25 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", type=Path, required=True)
-    ap.add_argument("--packed-dir", default="/data/ryan.kim/plism/repacked")
+    ap.add_argument("--packed-dir",
+                    default=os.environ.get("WAIV_PACKED_DIR", "/data/ryan.kim/plism/repacked"))
     ap.add_argument("--datasets", nargs="+", default=list(DATASETS))
     ap.add_argument("--model-prefix", default=None,
                     help="features/results dir prefix; defaults to waiv_<run-dir name>")
+    # 32/64 are the phikon-v2 run geometry (job 369043) and are only meaningful for a LoRA
+    # checkpoint; they are ignored for a full-FT one. Pass the values the run was TRAINED
+    # with -- build_model hard-fails on a rank/alpha mismatch rather than silently
+    # evaluating a differently-shaped adapter.
     ap.add_argument("--lora-rank", type=int, default=32)
     ap.add_argument("--lora-alpha", type=int, default=64)
+    # Default None (not DEFAULT_BACKBONE) so nothing is forwarded unless asked: the probe
+    # and the extractor both derive the backbone from the checkpoint when told nothing, and
+    # both refuse an override that contradicts it. $WAIV_BACKBONE is the same knob the
+    # training sbatch files and thunder_model.py use, so exporting it once is enough.
+    ap.add_argument("--backbone", default=os.environ.get("WAIV_BACKBONE") or None,
+                    help="HF id of the base backbone, e.g. kaiko-ai/midnight. Defaults to "
+                         "$WAIV_BACKBONE, else unset (each sub-tool falls back to the "
+                         "checkpoint's own recorded backbone / owkin/phikon-v2).")
     ap.add_argument("--proj-out-dim", type=int, default=512)
     ap.add_argument("--conditions-file", type=Path, default=None)
     ap.add_argument("--probe-tiles", type=int, default=256)

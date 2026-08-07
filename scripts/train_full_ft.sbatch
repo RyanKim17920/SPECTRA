@@ -12,8 +12,8 @@
 # backward now touches the whole backbone) plus the Tier-2 follower draining 10 checkpoints
 # of PathoROB behind it, which is the actual long pole.
 #SBATCH --time=04:00:00
-#SBATCH --output=slurm-%x-%j.out
-#SBATCH --error=slurm-%x-%j.err
+#SBATCH --output=logs/slurm-%x-%j.out
+#SBATCH --error=logs/slurm-%x-%j.err
 #
 # The full fine-tuning arm of the LoRA-vs-full-FT A/B (PLAN.md 3 phase 7/8). The control is
 # runs/waiv-real-369043 (rank-32 LoRA, 4000 steps). Everything that could confound the
@@ -59,20 +59,20 @@
 
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
-export HF_HOME=/data/ryan.kim/hf_home
+export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
 export HF_HUB_OFFLINE=0               # the Tier-2 follower streams the PathoROB parquet
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR=/data/ryan.kim/plism/repacked
+PACKED_DIR="${WAIV_PACKED_DIR:-/data/ryan.kim/plism/repacked}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-fullft}-${SLURM_JOB_ID:-local}"
 # /data, not $REPO/runs: 11 checkpoints x ~3.4 GiB = ~34 GiB.
-OUT_DIR="/data/ryan.kim/waiv_runs/$RUN_NAME"
+OUT_DIR="${WAIV_RUNS_DIR:-/data/ryan.kim/waiv_runs}/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"
 
@@ -84,7 +84,33 @@ EVAL_EVERY=25
 WARMUP_STEPS=100
 PROJ_OUT_DIM=512
 
+# Backbone knob. UNSET => nothing is passed and train_lora.py's own default
+# (owkin/phikon-v2) applies, i.e. byte-identical to the A/B arm this file was written for
+# (control runs/waiv-real-369043) and to every run submitted before this knob existed.
+# Set WAIV_BACKBONE=kaiko-ai/midnight (or any HF id) to full-FT something else; the same
+# value is threaded into the BEFORE probe and the Tier-2 eval follower below.
+#
+# SWITCHING THE BACKBONE ALMOST CERTAINLY MEANS RE-SIZING THE BATCH. N_GROUPS/GROUP_SIZE
+# above are sized for phikon-v2 (ViT-L/16, 24 blocks, 1024-d) at 2 x 192 with gradient
+# checkpointing, and full FT already holds AdamW moments for all 303M params on top of
+# that. midnight is ViT-g/14, 40 blocks, 1536-d -- ~3x the parameters -- and train_lora.py
+# warns that a phikon-v2-sized batch will OOM on a wider backbone. Measure the new one
+# first with
+#     sbatch scripts/sizing_probe.sbatch kaiko-ai/midnight
+# and edit N_GROUPS/GROUP_SIZE (or pass --n-groups/--group-size through "$@") from what it
+# reports. WAIV_BACKBONE deliberately does NOT change the batch defaults, and it also does
+# NOT change --lr 1e-5 / --weight-decay 0.02, which were chosen for a 303M ViT-L.
+#
+# NOTE: probe_follow.py (Tier 1, below) takes no --backbone. It does not need one -- it
+# always passes --checkpoint/--adapter, and embed_probe.py derives the backbone from the
+# checkpoint's own run config.json. Only the BEFORE probe, which has no checkpoint to read,
+# needs to be told.
+BACKBONE="${WAIV_BACKBONE:-}"
+BACKBONE_ARGS=()
+if [ -n "$BACKBONE" ]; then BACKBONE_ARGS=(--backbone "$BACKBONE"); fi
+
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | run $RUN_NAME ==="
+echo "=== backbone ${BACKBONE:-<script default: owkin/phikon-v2>} ==="
 echo "=== out_dir $OUT_DIR ==="
 df -h /data | tail -1
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
@@ -119,6 +145,7 @@ CUDA_VISIBLE_DEVICES=1 "$PY" scripts/embed_probe.py \
   --packed-dir "$PACKED_DIR" \
   --conditions-file "$OUT_DIR/conditions_used.json" \
   --proj-out-dim "$PROJ_OUT_DIM" \
+  "${BACKBONE_ARGS[@]}" \
   --out "$OUT_DIR/probe_before.json"
 
 rm -f "$OUT_DIR/TRAIN_DONE"
@@ -147,6 +174,7 @@ CUDA_VISIBLE_DEVICES=1 "$PY" scripts/eval_checkpoints.py \
   --packed-dir "$PACKED_DIR" \
   --conditions-file "$OUT_DIR/conditions_used.json" \
   --proj-out-dim "$PROJ_OUT_DIM" \
+  "${BACKBONE_ARGS[@]}" \
   --num-workers 8 \
   --follow --stop-file "$OUT_DIR/TRAIN_DONE" --poll-s 60 \
   > "$OUT_DIR/eval_follow.log" 2>&1 &
@@ -160,6 +188,7 @@ CUDA_VISIBLE_DEVICES=0 "$PY" scripts/train_lora.py \
   --packed-dir "$PACKED_DIR" \
   --out-dir "$OUT_DIR" \
   --full-ft \
+  "${BACKBONE_ARGS[@]}" \
   --heldout-scanners GT450 S210 \
   --heldout-stains HRH KR MY \
   --temperature 0.07 \

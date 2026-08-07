@@ -26,7 +26,7 @@
 
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
 DATASET="${1:?usage: run_thunder.sbatch <dataset> <tasks> [pooling] [run_name] [ckpt] [adapter]}"
@@ -62,8 +62,8 @@ if [ -n "$EPOCHS" ]; then
   EPOCH_ARGS=(--adaptation.epochs "$EPOCHS")
 fi
 
-export THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder
-export HF_HOME=/data/ryan.kim/hf_home
+export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
+export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
 export TOKENIZERS_PARALLELISM=false
 # wandb.login() is unconditional at thunder/benchmark.py:174 -- offline or the job blocks
 # on an interactive prompt with no tty.

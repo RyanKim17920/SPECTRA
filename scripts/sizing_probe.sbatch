@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=120G
 #SBATCH --time=01:00:00
-#SBATCH --output=slurm-%x-%j.out
-#SBATCH --error=slurm-%x-%j.err
+#SBATCH --output=logs/slurm-%x-%j.out
+#SBATCH --error=logs/slurm-%x-%j.err
 #
 #   sbatch scripts/sizing_probe.sbatch kaiko-ai/midnight "2x32 2x48 2x64 2x96 2x128"
 #
@@ -16,14 +16,14 @@
 
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
 BACKBONE="${1:-owkin/phikon-v2}"
 SHAPES="${2:-2x64 2x128 2x192}"
 CKPT_FLAG="${3:---grad-checkpointing}"
 
-export HF_HOME=/data/ryan.kim/hf_home
+export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1

@@ -37,7 +37,7 @@
 
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
 RUN_NAME="${1:?usage: run_thunder_retention.sbatch <run-name> [adapter-dir] [checkpoint]}"
@@ -45,8 +45,8 @@ ADAPTER="${2:-}"
 CKPT="${3:-}"
 DATASETS="${THUNDER_RETENTION_DATASETS:-bach break_his mhist bracs}"
 
-export THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder
-export HF_HOME=/data/ryan.kim/hf_home
+export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
+export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
 export TOKENIZERS_PARALLELISM=false
 export WANDB_MODE=offline
 export WANDB_SILENT=true

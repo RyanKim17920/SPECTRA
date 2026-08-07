@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=200G
 #SBATCH --time=02:00:00
-#SBATCH --output=slurm-%x-%j.out
-#SBATCH --error=slurm-%x-%j.err
+#SBATCH --output=logs/slurm-%x-%j.out
+#SBATCH --error=logs/slurm-%x-%j.err
 #
 # A *genuine* smoke test of the contrastive loop, on 1 H100 (PLAN.md 3 phase 7 dry run).
 #
@@ -27,17 +27,17 @@
 
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
-export HF_HOME=/data/ryan.kim/hf_home
+export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
 export HF_HUB_OFFLINE=1              # phikon-v2 is already cached; never hit the hub here
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR=/data/ryan.kim/plism/repacked
+PACKED_DIR="${WAIV_PACKED_DIR:-/data/ryan.kim/plism/repacked}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-smoke}-${SLURM_JOB_ID:-local}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
