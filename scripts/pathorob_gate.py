@@ -76,9 +76,13 @@ def main() -> int:
         ours_bal = res.get("balanced_accuracy", None)
         ref = (float(read_results(reference, ds, paths=paths)["robustness_index"])
                if reference else None)
-        waiv = waiv_row[ds]
+        # Not every published row has a per-dataset breakdown. Waiv's Table 1 gives
+        # Virchow2 only as an average, and inventing camelyon/tolkach_esca/tcga values to
+        # fill the schema would put fabricated numbers in a comparison column. Missing is
+        # rendered as "-" and the delta is suppressed; the AVG row below still compares.
+        waiv = waiv_row.get(ds)
         d_ref = None if ref is None else ours - ref
-        d_waiv = ours - waiv
+        d_waiv = None if waiv is None else ours - waiv
         # No committed reference => nothing to gate on. Do NOT silently promote the Waiv
         # 3-decimal row into the gate: it is a different-precision, different-pipeline
         # number and gating on it would manufacture a pass or a fail out of rounding.
@@ -87,7 +91,7 @@ def main() -> int:
         rows.append(
             {"dataset": ds, "ours": ours, "pathorob_reference": ref, "waiv_table1": waiv,
              "delta_vs_reference": d_ref, "delta_vs_waiv": d_waiv,
-             "reference_vs_waiv": None if ref is None else ref - waiv,
+             "reference_vs_waiv": None if (ref is None or waiv is None) else ref - waiv,
              "bal_acc": ours_bal, "pass": ok}
         )
 
@@ -102,8 +106,8 @@ def main() -> int:
     for r in rows:
         bal = f"{r['bal_acc']:.4f}" if r['bal_acc'] is not None else "-"
         print(f"{r['dataset']:<{w}}{r['ours']:>10.6f}{_f(r['pathorob_reference'], '14.6f'):>14}"
-              f"{r['waiv_table1']:>10.3f}{_f(r['delta_vs_reference'], '+10.6f'):>10}"
-              f"{r['delta_vs_waiv']:>+10.6f}{bal:>10}   {'PASS' if r['pass'] else 'n/a' if r['pathorob_reference'] is None else 'FAIL'}")
+              f"{_f(r['waiv_table1'], '10.3f'):>10}{_f(r['delta_vs_reference'], '+10.6f'):>10}"
+              f"{_f(r['delta_vs_waiv'], '+10.6f'):>10}{bal:>10}   {'PASS' if r['pass'] else 'n/a' if r['pathorob_reference'] is None else 'FAIL'}")
     if len(rows) == 3:
         avg = sum(r["ours"] for r in rows) / 3
         avg_ref = (sum(r["pathorob_reference"] for r in rows) / 3

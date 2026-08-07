@@ -542,6 +542,230 @@ def test_thunder_auto_pooling_never_resolves_to_clsmean_for_segmentation():
                  "thunder_model.py", ds, task,
                  "--loading-mode", "embedding_pre_loading"]
             )
+
+
+# --------------------------------------------------------------------------------------
+# Virchow2 (paige-ai/Virchow2) registration -- timm ViT-H/14, 5 prefix tokens
+
+
+def _load_thunder_model(name):
+    """Import src/waivphaet/eval/thunder_model.py, stubbing ``thunder`` if it is absent.
+
+    The two tests above skip when thunder is not importable, which is fine for them --
+    they assert on protocol tables. These tests assert on the SEGMENTATION SLICE, which is
+    the thing that silently degrades, so they must actually run in the default venv.
+    thunder is only used for the ``PretrainedModel`` base class and none of these tests
+    instantiate the subclass, so a stub base is faithful.
+    """
+    src = Path(__file__).resolve().parents[1] / "src" / "waivphaet" / "eval" / "thunder_model.py"
+    stubbed = []
+    if importlib.util.find_spec("thunder") is None:
+        pkg = types.ModuleType("thunder")
+        pkg.__path__ = []
+        models = types.ModuleType("thunder.models")
+        models.PretrainedModel = type("PretrainedModel", (object,), {})
+        sys.modules["thunder"], sys.modules["thunder.models"] = pkg, models
+        stubbed = ["thunder", "thunder.models"]
+    spec = importlib.util.spec_from_file_location(name, src)
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.modules.pop(name, None)
+        for m in stubbed:
+            sys.modules.pop(m, None)
+    return mod
+
+
+class _HFBackbone:
+    """transformers-style: keyword ``pixel_values``, ``.last_hidden_state``."""
+
+    def __init__(self, tokens):
+        self.tokens = tokens
+
+    def __call__(self, pixel_values):
+        assert pixel_values is not None
+        return types.SimpleNamespace(last_hidden_state=self.tokens)
+
+
+class _TimmBackbone:
+    """timm-style: the batch is POSITIONAL and the raw token tensor comes straight back."""
+
+    def __init__(self, tokens):
+        self.tokens = tokens
+
+    def __call__(self, images):
+        assert images is not None
+        return self.tokens
+
+
+def _seg_shim(mod, backbone, is_timm, num_prefix_tokens):
+    """Minimal stand-in for a constructed WaivPhikonEncoder.
+
+    The real class cannot be instantiated without downloading a backbone, so the two real
+    methods are bound onto a namespace instead -- the code under test is the shipped one,
+    only ``self`` is fake.
+    """
+    enc = types.SimpleNamespace(
+        backbone=backbone, is_timm=is_timm, num_prefix_tokens=num_prefix_tokens
+    )
+    shim = types.SimpleNamespace(encoder=enc)
+    shim._backbone_tokens = types.MethodType(mod.WaivPhikonEncoder._backbone_tokens, shim)
+    return shim
+
+
+@pytest.mark.parametrize("backbone_hidden", [("owkin/phikon-v2", 1024), ("kaiko-ai/midnight", 1536)])
+def test_thunder_segmentation_slice_is_bit_identical_on_the_published_backbones(backbone_hidden):
+    """``get_segmentation_embeddings`` used to be ``backbone(pixel_values=x).
+    last_hidden_state[:, 1:]``. It now dispatches on ``is_timm`` and slices by
+    ``num_prefix_tokens``. Both published backbones are HF with num_prefix_tokens == 1,
+    so the result must be BITWISE the old expression -- every published segmentation
+    number came from it."""
+    _, hidden = backbone_hidden
+    mod = _load_thunder_model("_waiv_thunder_seg_identity")
+    torch.manual_seed(0)
+    tokens = torch.randn(2, 197, hidden, dtype=torch.float64)
+    x = torch.randn(2, 3, 224, 224, dtype=torch.float64)
+
+    bb = _HFBackbone(tokens)
+    expected = bb(pixel_values=x).last_hidden_state[:, 1:]      # the pre-change expression
+    got = mod.WaivPhikonEncoder.get_segmentation_embeddings(_seg_shim(mod, bb, False, 1), x)
+
+    assert got.shape == expected.shape
+    assert torch.equal(got, expected), "segmentation slice moved on a published backbone"
+
+
+def test_thunder_segmentation_drops_virchow2_register_tokens_and_calls_timm_positionally():
+    """Two separate bugs, both silent-or-fatal on Virchow2:
+
+    1. ``backbone(pixel_values=x)`` is a TypeError on a timm VisionTransformer (the batch
+       is positional). Proven directly against the fake, so the test fails if the shim
+       ever stops modelling the real signature.
+    2. ``[:, 1:]`` would hand THUNDER's segmentation decoder the 4 register tokens as if
+       they were image patches -- right shape, right dtype, no warning, worse Dice.
+    """
+    mod = _load_thunder_model("_waiv_thunder_seg_virchow2")
+    torch.manual_seed(0)
+    tokens = torch.randn(2, 261, 1280, dtype=torch.float64)     # [CLS] + 4 reg + 256 patch
+    x = torch.randn(2, 3, 224, 224, dtype=torch.float64)
+
+    bb = _TimmBackbone(tokens)
+    with pytest.raises(TypeError):
+        bb(pixel_values=x)                                       # bug 1, demonstrated
+
+    got = mod.WaivPhikonEncoder.get_segmentation_embeddings(_seg_shim(mod, bb, True, 5), x)
+    assert got.shape == (2, 256, 1280), got.shape
+    assert torch.equal(got, tokens[:, 5:])
+    # And the wrong-but-plausible version is genuinely different, i.e. the test has teeth.
+    assert got.shape != tokens[:, 1:].shape
+
+
+def test_thunder_pooling_tables_cover_virchow2_without_moving_the_published_two():
+    """Waiv 3.3: CLS+mean is used in THUNDER for Virchow2 / AquaViT / H0-mini /
+    Midnight-12k. Virchow2 is therefore clsmean, and -- because clsmean advertises
+    emb_dim = 2*hidden (2560) while the segmentation branch returns hidden-d (1280) patch
+    tokens -- the existing clsmean->cls segmentation correction applies to it unchanged."""
+    mod = _load_thunder_model("_waiv_thunder_virchow2_pooling")
+    v, mid, phi = "paige-ai/Virchow2", "kaiko-ai/midnight", "owkin/phikon-v2"
+
+    assert v in mod.THUNDER_CLSMEAN_BACKBONES
+    assert mod._default_pooling(v) == "clsmean"
+    assert mod.resolve_pooling(v, None, False) == "clsmean"     # 12 classification sets
+    assert mod.resolve_pooling(v, None, True) == "cls"          # 2 segmentation sets
+    for explicit in ("cls", "mean", "clsmean"):                 # explicit still wins
+        for seg in (True, False):
+            assert mod.resolve_pooling(v, explicit, seg) == explicit
+
+    # The published two are untouched, including the default-backbone path.
+    assert mod._default_pooling(None) == "cls"
+    assert mod._default_pooling(phi) == "cls"
+    assert mod._default_pooling(mid) == "clsmean"
+    assert mod.THUNDER_CLS_BACKBONES == frozenset({phi})
+    assert mod.resolve_pooling(mid, None, True) == "cls"
+    assert mod.resolve_pooling(mid, None, False) == "clsmean"
+    assert mod.resolve_pooling(phi, None, True) == "cls"
+    assert mod.resolve_pooling(phi, None, False) == "cls"
+    # An unlisted backbone is still a hard error, not a silent "cls".
+    with pytest.raises(RuntimeError):
+        mod._default_pooling("some-lab/NotInThePaper")
+
+
+def test_pathorob_virchow2_target_records_only_the_average():
+    """Waiv Table 1 gives Virchow2 Avg RI 0.858 -> 0.918 and this repo has no per-dataset
+    breakdown behind it. Inventing three numbers that average to 0.858 is undetectable
+    once written down, so the per-dataset keys must be ABSENT, and the published rows must
+    not have moved."""
+    from waivphaet.eval.pathorob_adapter import DATASETS, TARGETS, waiv_target
+
+    assert TARGETS["virchow2_base"] == {"avg": 0.858}
+    assert TARGETS["virchow2_target"] == {"avg": 0.918}
+    for key in ("virchow2_base", "virchow2_target"):
+        for ds in DATASETS:
+            assert ds not in TARGETS[key], f"fabricated per-dataset value {key}/{ds}"
+            assert waiv_target(key, ds) is None
+        assert waiv_target(key, "avg") == TARGETS[key]["avg"]
+
+    # The three rows every published number was gated against are byte-for-byte unchanged.
+    assert TARGETS["phikon_v2_base"] == {
+        "tcga": 0.619, "camelyon": 0.019, "tolkach_esca": 0.768, "avg": 0.469}
+    assert TARGETS["phaet_target"] == {
+        "tcga": 0.785, "camelyon": 0.702, "tolkach_esca": 0.932, "avg": 0.806}
+    assert TARGETS["midnight_base"] == {
+        "tcga": 0.858, "camelyon": 0.478, "tolkach_esca": 0.941, "avg": 0.759}
+    assert TARGETS["mascaret_target"] == {
+        "tcga": 0.893, "camelyon": 0.907, "tolkach_esca": 0.972, "avg": 0.924}
+
+
+def test_thunder_run_name_and_job_prefix_conventions_are_consistent_across_the_three_files():
+    """The Virchow2 sweep only works if three files agree: submit_thunder.sh names the
+    jobs and runs, thunder_pilot.py must recognise the job prefixes (or it declares DONE
+    against a held queue -- the first Midnight submission's actual failure), and
+    collect_thunder.py must map the run names back to the right backbone (or Virchow2 F1s
+    get diffed against phikon-v2's appendix)."""
+    repo = Path(__file__).resolve().parents[1]
+    submit = (repo / "scripts" / "submit_thunder.sh").read_text()
+
+    pilot = importlib.util.spec_from_file_location(
+        "_waiv_pilot", repo / "scripts" / "thunder_pilot.py")
+    pmod = importlib.util.module_from_spec(pilot)
+    pilot.loader.exec_module(pmod)
+    sys.modules.pop("_waiv_pilot", None)
+
+    collect = importlib.util.spec_from_file_location(
+        "_waiv_collect", repo / "scripts" / "collect_thunder.py")
+    cmod = importlib.util.module_from_spec(collect)
+    collect.loader.exec_module(cmod)
+    sys.modules.pop("_waiv_collect", None)
+
+    # Job prefixes: declared in the submitter, known to the pilot.
+    for prefix in ("thd-", "thdft1k-", "mthd-", "mthdft-", "vthd-", "vthdft-"):
+        assert prefix in pmod.DEFAULT_PREFIXES, prefix
+    for prefix in ("vthd-", "vthdft-"):
+        assert f'"{prefix}"' in submit, f"{prefix} not declared in submit_thunder.sh"
+    # The pilot de-prioritises base jobs by looking for "ft" in the prefix.
+    assert "ft" in "vthdft-" and "ft" not in "vthd-"
+    # Additive only: no existing job name can start with a new prefix and vice versa.
+    for new in ("vthd-", "vthdft-"):
+        for old in ("thd-", "thdft1k-", "mthd-", "mthdft-"):
+            assert not new.startswith(old) and not old.startswith(new)
+
+    # Run names: declared in the submitter, attributed by the collector.
+    for run in ("vbase_clsmean", "vft500_clsmean", "vbase_cls", "vft500_cls"):
+        assert run in submit, f"{run} not declared in submit_thunder.sh"
+        assert cmod.infer_backbone(run) == cmod.VIRCHOW2, run
+    # Published-two attribution is unchanged.
+    for run in ("base_cls", "ft1000_cls"):
+        assert cmod.infer_backbone(run) == cmod.PHIKONV2, run
+    for run in ("mbase_clsmean", "mft500_clsmean", "mbase_cls", "mft500_cls"):
+        assert cmod.infer_backbone(run) == cmod.MIDNIGHT, run
+    assert cmod.infer_backbone("zzz_unknown") is None
+
+    # No transcribed THUNDER leaderboard row for Virchow2 => it must take the same
+    # "NO published counterpart" path Midnight takes, never phikon-v2's pub/delta columns.
+    assert set(cmod.PUBLISHED) == {cmod.PHIKONV2}
+    assert set(cmod.PUBLISHED_SOURCE) == {cmod.PHIKONV2}
+
+
 # --------------------------------------------------------------------------------------
 # Full FT mode (full-ft branch)
 

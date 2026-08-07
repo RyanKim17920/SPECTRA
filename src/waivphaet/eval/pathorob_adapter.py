@@ -58,7 +58,29 @@ TARGETS = {
     # right second test of whether our reconstruction generalises.
     "midnight_base": {"tcga": 0.858, "camelyon": 0.478, "tolkach_esca": 0.941, "avg": 0.759},
     "mascaret_target": {"tcga": 0.893, "camelyon": 0.907, "tolkach_esca": 0.972, "avg": 0.924},
+    # Third backbone, paige-ai/Virchow2 (timm ViT-H/14). AVERAGE ONLY, ON PURPOSE.
+    # Waiv Table 1 gives Virchow2 Avg RI 0.858 base -> 0.918 fine-tuned; the per-dataset
+    # tcga / camelyon / tolkach_esca breakdown behind that average was not transcribed and
+    # is not in this repo. Three numbers that average to 0.858 are trivial to invent and
+    # impossible to distinguish from real ones once written down, so the keys are simply
+    # absent. A caller that indexes TARGETS["virchow2_base"]["camelyon"] therefore gets a
+    # loud KeyError, which is the correct outcome; use waiv_target() below for the
+    # tolerant, None-returning read.
+    "virchow2_base": {"avg": 0.858},
+    "virchow2_target": {"avg": 0.918},
 }
+
+def waiv_target(key: str, dataset: str) -> float | None:
+    """Waiv Table-1 value for ``key`` on ``dataset`` (or ``"avg"``), or None if unpublished.
+
+    ``TARGETS[key][dataset]`` stays a hard KeyError for anything that assumes a full
+    breakdown exists (scripts/pathorob_gate.py does, deliberately -- it prints a
+    per-dataset comparison column and has nothing to print without one). This accessor is
+    for code that can honestly render "not published".
+    """
+    if key not in TARGETS:
+        raise KeyError(f"unknown Waiv Table-1 row {key!r}; have {sorted(TARGETS)}")
+    return TARGETS[key].get(dataset)
 
 
 @dataclass

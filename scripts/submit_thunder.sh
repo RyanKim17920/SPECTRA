@@ -33,7 +33,7 @@
 # patch tokens at all, so nothing about the published protocol is lost.
 #
 # ---------------------------------------------------------------------------------------
-# ADDING A THIRD BACKBONE
+# ADDING A BACKBONE  (phikon-v2, midnight and virchow2 are already here)
 # ---------------------------------------------------------------------------------------
 # Add one case to backbone_spec() below AND add its two job-name prefixes to
 # scripts/thunder_pilot.py's PREFIXES (or pass THUNDER_PREFIXES). A prefix the pilot does
@@ -48,6 +48,7 @@
 #
 #   bash scripts/submit_thunder.sh                                  # dry run, phikon-v2
 #   bash scripts/submit_thunder.sh --backbone midnight              # dry run, Midnight
+#   bash scripts/submit_thunder.sh --backbone virchow2              # dry run, Virchow2
 #   bash scripts/submit_thunder.sh --backbone midnight --go         # submit
 #   bash scripts/submit_thunder.sh --cancel-held --go               # resubmit flow
 set -uo pipefail
@@ -63,7 +64,7 @@ while [ $# -gt 0 ]; do
     --backbone=*) BACKBONE_KEY="${1#--backbone=}"; shift ;;
     --cancel-held) CANCEL_HELD=1; shift ;;
     *) echo "unknown argument: $1"
-       echo "usage: $0 [--backbone phikon-v2|midnight] [--cancel-held] [--go]"; exit 2 ;;
+       echo "usage: $0 [--backbone phikon-v2|midnight|virchow2] [--cancel-held] [--go]"; exit 2 ;;
   esac
 done
 
@@ -92,9 +93,34 @@ backbone_spec() {
       SEG_BASE_RUN="mbase_cls";     SEG_FT_RUN="mft500_cls"
       ADAPTER="runs/waiv-midnight-369159/step_0000500"
       ;;
+    # Third backbone. Naming follows Midnight exactly, with v- for Virchow2 where
+    # Midnight uses m-: job prefixes vthd-/vthdft- (thunder_pilot.py DEFAULT_PREFIXES),
+    # run names vbase_*/vft500_* (collect_thunder.py BACKBONE_RUN_PREFIXES). Virchow2 is
+    # clsmean in THUNDER (arXiv:2607.22861 3 line 106 names it first), so CLS_POOL is
+    # "auto" -- thunder_model._default_pooling resolves paige-ai/Virchow2 to clsmean --
+    # and the classification rows carry _clsmean while the two segmentation rows carry
+    # _cls, for the emb_dim reason in the header (2560 advertised vs 1280 patch tokens).
+    virchow2|virchow|paige-ai/Virchow2)
+      BACKBONE="paige-ai/Virchow2"
+      P_BASE="vthd-"; P_FT="vthdft-"
+      CLS_POOL="auto"
+      CLS_BASE_RUN="vbase_clsmean"; CLS_FT_RUN="vft500_clsmean"
+      SEG_BASE_RUN="vbase_cls";     SEG_FT_RUN="vft500_cls"
+      # PLACEHOLDER. No Virchow2 fine-tune has been trained yet, so there is no adapter
+      # to point at. The path below does not exist on purpose: a --go run refuses rather
+      # than quietly submitting the *_FT jobs with no adapter, which would produce a full
+      # sweep of base numbers filed under vft500_* and silently corrupt the comparison.
+      # Override with WAIV_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX once one exists.
+      ADAPTER="${WAIV_VIRCHOW2_ADAPTER:-runs/PLACEHOLDER-virchow2-adapter}"
+      if [ $GO -eq 1 ] && [ ! -d "$ADAPTER" ]; then
+        echo "refusing to submit: Virchow2 adapter '$ADAPTER' does not exist."
+        echo "  set WAIV_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX, or drop --go for a dry run."
+        exit 2
+      fi
+      ;;
     *)
       echo "unknown backbone: $1"
-      echo "  valid: phikon-v2 midnight"
+      echo "  valid: phikon-v2 midnight virchow2"
       exit 2 ;;
   esac
 }

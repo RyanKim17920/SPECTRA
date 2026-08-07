@@ -10,7 +10,7 @@ Used as::
 
 **Do not hardcode ``WAIV_POOLING`` in a sweep script.** The correct THUNDER pooling
 depends on the backbone (see ``THUNDER_CLSMEAN_BACKBONES`` below): cls for phikon-v2,
-clsmean for midnight. Leaving it unset picks the right one. For any backbone not in
+clsmean for midnight and Virchow2. Leaving it unset picks the right one. For any backbone not in
 those tables there is no right one to pick, so an unset ``WAIV_POOLING`` is a hard error
 rather than a silent ``cls``.
 
@@ -37,7 +37,8 @@ Segmentation consumes patch tokens either way, so the two pooling modes differ o
 five tile-level tasks *numerically* -- but they are NOT interchangeable there. clsmean
 advertises ``emb_dim = 2 * hidden`` and THUNDER sizes its segmentation decoder from
 ``emb_dim``, so on a backbone whose CLS dim differs from its patch dim (Midnight: 3072 vs
-1536) a clsmean segmentation run crashes in ``task_specific_models.py:121``. ``auto`` is
+1536; Virchow2: 2560 vs 1280) a clsmean segmentation run crashes in
+``task_specific_models.py:121``. ``auto`` is
 therefore resolved to ``cls`` for segmentation runs; see ``resolve_pooling`` below.
 
 Their transform for phikon2 comes from ``AutoImageProcessor`` (resize 224, rescale,
@@ -71,7 +72,14 @@ from thunder.models import PretrainedModel  # noqa: E402
 #: So phikon-v2 must be scored CLS-only here (which is also THUNDER's own published
 #: phikon2 protocol, ``pretrained_models.py:303``) while midnight must be clsmean. Get
 #: this backwards and the base-vs-fine-tuned rank sums are not comparable to their table.
-THUNDER_CLSMEAN_BACKBONES = frozenset({"kaiko-ai/midnight"})
+#: ``paige-ai/Virchow2`` is in that same clsmean list, named explicitly on line 106, so it
+#: is a transcription and not an inference. Its clsmean width is 2560 (2 x 1280), not
+#: Midnight's 3072 -- but the *reason* the segmentation branch has to fall back to cls is
+#: not the number 3072, it is that clsmean advertises ``emb_dim = 2 * hidden`` while
+#: ``get_segmentation_embeddings`` returns raw hidden-d patch tokens. That inequality holds
+#: for every backbone with clsmean pooling, Virchow2 included (2560 != 1280), so the
+#: ``resolve_pooling`` correction below applies to it unchanged. See ``resolve_pooling``.
+THUNDER_CLSMEAN_BACKBONES = frozenset({"kaiko-ai/midnight", "paige-ai/Virchow2"})
 
 #: The other half of the same published table: backbones Waiv scored CLS-only.
 #: Both sets are transcriptions of a paper, so membership cannot be inferred for a
@@ -132,6 +140,10 @@ def resolve_pooling(backbone: str | None, explicit: str | None, segmentation: bo
 
         RuntimeError: mat1 and mat2 shapes cannot be multiplied (16384x1536 and 3072x768)
 
+    On Virchow2 (ViT-H, hidden 1280) it is 2560 vs 1280 -- a different pair of numbers,
+    the same inequality, so the correction applies there unchanged and its two segmentation
+    datasets must run cls just like Midnight's.
+
     phikon-v2 never hit this only because its CLS dim equals its patch dim. Pooling is not
     applied to patch tokens at all, so cls is not a protocol compromise here -- it is the
     only self-consistent reading of "no pooling on the segmentation branch".
@@ -178,7 +190,8 @@ class WaivPhikonEncoder(PretrainedModel):
         slug = self.encoder.cfg.backbone.split("/")[-1].replace("-", "").replace(".", "")
         default_name = f"waiv_{slug}_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")
         self.name = os.environ.get("WAIV_RUN_NAME", default_name)
-        # Derived from the backbone: phikon-v2 1024/2048, midnight 1536/3072.
+        # Derived from the backbone: phikon-v2 1024/2048, midnight 1536/3072,
+        # Virchow2 1280/2560 (cls/clsmean).
         self.emb_dim = int(self.encoder.embed_dim)
         self.vlm = False
 
@@ -195,11 +208,37 @@ class WaivPhikonEncoder(PretrainedModel):
         adversarial_attack -- five of the six tasks in their rank sum."""
         return self.encoder.embed(x)
 
+    def _backbone_tokens(self, x):
+        """Raw ``(B, T, hidden)`` token sequence, dispatched the way ``WaivEncoder.embed``
+        dispatches it.
+
+        ``embed`` is not reusable here because it returns the *pooled* vector and there is
+        no token-returning method on the encoder to call instead, so the branch is
+        mirrored -- but it is mirrored off ``self.encoder.is_timm``, the same flag
+        ``embed`` reads, rather than off a backbone-name list, so a fourth backbone cannot
+        land on the wrong arm. ``self.encoder.backbone(pixel_values=x)`` unconditionally
+        was a plain bug: a timm ``VisionTransformer.forward`` takes the batch
+        POSITIONALLY and raises ``TypeError: forward() got an unexpected keyword argument
+        'pixel_values'`` on Virchow2.
+        """
+        if self.encoder.is_timm:
+            # Built with global_pool="" / num_classes=0, so forward() already returns the
+            # token sequence; going through forward() (not forward_features) keeps any
+            # PEFT wrapper in the path, exactly as embed() does.
+            return self.encoder.backbone(x)
+        return self.encoder.backbone(pixel_values=x).last_hidden_state
+
     def get_segmentation_embeddings(self, x):
-        """``(B, tokens, hidden)`` patch tokens, matching their phikon2 branch. Pooling
-        does not apply here, so this is identical under cls and clsmean."""
-        out = self.encoder.backbone(pixel_values=x)
-        return out.last_hidden_state[:, 1:]
+        """``(B, patch tokens, hidden)``, matching their phikon2 branch. Pooling does not
+        apply here, so this is identical under cls and clsmean.
+
+        The prefix slice is ``num_prefix_tokens``, not the literal 1 it used to be.
+        On every HF backbone that value IS 1 (phikon-v2, midnight), so this is bitwise
+        the old ``[:, 1:]``. On Virchow2 it is 5, and the literal would have handed the 4
+        register tokens to THUNDER's segmentation decoder as if they were image patches --
+        right shape, right dtype, no warning, worse Dice.
+        """
+        return self._backbone_tokens(x)[:, self.encoder.num_prefix_tokens :]
 
 
 def _selftest() -> None:

@@ -35,14 +35,17 @@ USER = os.environ.get("USER") or os.environ.get("LOGNAME") or "ryan.kim"
 # Job-name prefixes for the THUNDER sweep: `thd-` = base phikon-v2, `thdft1k-` =
 # fine-tuned step-1000 adapter. Anything else in the queue (hest, speedlm, qwen,
 # other users' work) is deliberately untouched.
-#: phikon-v2 sweep = thd-/thdft1k-, Midnight sweep = mthd-/mthdft-. A prefix missing here
+#: phikon-v2 sweep = thd-/thdft1k-, Midnight sweep = mthd-/mthdft-, Virchow2 sweep =
+#: vthd-/vthdft-. A prefix missing here
 #: makes the pilot see an empty queue and declare DONE while jobs sit held forever, which
 #: is exactly what happened on the first Midnight submission.
 #:
-#: A THIRD backbone would reproduce that bug verbatim, so the tuple is overridable without
-#: editing this file: `--prefixes thd-,thdft1k-,xthd-` or THUNDER_PREFIXES=thd-,xthd-.
-#: The default is the four the two live sweeps use, so existing invocations are unchanged.
-DEFAULT_PREFIXES = ("thd-", "thdft1k-", "mthd-", "mthdft-")
+#: A FOURTH backbone would reproduce that bug verbatim, so the tuple is overridable
+#: without editing this file: `--prefixes thd-,thdft1k-,xthd-` or THUNDER_PREFIXES=...
+#: The default is the six the three sweeps use; adding the Virchow2 pair cannot change
+#: what the two live sweeps see, because `startswith` on a longer, disjoint prefix set is
+#: purely additive and no phikon-v2 or Midnight job name begins with "vthd-".
+DEFAULT_PREFIXES = ("thd-", "thdft1k-", "mthd-", "mthdft-", "vthd-", "vthdft-")
 
 
 def _parse_prefixes(spec: str | None) -> tuple[str, ...]:

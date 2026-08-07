@@ -49,6 +49,7 @@ TASKS = ["knn", "linear_probing", "simple_shot", "segmentation"]
 
 PHIKONV2 = "owkin/phikon-v2"
 MIDNIGHT = "kaiko-ai/midnight"
+VIRCHOW2 = "paige-ai/Virchow2"
 
 # Published absolutes, KEYED BY BACKBONE, for cross-checking our base run. The key is the
 # whole point: a published row belongs to one encoder, and a column headed "pub" next to a
@@ -70,6 +71,7 @@ MIDNIGHT = "kaiko-ai/midnight"
 # dataset -> percent shape, plus a PUBLISHED_SOURCE entry) is all that is needed to turn
 # the Midnight cross-check back on; until then Midnight runs print an explicit
 # "NO published counterpart" note rather than a comparison against phikon-v2's numbers.
+# The same holds for paige-ai/Virchow2: no transcribed row, so no key, so no columns.
 PUBLISHED = {
     PHIKONV2: {
         "knn": {
@@ -113,9 +115,21 @@ PUBLISHED_SOURCE = {PHIKONV2: "arXiv:2507.07860v3"}
 # runs mbase_*/mft*_* and phikon-v2 runs base_*/ft*_*). A run name matching NO prefix
 # resolves to None -- unknown, no published columns -- which is the safe answer for a third
 # backbone, rather than defaulting it into phikon-v2's table.
+#
+# Virchow2 runs are named vbase_*/vft*_* (scripts/submit_thunder.sh --backbone virchow2).
+# Order matters only in that the longer, more specific prefixes must be tried first --
+# "vbase_clsmean" does not start with "base", so there is no actual collision here, but
+# keeping the per-backbone letters grouped above the bare phikon-v2 pair preserves that
+# property if a future run name ever drops the leading letter.
+#
+# There is deliberately no VIRCHOW2 key in PUBLISHED: this repo holds no transcribed
+# THUNDER leaderboard row for Virchow2, so it takes the same "NO published counterpart"
+# path Midnight takes, and its F1s are never diffed against phikon-v2's appendix.
 BACKBONE_RUN_PREFIXES = (
     ("mbase", MIDNIGHT),
     ("mft", MIDNIGHT),
+    ("vbase", VIRCHOW2),
+    ("vft", VIRCHOW2),
     ("base", PHIKONV2),
     ("ft", PHIKONV2),
 )
