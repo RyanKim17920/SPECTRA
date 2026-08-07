@@ -522,8 +522,8 @@ term, making the KL silently inert. The teacher is free under LoRA — `disable_
 |---|---|---|---|---|---|---|
 | 0 (reference) | 0.8029 | 0.0017 | 0.680 | +0.0078 | +0.0091 | **+0.0084** |
 | **0.03** | **0.8014** | 0.0017 | 0.802 | +0.0069 | +0.0063 | **+0.0066** |
-| 0.3 | 0.6250 | 0.0146 | 0.618 | +0.0021 | — | — |
-| 3 | 0.4796 | 0.0010 | 0.154 | — | — | — |
+| 0.3 | 0.6250 | 0.0146 | 0.618 | +0.0021 | +0.0012 | +0.0017 |
+| 3 | 0.4796 | 0.0010 | 0.154 | +0.0002 | not run | +0.0002 |
 | 10 / 50 / 200 | ~0.474 | — | 0.065 | — | — | cancelled at step 500 |
 
 The bar was **pre-registered before any arm ran**: preserve robustness (RI plateau ≥ 0.80) *and*
@@ -531,6 +531,15 @@ beat the best HEST Δ ever observed here (+0.0098, phikon-v2 step 3500, §2). λ
 arm to clear the robustness half — and it shows **no retention benefit**, landing at +0.0066
 against the λ=0 control's +0.0084, with **both** measured checkpoints below the control.
 **Refuted.**
+
+**The premise was wrong, and that is the useful finding.** The experiment assumed
+fine-tuning damages retention and that constraining drift would recover it. It does not,
+because fine-tuning does not damage retention in the first place: the λ=0 control *improves*
+HEST by **+0.0078** over base. It improves it less than Waiv's +0.0196, but the sign is
+positive. Both axes then decline monotonically with λ, and at λ=3 the model sits at base on
+*both* — RI 0.4796 against a base of 0.4686, HEST +0.0002 against a base of 0.3747. The term
+never preserved anything; it removed a gain that fine-tuning produces. A retention term was
+addressing a problem that does not exist, which is why no λ could work.
 
 **It does not even trade — it is strictly dominated.** The obvious defence of a retention term
 is that it buys retention at the cost of robustness, i.e. moves along the frontier. It does not.
