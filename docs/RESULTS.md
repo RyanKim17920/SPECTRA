@@ -454,3 +454,44 @@ Adding one is a method change, not a sweep, and nothing here tests it.
   than through the trailing `"$@"`: appending `--lora-rank` as an extra arg reaches only the
   trainer, which would train at one rank and evaluate at another — `build_model` hard-fails on
   that mismatch, so the failure is loud, but the env route is the correct one.
+
+---
+
+## 6. Third backbone — `paige-ai/Virchow2` base reproduction
+
+The portability work is only tested by a backbone it was not written against. Virchow2 is
+that test: a **timm** checkpoint (`AutoModel` cannot load it — its config.json has no
+`model_type`), ViT-H/14, 32 blocks, hidden 1280, packed-SwiGLU FFN, and **4 register tokens**
+on top of CLS. Every prior backbone here is a `transformers` Dinov2 with a single prefix token.
+
+Base run, `clsmean` pooling (the paper's §3.3 protocol for PathoROB across all models),
+SLURM jobs 372330 (features) + 372476 (metric):
+
+| dataset | our base RI | balanced accuracy |
+|---|---|---|
+| camelyon | 0.798855 | 0.9876 |
+| tolkach_esca | 0.954102 | 0.9770 |
+| tcga | 0.821763 | 0.9274 |
+| **Avg** | **0.858240** | — |
+
+**Waiv Table 1 base: 0.858. Ours: 0.858240, Δ +0.00024.**
+
+This is the base-reproduction gate (PLAN.md §3 phase 5) passing on a third backbone, and it
+is a sharp test rather than a loose one — four independent things had to be right at once and
+each fails silently rather than loudly:
+
+- the timm loader branch, chosen by reading the repo's config.json rather than a name list;
+- **SwiGLUPacked detected from the checkpoint** (`fc1_out == 2*fc2_in`, 6832 vs 3416) — without
+  it the load dies with a size mismatch on all 32 blocks;
+- **register-token-aware pooling.** `_pool` previously sliced `tokens[:, 1:]`, which on
+  Virchow2 averages 4 register tokens into the patch mean. That produces a plausible
+  embedding and a wrong number. Had it not been fixed, this average would not have landed on
+  0.858;
+- normalization derived from timm's `pretrained_cfg` (ImageNet), with no override entry.
+
+Waiv publish no per-dataset breakdown for Virchow2, so `pathorob_adapter.TARGETS` carries the
+average only and `pathorob_gate.py` renders the missing per-dataset cells as `-` rather than
+inventing them. The per-dataset column above is **ours**, not a reproduction of theirs.
+
+Not yet run: Virchow2 fine-tuning. The submitter's adapter path is a placeholder and `--go`
+refuses on it, so no THUNDER sweep can file base numbers under a fine-tuned run name.
