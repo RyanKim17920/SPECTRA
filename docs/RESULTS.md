@@ -495,3 +495,61 @@ inventing them. The per-dataset column above is **ours**, not a reproduction of 
 
 Not yet run: Virchow2 fine-tuning. The submitter's adapter path is a placeholder and `--go`
 refuses on it, so no THUNDER sweep can file base numbers under a fine-tuned run name.
+
+---
+
+## 7. Retention term — relational KL to a frozen teacher
+
+Every negative result above points the same way: robustness reproduces, retention does not,
+and it is not the checkpoint (§2 sweep), not the LoRA rank (§5), and not full fine-tuning
+(§4). The loss has no retention component at all — a single masked InfoNCE term — and
+`PLAN.md` §2 scoped a frozen-teacher anchor as optional and never built it. This tests it.
+
+**Design.** Relational, not an L2 pull to base: a pull toward the frozen base embedding would
+fight the objective, since robustness is bought precisely by moving embeddings to collapse
+acquisition directions. Instead the term preserves relative geometry — softmax over pairwise
+cosine similarities under student and frozen teacher, penalised by `KL(P_teacher ‖ P_student)`,
+verified invariant to a global rotation+rescale. Candidates are restricted to the anchor's own
+condition-homogeneous group (a whole-batch KL would ask the student to preserve teacher
+similarities that are partly acquisition-driven, re-injecting the confounder). The diagonal is
+masked: after normalisation `S_ii = 1` exactly and at τ=0.07 it would swamp every off-diagonal
+term, making the KL silently inert. The teacher is free under LoRA — `disable_adapter()` under
+`no_grad`, no second copy of the weights. Measured GPU cost: **+6.1% step time, +4.7 MiB peak**.
+
+**Result.** Plateau over steps ≥1500, 4000-step arms otherwise identical to the §1 reference:
+
+| λ | RI plateau | sd | drift | HEST Δ @s3000 |
+|---|---|---|---|---|
+| 0 (reference) | 0.8029 | 0.0017 | 0.680 | **+0.0091** |
+| **0.03** | **0.8014** | 0.0017 | 0.802 | **+0.0063** |
+| 0.3 | 0.6250 | 0.0146 | 0.618 | — |
+| 3 | 0.4796 | 0.0010 | 0.154 | — |
+| 10 / 50 / 200 | ~0.474 | — | 0.065 | — (cancelled at step 500) |
+
+The bar was **pre-registered before any arm ran**: preserve robustness (RI plateau ≥ 0.80) *and*
+beat the best HEST Δ ever observed here (+0.0098, phikon-v2 step 3500, §2). λ=0.03 is the only
+arm to clear the robustness half — and it shows **no retention benefit**, landing at +0.0063
+against the λ=0 control's +0.0091. **Refuted.**
+
+**There is no useful window.** λ=0.03 does not constrain the representation at all — its
+plateau drift (0.802) is *above* the control's (0.680) — so it is inert, and its RI sits within
+one standard deviation of the control. The next λ up destroys robustness outright (0.625), and
+by λ=3 the model is pinned at base (0.4796 against a base of 0.4686) with drift collapsed to
+0.154. The term is either inert or destructive; nothing in between buys retention.
+
+**The λ calibration is worth recording as a methods note.** The first bracket, {10, 50, 200},
+was chosen from the KL-to-InfoNCE *loss-value* ratio measured at step 60 (1:122). All three
+pinned the model at base and were cancelled. Loss magnitude is the wrong quantity: at λ=10 the
+KL contributed 3.3% of the loss value while cutting `adapter_rel_l2_delta` from ~0.75 to ~0.065.
+**`adapter_rel_l2_delta` — already logged by the eval follower — is the quantity that governs
+this**, and calibrating on it directly would have found the transition immediately.
+
+**What this does and does not show.** It does not show that retention is unrecoverable — only
+that *this* term cannot recover it, and that the failure is not caused by unconstrained drift,
+since constraining drift does not restore retention. n=1 per λ; the 0.0028 gap between λ=0.03
+and the control is inside the HEST checkpoint scatter (0.0051 for the reference across steps,
+§2), so "no detectable benefit" is the supportable claim, not "actively harmful". Only one
+checkpoint (s3000) is measured for the decisive arm.
+
+The term ships behind `--retention-kl-weight`, default **0.0**, bit-identical to the published
+training path when off.
