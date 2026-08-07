@@ -320,8 +320,106 @@ and at n=1 seed a 0.007 gap is not decisive in either direction. The supportable
 
 ## 5. LoRA rank sweep
 
-*Placeholder — results landing.* Ranks 8 / 16 / 64 / 128 were trained against the reference
-rank 32 (SLURM jobs 371020 / 371021 / 371022 / 371023) and the PathoROB pass has completed;
-the HEST retention pass over the same arms is still queued. Numbers, tables and the
-read of them go here once both passes are collected. Nothing in §1–§4 depends on this
-section; the headline checkpoints and the rank-32 reference are unchanged by it.
+Does LoRA rank matter for robustification? Four new arms (ranks 8 / 16 / 64 / 128) against the
+rank-32 reference that every published number in §1–§4 comes from. PathoROB pass is complete;
+the HEST retention pass over the same arms is queued and not run.
+
+### Design
+
+| rank | alpha | alpha/r | trainable params | adapter on disk | SLURM job | state | run dir |
+|---|---|---|---|---|---|---|---|
+| 8 | 16 | 2 | 3.54 M | 13.5 MiB | 371020 | COMPLETED | `runs/waiv-rank8-371020/` |
+| 16 | 32 | 2 | 7.08 M | 27.0 MiB | 371021 | COMPLETED | `runs/waiv-rank16-371021/` |
+| 32 (ref) | 64 | 2 | 14.16 M | 54.0 MiB | 369043 | see note | `runs/waiv-real-369043/` |
+| 64 | 128 | 2 | 28.31 M | 108.0 MiB | 371022 | COMPLETED | `runs/waiv-rank64-371022/` |
+| 128 | 256 | 2 | 56.62 M | 216.0 MiB | 371023 | COMPLETED | `runs/waiv-rank128-371023/` |
+
+Alpha is set to 2r in every arm, so the LoRA scaling factor alpha/r is held constant at 2 and
+**rank is the only thing that varies**. Verified from each arm's `adapter_config.json`
+(`r`, `lora_alpha`) and its identical `target_modules` set (query/key/value/dense/fc1/fc2).
+Everything else is byte-identical to 369043: lr 1e-4, weight decay 0.05, warmup 200,
+temperature 0.07, 2 groups × 192, seed 0, `max_steps` **4000**.
+
+`max_steps` was deliberately **not** shortened for the sweep. The LR schedule is cosine to zero
+at `max_steps`, so a shorter run is not a prefix of a longer one — a 2000-step arm would be a
+different LR trajectory, not an early view of the same one. Each arm is a full 4000-step run
+(~2 h 33 m wall).
+
+Note on the rank-32 reference: job 369043 was cancelled after writing 7 checkpoints, and its
+eval follower scored 6 of them, so the reference curve stops at step 3000 while the sweep arms
+run to 4000. Its plateau window is therefore n=4 where the others are n=6.
+
+### Avg RI by step (mean of camelyon, tolkach_esca, tcga robustness_index)
+
+| step | rank 8 | rank 16 | rank 32 (ref) | rank 64 | rank 128 |
+|---|---|---|---|---|---|
+| 500 | 0.7793 | 0.7990 | 0.8036 | 0.8078 | **0.8084** |
+| 1000 | 0.7920 | 0.8026 | **0.8080** | 0.8041 | 0.8081 |
+| 1500 | 0.7944 | 0.7976 | 0.8032 | 0.7999 | 0.7983 |
+| 2000 | 0.8013 | **0.8042** | 0.8051 | 0.8006 | 0.8052 |
+| 2500 | 0.8005 | 0.8021 | 0.8022 | 0.7953 | 0.8002 |
+| 3000 | 0.8008 | 0.8032 | 0.8010 | 0.7953 | 0.8011 |
+| 3500 | 0.8006 | 0.8020 | — | 0.7954 | 0.8001 |
+| 4000 | **0.8014** | 0.8026 | — | 0.7950 | 0.8002 |
+
+Recomputed from each arm's `ri_curve.json` (`points[].datasets.{camelyon,tolkach_esca,tcga}
+.robustness_index`), not transcribed. phikon-v2 base is 0.469; Waiv's Phaet target is 0.806.
+
+### Peak and plateau disagree, and the plateau is the honest statistic
+
+| rank | peak Avg RI | at step | plateau mean (steps ≥1500) | plateau sd | n |
+|---|---|---|---|---|---|
+| 8 | 0.8014 | 4000 | 0.7998 | 0.0027 | 6 |
+| 16 | 0.8042 | 2000 | 0.8019 | 0.0023 | 6 |
+| 32 (ref) | 0.8080 | 1000 | **0.8029** | 0.0017 | 4 |
+| 64 | 0.8078 | 500 | 0.7969 | 0.0026 | 6 |
+| 128 | **0.8084** | 500 | 0.8009 | 0.0023 | 6 |
+
+**Peak looks monotone in rank; it is an artefact of peak-picking.** Read down the peak column —
+0.8014 / 0.8042 / 0.8080 / 0.8078 / 0.8084 — and rank appears to buy robustness. It does not.
+Ranks 64 and 128 both peak at step **500**, a single checkpoint; taking an arm's max over 8
+checkpoints selects that arm's luckiest one, and the two arms with the most checkpoint-to-
+checkpoint scatter get the largest upward selection bias. The plateau means are non-monotone:
+rank 32 highest (0.8029), rank 64 **lowest** (0.7969), rank 128 in between (0.8009). No trend.
+
+**Headline: rank does not systematically affect PathoROB.** The between-rank spread of plateau
+means is 0.0060 (0.7969–0.8029), against a within-arm scatter of 0.0017–0.0027. At n=1 seed the
+arms are not separable: ranks 16, 32, 64 and 128 all sit inside roughly one within-arm
+standard deviation of each other. Only rank 8 separates, and only transiently — at step 500 it
+is 0.7793, nearly 0.03 below every other arm, but by step 2000 it has caught up.
+
+**What rank changes is *when*, not *how high*.** Ranks 64 and 128 reach their best value at step
+500; rank 8 needs ~2000 steps to get there and is clearly worse before that. All arms then
+converge to the same ~0.80 plateau. Capacity and step budget substitute for each other. The
+practical consequence for a new backbone is that there is no rank to recommend independent of
+step budget — and that the existing blind "best PathoROB checkpoint" selection rule absorbs the
+interaction automatically, because a low-rank arm is simply selected later.
+
+**Every rank lands at ~0.80, near Waiv's Phaet target of 0.806.** PathoROB is not where this
+reconstruction is deficient, so rank is not a lever on it. That is consistent with the HEST
+checkpoint sweep in §2: the deficiency is in *retention*, and it is intrinsic to the recipe.
+
+### The limit, stated plainly
+
+This sweep measures the **robustness** axis only. The eval follower in `train_real.sbatch`
+computes PathoROB, not HEST, so nothing here says whether rank trades robustness against
+retention differently. That question is **not answered by this section**.
+
+### HEST retention over the rank arms — queued, not run
+
+A HEST retention pass over the four sweep arms (ranks 8 / 16 / 64 / 128, at steps 2000 and 3000)
+is queued and has not been run. No numbers exist yet. This subsection will be filled in from
+that pass; until then, nothing about rank-vs-retention should be inferred from §5.
+
+### Method notes
+
+- Comparing arms at their peak checkpoint selects noise, and selects more of it from noisier
+  arms. Future sweeps here should report plateau means with the within-arm scatter alongside,
+  and treat a peak-only table as a diagnostic, not a result.
+- The sweep required no fork of the training script. `scripts/train_real.sbatch` reads
+  `WAIV_LORA_RANK` / `WAIV_LORA_ALPHA` (defaults 32 / 64, reproducing 369043 exactly), and the
+  same `$LORA_RANK` / `$LORA_ALPHA` are passed to the before-probe (`embed_probe.py`), the eval
+  follower (`eval_checkpoints.py`) and `train_lora.py`. Rank must come from the env vars rather
+  than through the trailing `"$@"`: appending `--lora-rank` as an extra arg reaches only the
+  trainer, which would train at one rank and evaluate at another — `build_model` hard-fails on
+  that mismatch, so the failure is loud, but the env route is the correct one.
