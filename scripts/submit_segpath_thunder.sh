@@ -109,6 +109,14 @@ fi
 SEG_TASKS="segmentation"
 PHIKON_ADAPTER="runs/waiv-real-369043/step_0001000"
 MIDNIGHT_ADAPTER="runs/waiv-midnight-369159/step_0000500"
+# Third backbone. Unlike the two above, its adapter is not a constant: the checkpoint is
+# picked by the blind "best PathoROB checkpoint" rule after training, so both the path and
+# the step encoded in the run name arrive from the environment. When the adapter is absent
+# the vthdft- row is SKIPPED and the vthd- base row still goes -- these jobs run 96h, so
+# the base half must not wait on the fine-tune. Same property as submit_thunder.sh
+# --base-only: nothing lands under vft*_ without a real adapter.
+VIRCHOW2_ADAPTER="${WAIV_VIRCHOW2_ADAPTER:-}"
+VIRCHOW2_FT_RUN="${WAIV_VIRCHOW2_FT_RUN:-vft500_cls}"
 
 ROOT="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
 ACTIVE=$(squeue -u ryan.kim -h -o "%j" | sort -u)
@@ -169,6 +177,12 @@ for spec in "${SPECS[@]}"; do
   submit "thdft1k-$ds" "$ds" ft1000_cls  "$ep" 72:00:00 ""                 "$PHIKON_ADAPTER"
   submit "mthd-$ds"    "$ds" mbase_cls   "$ep" 96:00:00 kaiko-ai/midnight  ""
   submit "mthdft-$ds"  "$ds" mft500_cls  "$ep" 96:00:00 kaiko-ai/midnight  "$MIDNIGHT_ADAPTER"
+  submit "vthd-$ds"    "$ds" vbase_cls   "$ep" 96:00:00 paige-ai/Virchow2  ""
+  if [ -n "$VIRCHOW2_ADAPTER" ] && [ -d "$VIRCHOW2_ADAPTER" ]; then
+    submit "vthdft-$ds" "$ds" "$VIRCHOW2_FT_RUN" "$ep" 96:00:00 paige-ai/Virchow2 "$VIRCHOW2_ADAPTER"
+  else
+    echo "SKIP vthdft-$ds -- no Virchow2 adapter (set WAIV_VIRCHOW2_ADAPTER + WAIV_VIRCHOW2_FT_RUN)"
+  fi
 done
 
 echo

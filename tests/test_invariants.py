@@ -9,6 +9,8 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import types
@@ -749,9 +751,25 @@ def test_thunder_run_name_and_job_prefix_conventions_are_consistent_across_the_t
         for old in ("thd-", "thdft1k-", "mthd-", "mthdft-"):
             assert not new.startswith(old) and not old.startswith(new)
 
-    # Run names: declared in the submitter, attributed by the collector.
-    for run in ("vbase_clsmean", "vft500_clsmean", "vbase_cls", "vft500_cls"):
+    # Run names: attributed by the collector. The base rows are literals in the
+    # submitter; the FT rows are not, because the fine-tuned step is only known once the
+    # blind "best PathoROB checkpoint" rule has run, so it is interpolated from
+    # WAIV_VIRCHOW2_FT_STEP. Assert on what the submitter actually EMITS rather than on
+    # its source text -- that is the property the sweep depends on, and it keeps the test
+    # honest across both a default and an overridden step.
+    for run in ("vbase_clsmean", "vbase_cls"):
         assert run in submit, f"{run} not declared in submit_thunder.sh"
+    for step in ("500", "1250"):
+        env = dict(os.environ, WAIV_VIRCHOW2_FT_STEP=step,
+                   WAIV_VIRCHOW2_ADAPTER="runs/PLACEHOLDER-virchow2-adapter")
+        emitted = subprocess.run(
+            ["bash", str(repo / "scripts" / "submit_thunder.sh"), "--backbone", "virchow2"],
+            capture_output=True, text=True, env=env, cwd=repo, check=True).stdout
+        for run in (f"vft{step}_clsmean", f"vft{step}_cls"):
+            assert f" {run} " in emitted or emitted.rstrip().endswith(f" {run}"), \
+                f"{run} not emitted by submit_thunder.sh at step {step}"
+    for run in ("vbase_clsmean", "vft500_clsmean", "vbase_cls", "vft500_cls",
+                "vft1250_clsmean", "vft1250_cls"):
         assert cmod.infer_backbone(run) == cmod.VIRCHOW2, run
     # Published-two attribution is unchanged.
     for run in ("base_cls", "ft1000_cls"):

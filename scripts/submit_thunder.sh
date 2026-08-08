@@ -51,20 +51,30 @@
 #   bash scripts/submit_thunder.sh --backbone virchow2              # dry run, Virchow2
 #   bash scripts/submit_thunder.sh --backbone midnight --go         # submit
 #   bash scripts/submit_thunder.sh --cancel-held --go               # resubmit flow
+#   bash scripts/submit_thunder.sh --backbone virchow2 --base-only --go   # base rows only
+#
+# --base-only submits the *_BASE jobs and nothing else. It exists so a backbone's base
+# sweep can drain while its fine-tune is still training -- the base rows depend on no
+# adapter, and THUNDER is the long pole. It therefore also lifts the adapter-exists
+# refusal below, which is safe precisely because no *_FT job is submitted: the property
+# that guard protects is "nothing lands under *ft*_ without an adapter", and base-only
+# writes only under *base_.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 BACKBONE_KEY="phikon-v2"
 GO=0
 CANCEL_HELD=0
+BASE_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --go) GO=1; shift ;;
     --backbone) BACKBONE_KEY="${2:-}"; shift 2 ;;
     --backbone=*) BACKBONE_KEY="${1#--backbone=}"; shift ;;
     --cancel-held) CANCEL_HELD=1; shift ;;
+    --base-only) BASE_ONLY=1; shift ;;
     *) echo "unknown argument: $1"
-       echo "usage: $0 [--backbone phikon-v2|midnight|virchow2] [--cancel-held] [--go]"; exit 2 ;;
+       echo "usage: $0 [--backbone phikon-v2|midnight|virchow2] [--base-only] [--cancel-held] [--go]"; exit 2 ;;
   esac
 done
 
@@ -104,17 +114,24 @@ backbone_spec() {
       BACKBONE="paige-ai/Virchow2"
       P_BASE="vthd-"; P_FT="vthdft-"
       CLS_POOL="auto"
-      CLS_BASE_RUN="vbase_clsmean"; CLS_FT_RUN="vft500_clsmean"
-      SEG_BASE_RUN="vbase_cls";     SEG_FT_RUN="vft500_cls"
+      # The FT step is not known until training picks a checkpoint by the blind
+      # "best PathoROB checkpoint" rule, so it comes from the environment rather than
+      # being frozen at 500 the way Midnight's is. collect_thunder.py matches on the
+      # bare "vft" prefix (BACKBONE_RUN_PREFIXES), so any step merges into the table.
+      V_FT_STEP="${WAIV_VIRCHOW2_FT_STEP:-500}"
+      CLS_BASE_RUN="vbase_clsmean"; CLS_FT_RUN="vft${V_FT_STEP}_clsmean"
+      SEG_BASE_RUN="vbase_cls";     SEG_FT_RUN="vft${V_FT_STEP}_cls"
       # PLACEHOLDER. No Virchow2 fine-tune has been trained yet, so there is no adapter
       # to point at. The path below does not exist on purpose: a --go run refuses rather
       # than quietly submitting the *_FT jobs with no adapter, which would produce a full
       # sweep of base numbers filed under vft500_* and silently corrupt the comparison.
       # Override with WAIV_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX once one exists.
       ADAPTER="${WAIV_VIRCHOW2_ADAPTER:-runs/PLACEHOLDER-virchow2-adapter}"
-      if [ $GO -eq 1 ] && [ ! -d "$ADAPTER" ]; then
+      # --base-only submits no *_FT job, so a missing adapter cannot mislabel anything.
+      if [ $GO -eq 1 ] && [ $BASE_ONLY -eq 0 ] && [ ! -d "$ADAPTER" ]; then
         echo "refusing to submit: Virchow2 adapter '$ADAPTER' does not exist."
-        echo "  set WAIV_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX, or drop --go for a dry run."
+        echo "  set WAIV_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX, pass --base-only for the"
+        echo "  base rows alone, or drop --go for a dry run."
         exit 2
       fi
       ;;
@@ -193,14 +210,14 @@ submit() {  # submit <jobname> <dataset> <tasks> <pooling> <run_name> [adapter]
 
 for ds in $CLASSIFICATION; do
   submit "$P_BASE$ds" "$ds" "$CLS_TASKS" "$CLS_POOL" "$CLS_BASE_RUN"
-  submit "$P_FT$ds"   "$ds" "$CLS_TASKS" "$CLS_POOL" "$CLS_FT_RUN" "$ADAPTER"
+  [ $BASE_ONLY -eq 1 ] || submit "$P_FT$ds" "$ds" "$CLS_TASKS" "$CLS_POOL" "$CLS_FT_RUN" "$ADAPTER"
 done
 # cls, not $CLS_POOL -- see the emb_dim/patch-dim note in the header. The run_name carries
 # the pooling too, so on Midnight these land in outputs/res/<ds>/m{base,ft500}_cls/ and
 # cannot collide with the _clsmean classification rows.
 for ds in $SEGMENTATION; do
   submit "$P_BASE$ds" "$ds" "$SEG_TASKS" cls "$SEG_BASE_RUN"
-  submit "$P_FT$ds"   "$ds" "$SEG_TASKS" cls "$SEG_FT_RUN" "$ADAPTER"
+  [ $BASE_ONLY -eq 1 ] || submit "$P_FT$ds" "$ds" "$SEG_TASKS" cls "$SEG_FT_RUN" "$ADAPTER"
 done
 
 echo
