@@ -54,16 +54,26 @@ deltas are meaningful rather than merely plausible.
 | LoRA rank 32 | **0.8080** | 1000 |
 | full FT | 0.8007 | 500 |
 
-PathoROB is the primary axis and is never seen in training. THUNDER covers 16 of Waiv's 16
-datasets over all four tasks; we match or beat Waiv on 7 of 8 model × task pairs, the
-exception being Midnight segmentation. HEST retention is the weak axis on both backbones, and
-a sweep over every checkpoint shows that is intrinsic to the recipe, not a checkpoint-selection
-artefact. Full FT did not beat LoRA. n=1 seed throughout, matching each benchmark's own
-protocol; our runs are fp32 against Waiv's mixed precision, so deltas compare but absolute
-levels do not, and the Midnight HEST columns are not on a common scale at all. A LoRA rank
-sweep over ranks 8–128 finds no systematic effect on either axis — PathoROB plateau means
-0.797–0.803 and HEST mean Δ +0.003 to +0.009, both spreads no larger than one arm's own
-checkpoint-to-checkpoint scatter. Capacity is not the lever.
+### Third backbone — `paige-ai/Virchow2`, base only
+
+| dataset | camelyon | tolkach_esca | tcga | **Avg** | Waiv T1 |
+|---|---|---|---|---|---|
+| our base RI | 0.7989 | 0.9541 | 0.8218 | **0.8582** | 0.858 |
+
+PathoROB is the primary axis and is never seen in training. THUNDER covers all 16 of Waiv's
+datasets; we match or beat them on 7 of 8 model × task pairs, the exception being Midnight
+segmentation. Full FT did not beat LoRA. Virchow2 (timm ViT-H, 4 register tokens) reproduces
+its published base to +0.0002, which is what validates the pipeline on a backbone it was not
+written against.
+
+**Retention is the axis that does not reproduce**, and four experiments say it is not a tuning
+problem: it survives every checkpoint, LoRA ranks 8–128 (both axes flat within one arm's own
+scatter), full fine-tuning, and an added frozen-teacher retention term. That last one also
+corrected the premise — fine-tuning *improves* HEST (+0.0078 over base), just less than Waiv's
++0.0196, so there is no retention loss to prevent and every λ was strictly dominated by λ=0.
+
+n=1 seed throughout, matching each benchmark's own protocol; our runs are fp32 against Waiv's
+mixed precision, so deltas compare but absolute levels do not.
 
 Read the numbers with [`docs/CAVEATS.md`](docs/CAVEATS.md) open.
 
@@ -73,10 +83,10 @@ Read the numbers with [`docs/CAVEATS.md`](docs/CAVEATS.md) open.
 
 | file | contents |
 |---|---|
-| [`docs/RESULTS.md`](docs/RESULTS.md) | Full numeric record: headline, per-task THUNDER, per-dataset THUNDER, per-cancer-type HEST, HEST checkpoint sweep, full-FT pilot, LoRA rank sweep |
+| [`docs/RESULTS.md`](docs/RESULTS.md) | Full numeric record: headline, per-task and per-dataset THUNDER, per-cancer-type HEST, HEST checkpoint sweep, full-FT pilot, LoRA rank sweep, Virchow2 base, retention-KL sweep |
 | [`docs/CAVEATS.md`](docs/CAVEATS.md) | Every caveat the results are conditioned on, plus the reporting discipline the project holds itself to |
 | [`docs/REPRODUCING.md`](docs/REPRODUCING.md) | Environments, data prep, training, evaluation, and the verification the numbers rest on |
-| [`docs/NEW_MODEL.md`](docs/NEW_MODEL.md) | Applying this recipe to a backbone other than phikon-v2 or Midnight |
+| [`docs/NEW_MODEL.md`](docs/NEW_MODEL.md) | Applying this recipe to a new backbone; `paige-ai/Virchow2` is the worked example |
 | [`PLAN.md`](PLAN.md) | The spec the recipe was reconstructed against |
 
 ## Layout
