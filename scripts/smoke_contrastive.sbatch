@@ -30,14 +30,14 @@ set -euo pipefail
 REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
+export HF_HOME="${HF_HOME:-/data/huggingface}"
 export HF_HUB_OFFLINE=1              # phikon-v2 is already cached; never hit the hub here
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/ryan.kim/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-smoke}-${SLURM_JOB_ID:-local}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"

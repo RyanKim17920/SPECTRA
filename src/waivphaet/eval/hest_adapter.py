@@ -250,7 +250,7 @@ def compare_to_published(results: dict[str, float]) -> dict[str, dict]:
 
 def env_defaults() -> dict[str, str]:
     """PYTHONNOUSERSITE: a broken pandas in ``~/.local`` shadows venv pins on this box."""
-    return {"HF_HOME": "/data/ryan.kim/hf_home", "PYTHONNOUSERSITE": "1",
+    return {"HF_HOME": "/data/huggingface", "PYTHONNOUSERSITE": "1",
             "TOKENIZERS_PARALLELISM": "false"}
 
 

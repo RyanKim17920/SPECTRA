@@ -243,7 +243,7 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", type=Path, required=True)
     ap.add_argument("--packed-dir",
-                    default=os.environ.get("WAIV_PACKED_DIR", "/data/ryan.kim/plism/repacked"))
+                    default=os.environ.get("WAIV_PACKED_DIR", "/data/plism/repacked"))
     ap.add_argument("--datasets", nargs="+", default=list(DATASETS))
     ap.add_argument("--model-prefix", default=None,
                     help="features/results dir prefix; defaults to waiv_<run-dir name>")
@@ -276,7 +276,7 @@ def main() -> int:
     ap.add_argument("--keep-features", dest="purge_features", action="store_false")
     args = ap.parse_args()
 
-    os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+    os.environ.setdefault("HF_HOME", "/data/huggingface")
     if args.model_prefix is None:
         args.model_prefix = "waiv_" + args.run_dir.name.replace("-", "_")
     paths = PathoRobPaths(root=REPO / "third_party" / "PathoROB")

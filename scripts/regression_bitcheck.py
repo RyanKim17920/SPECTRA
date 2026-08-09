@@ -20,7 +20,7 @@ FeatureDataManager npz layout and the metric itself. It isolates exactly the par
 refactor can break, and it does so before burning a GPU slot.
 """
 import importlib.util, os, sys
-os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+os.environ.setdefault("HF_HOME", "/data/huggingface")
 import numpy as np, torch
 
 def load(repo, n=64, pooling="clsmean"):

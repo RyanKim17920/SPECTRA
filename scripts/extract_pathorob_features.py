@@ -38,7 +38,7 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+os.environ.setdefault("HF_HOME", "/data/huggingface")
 
 import numpy as np
 import torch

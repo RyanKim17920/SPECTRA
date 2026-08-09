@@ -54,7 +54,7 @@ from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
+    ap.add_argument("--packed-dir", type=Path, default=Path("/data/plism/repacked"))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--adapter", type=Path, default=None,
                     help="LoRA checkpoint dir written by save_checkpoint (contains adapter/ + projector.pt)")
@@ -161,7 +161,7 @@ def pair_stats(x: torch.Tensor, y: torch.Tensor) -> dict[str, float]:
 
 def main() -> int:
     args = parse_args()
-    os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+    os.environ.setdefault("HF_HOME", "/data/huggingface")
 
     if args.checkpoint and args.adapter:
         raise SystemExit("--checkpoint and --adapter are mutually exclusive")

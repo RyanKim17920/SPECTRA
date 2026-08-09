@@ -298,7 +298,7 @@ class TrainConfig:
     #: carries no machine-specific path; the fallback is this cluster's repacked PLISM so
     #: every existing launcher keeps working unchanged.
     packed_dir: str = field(
-        default_factory=lambda: os.environ.get("WAIV_PACKED_DIR", "/data/ryan.kim/plism/repacked")
+        default_factory=lambda: os.environ.get("WAIV_PACKED_DIR", "/data/plism/repacked")
     )
     out_dir: str = "runs/dev"
     # optimisation

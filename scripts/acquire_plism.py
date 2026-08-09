@@ -25,7 +25,7 @@ notice (same failure mode as misregistration, PLAN.md 4 phase 1 item 3).
 
 Usage::
 
-    export HF_HOME=/data/ryan.kim/hf_home     # never let the default ~/.cache fill /admin
+    export HF_HOME=/data/huggingface     # never let the default ~/.cache fill /admin
     python scripts/acquire_plism.py --dry-run
     python scripts/acquire_plism.py
 """
@@ -194,8 +194,8 @@ def process(cond, args, manifest: dict) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--h5-dir", type=Path, default=Path("/data/ryan.kim/plism"))
-    p.add_argument("--out-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
+    p.add_argument("--h5-dir", type=Path, default=Path("/data/plism"))
+    p.add_argument("--out-dir", type=Path, default=Path("/data/plism/repacked"))
     p.add_argument("--manifest", type=Path, default=None, help="default: <out-dir>/manifest.json")
     p.add_argument("--verify-samples", type=int, default=64)
     p.add_argument("--retries", type=int, default=2, help="extra attempts per slide after a failure")

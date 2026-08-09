@@ -52,14 +52,17 @@ set -euo pipefail
 REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
+export HF_HOME="${HF_HOME:-/data/huggingface}"
 export HF_HUB_OFFLINE=0               # the follower streams the PathoROB parquet
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/ryan.kim/plism/repacked}"
+# The corpus moved from /data/ryan.kim/plism to /data/plism on 2026-08-09. The old path is
+# gone, so a stale default here does not degrade -- it fails the preflight in 1 second with
+# FileNotFoundError on manifest.json, which is how jobs 376023/376024 died.
+PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-real}-${SLURM_JOB_ID:-local}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"

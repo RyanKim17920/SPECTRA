@@ -28,7 +28,7 @@ EXP_CODE="${2:-base_${POOLING}}"
 CKPT="${3:-}"
 ADAPTER="${4:-}"
 
-export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
+export HF_HOME="${HF_HOME:-/data/huggingface}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 # A broken pandas in ~/.local shadowed a venv earlier on this box; isolate or the pins

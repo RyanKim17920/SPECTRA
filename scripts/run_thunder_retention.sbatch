@@ -46,7 +46,7 @@ CKPT="${3:-}"
 DATASETS="${THUNDER_RETENTION_DATASETS:-bach break_his mhist bracs}"
 
 export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
-export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
+export HF_HOME="${HF_HOME:-/data/huggingface}"
 export TOKENIZERS_PARALLELISM=false
 export WANDB_MODE=offline
 export WANDB_SILENT=true

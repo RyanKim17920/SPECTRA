@@ -49,7 +49,7 @@ def parse_ckpt_schedule(value: str) -> list[int]:
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
+    ap.add_argument("--packed-dir", type=Path, default=Path("/data/plism/repacked"))
     ap.add_argument("--out-dir", type=Path, required=True)
     # split (PLAN.md 3 phase 7): 2 of 7 scanners, 3 of 13 stains
     ap.add_argument("--heldout-scanners", nargs="*", default=["GT450", "S210"])
@@ -118,7 +118,7 @@ def parse_args():
 
 def main() -> int:
     args = parse_args()
-    os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+    os.environ.setdefault("HF_HOME", "/data/huggingface")
     torch.manual_seed(args.seed)
 
     use_lora = not args.full_ft

@@ -62,14 +62,14 @@ set -euo pipefail
 REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
+export HF_HOME="${HF_HOME:-/data/huggingface}"
 export HF_HUB_OFFLINE=0               # the Tier-2 follower streams the PathoROB parquet
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/ryan.kim/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-fullft}-${SLURM_JOB_ID:-local}"
 # /data, not $REPO/runs: 11 checkpoints x ~3.4 GiB = ~34 GiB.
 OUT_DIR="${WAIV_RUNS_DIR:-/data/ryan.kim/waiv_runs}/$RUN_NAME"

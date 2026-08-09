@@ -21,7 +21,7 @@ So the whole adapter is: run *our* encoder over their patches, hand the array to
 
 Their metadata CSVs ship in the repo (``data/metadata/*.csv``, columns
 ``subset,slide_id,patch_id,biological_class,medical_center``); the images stream from HF
-(``bifold-pathomics/PathoROB-{dataset}``), so set ``HF_HOME=/data/ryan.kim/hf_home``.
+(``bifold-pathomics/PathoROB-{dataset}``), so set ``HF_HOME=/data/huggingface``.
 
 Reference numbers are committed under ``third_party/PathoROB/results/``, including
 ``phikonv2_clsmean`` -- that is the gate for PLAN.md 3 phase 5 (reproduce Avg RI 0.469,

@@ -225,8 +225,8 @@ def benchmark(
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--h5-dir", type=Path, default=Path("/data/ryan.kim/plism"))
-    p.add_argument("--out-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
+    p.add_argument("--h5-dir", type=Path, default=Path("/data/plism"))
+    p.add_argument("--out-dir", type=Path, default=Path("/data/plism/repacked"))
     p.add_argument("--overwrite", action="store_true")
     p.add_argument("--verify", action="store_true", help="byte-check a random tile sample")
     p.add_argument("--verify-samples", type=int, default=64)

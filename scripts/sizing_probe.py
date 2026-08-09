@@ -35,7 +35,7 @@ import json
 import os
 import time
 
-os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+os.environ.setdefault("HF_HOME", "/data/huggingface")
 
 import torch
 

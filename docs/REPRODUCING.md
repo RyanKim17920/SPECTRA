@@ -54,7 +54,7 @@ before training: 16,278 tiny HDF5 datasets per slide makes random pair sampling 
 
 ```bash
 ./.venv/bin/python -m waivphaet.data.repack \
-  --h5-dir /data/ryan.kim/plism --out-dir /data/ryan.kim/plism/repacked --verify --benchmark
+  --h5-dir /data/plism --out-dir /data/plism/repacked --verify --benchmark
 ```
 
 Residual Elastix misregistration is ~5–50 px, so positives are near-identical *shifted*

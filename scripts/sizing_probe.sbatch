@@ -23,7 +23,7 @@ BACKBONE="${1:-owkin/phikon-v2}"
 SHAPES="${2:-2x64 2x128 2x192}"
 CKPT_FLAG="${3:---grad-checkpointing}"
 
-export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
+export HF_HOME="${HF_HOME:-/data/huggingface}"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1

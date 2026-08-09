@@ -295,7 +295,7 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", type=Path, required=True)
     ap.add_argument("--packed-dir", type=Path,
-                    default=Path("/data/ryan.kim/plism/repacked"))
+                    default=Path("/data/plism/repacked"))
     ap.add_argument("--conditions-file", type=Path, default=None,
                     help="pin the probe's condition set, exactly as the BEFORE probe and "
                          "eval_checkpoints.py do -- otherwise a shrinking condition set "
@@ -314,7 +314,7 @@ def main() -> int:
     ap.add_argument("--max-wait-s", type=int, default=8 * 3600)
     args = ap.parse_args()
 
-    os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")
+    os.environ.setdefault("HF_HOME", "/data/huggingface")
 
     # Resume: anything already in collapse_watch.json keeps its verdict, and its digest
     # stays available as the `prev` term so a restart cannot manufacture a fake delta.

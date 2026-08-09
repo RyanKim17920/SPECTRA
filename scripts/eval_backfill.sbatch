@@ -33,7 +33,7 @@ RUN_DIR="${1:?usage: sbatch scripts/eval_backfill.sbatch <run-dir> [lora-rank] [
 LORA_RANK="${2:-32}"
 LORA_ALPHA="${3:-64}"
 
-export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
+export HF_HOME="${HF_HOME:-/data/huggingface}"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8

@@ -10,8 +10,8 @@ which is the degenerate case PLAN.md 2 warns about.
 
 Assumes the local ``.h5`` have been repacked::
 
-    python -m waivphaet.data.repack --h5-dir /data/ryan.kim/plism \
-        --out-dir /data/ryan.kim/plism/repacked --verify
+    python -m waivphaet.data.repack --h5-dir /data/plism \
+        --out-dir /data/plism/repacked --verify
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ from waivphaet.train.contrastive import TrainConfig, train
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--h5-dir", type=Path, default=Path("/data/ryan.kim/plism"))
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/ryan.kim/plism/repacked"))
+    ap.add_argument("--h5-dir", type=Path, default=Path("/data/plism"))
+    ap.add_argument("--packed-dir", type=Path, default=Path("/data/plism/repacked"))
     ap.add_argument("--out-dir", type=Path, default=Path("runs/smoke"))
     ap.add_argument("--steps", type=int, default=4)
     ap.add_argument("--n-groups", type=int, default=2)
@@ -41,7 +41,7 @@ def main() -> int:
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
 
-    os.environ.setdefault("HF_HOME", "/data/ryan.kim/hf_home")  # never fill /admin
+    os.environ.setdefault("HF_HOME", "/data/huggingface")  # never fill /admin
 
     present = [p.name for p in Path(args.h5_dir).glob("*.tif.h5")]
     conds = available_conditions(all_conditions(), present)

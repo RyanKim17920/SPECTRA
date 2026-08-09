@@ -23,7 +23,7 @@ REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
 cd "$REPO"
 
 # HF cache MUST live on /data -- /admin has only ~1.4 TB and must not fill (PLAN.md 5).
-export HF_HOME="${HF_HOME:-/data/ryan.kim/hf_home}"
+export HF_HOME="${HF_HOME:-/data/huggingface}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
@@ -59,9 +59,9 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 # --- preflight ------------------------------------------------------------------------
 # Repack must have run: 16,278 tiny HDF5 datasets per slide makes random pair sampling
 # I/O bound (~112-125x slower than the contiguous memmap, measured).
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/ryan.kim/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 # Only used to print the fix-it command below; never read.
-H5_DIR="${WAIV_H5_DIR:-/data/ryan.kim/plism}"
+H5_DIR="${WAIV_H5_DIR:-/data/plism}"
 if [ ! -f "$PACKED_DIR/keys.json" ]; then
   echo "FATAL: $PACKED_DIR not repacked. Run:"
   echo "  ./.venv/bin/python -m waivphaet.data.repack --h5-dir $H5_DIR \\"

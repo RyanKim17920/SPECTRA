@@ -1,0 +1,9 @@
+[08-09 15:40] supervisor started (pause<40G, resume>150G)
+[08-09 15:40] ok: /data 4406G, pilot_up=1, 27 vthd jobs outstanding
+[08-09 15:50] ok: /data 5270G, pilot_up=1, 27 vthd jobs outstanding
+[08-09 16:00] ok: /data 5245G, pilot_up=1, 27 vthd jobs outstanding
+[08-09 16:10] ok: /data 5388G, pilot_up=1, 27 vthd jobs outstanding
+[08-09 16:20] ok: /data 5384G, pilot_up=1, 27 vthd jobs outstanding
+[08-09 16:30] ok: /data 5381G, pilot_up=1, 27 vthd jobs outstanding
+[08-09 16:40] ok: /data 5319G, pilot_up=1, 27 vthd jobs outstanding
+[08-09 16:50] ok: /data 5247G, pilot_up=1, 27 vthd jobs outstanding
