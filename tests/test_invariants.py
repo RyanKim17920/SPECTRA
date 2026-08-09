@@ -759,15 +759,28 @@ def test_thunder_run_name_and_job_prefix_conventions_are_consistent_across_the_t
     # honest across both a default and an overridden step.
     for run in ("vbase_clsmean", "vbase_cls"):
         assert run in submit, f"{run} not declared in submit_thunder.sh"
-    for step in ("500", "1250"):
-        env = dict(os.environ, WAIV_VIRCHOW2_FT_STEP=step,
-                   WAIV_VIRCHOW2_ADAPTER="runs/PLACEHOLDER-virchow2-adapter")
-        emitted = subprocess.run(
-            ["bash", str(repo / "scripts" / "submit_thunder.sh"), "--backbone", "virchow2"],
-            capture_output=True, text=True, env=env, cwd=repo, check=True).stdout
-        for run in (f"vft{step}_clsmean", f"vft{step}_cls"):
-            assert f" {run} " in emitted or emitted.rstrip().endswith(f" {run}"), \
-                f"{run} not emitted by submit_thunder.sh at step {step}"
+    # The submitter consults live SLURM state and on-disk results, and SKIPS anything already
+    # queued or complete -- so run it hermetically or this test reports on the cluster's mood
+    # rather than on the script. Stub squeue to return nothing and point the results root at
+    # an empty dir, so every job takes the emit path.
+    with tempfile.TemporaryDirectory() as td:
+        bindir = Path(td) / "bin"
+        bindir.mkdir()
+        (bindir / "squeue").write_text("#!/bin/sh\nexit 0\n")
+        (bindir / "squeue").chmod(0o755)
+        for step in ("500", "1250"):
+            env = dict(os.environ,
+                       PATH=f"{bindir}:{os.environ['PATH']}",
+                       THUNDER_BASE_DATA_FOLDER=str(Path(td) / "empty_root"),
+                       WAIV_VIRCHOW2_FT_STEP=step,
+                       WAIV_VIRCHOW2_ADAPTER="runs/PLACEHOLDER-virchow2-adapter")
+            emitted = subprocess.run(
+                ["bash", str(repo / "scripts" / "submit_thunder.sh"), "--backbone", "virchow2"],
+                capture_output=True, text=True, env=env, cwd=repo, check=True).stdout
+            assert "SKIP" not in emitted, f"submitter not hermetic:\n{emitted[:400]}"
+            for run in (f"vft{step}_clsmean", f"vft{step}_cls"):
+                assert f" {run} " in emitted or emitted.rstrip().endswith(f" {run}"), \
+                    f"{run} not emitted by submit_thunder.sh at step {step}"
     for run in ("vbase_clsmean", "vft500_clsmean", "vbase_cls", "vft500_cls",
                 "vft1250_clsmean", "vft1250_cls"):
         assert cmod.infer_backbone(run) == cmod.VIRCHOW2, run
