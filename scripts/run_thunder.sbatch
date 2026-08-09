@@ -122,6 +122,42 @@ case "$TASKS" in *segmentation*) MODE=online_loading ;; esac
 # whenever the cache is cold, so a job is self-sufficient rather than depending on
 # whatever happened to run before it.
 EMB_DIR="${THUNDER_BASE_DATA_FOLDER}/embeddings/${DATASET}/${RUN_NAME}"
+
+# A PARTIAL cache is worse than a cold one. If a job is killed mid-precompute -- preemption,
+# or ENOSPC on /data, both of which happened repeatedly during the Virchow2 sweep -- it
+# leaves an embeddings.h5 that exists but is truncated, with HDF5's write-consistency flag
+# still set. THUNDER's own check is presence-only, so the next job logs
+#   "Pre-computed embeddings already found ... Not re-computing them"
+# skips the precompute, and dies ~60s later on
+#   OSError: Unable to synchronously open file (file is already open for write)
+# Three separate jobs died this way on 2026-08-08/09, each time tripping the pilot's
+# max-fast-failures guard and halting the whole sweep. A presence test cannot distinguish
+# the two states, so test whether every h5 in the cache actually OPENS read-only, and treat
+# a cache that fails as cold: wipe it and precompute. Recomputing costs an hour; reading a
+# corrupt cache costs the sweep.
+if [ "$MODE" = "embedding_pre_loading" ] && [ -d "$EMB_DIR" ]; then
+  if ! "$REPO/.venv-thunder/bin/python" - "$EMB_DIR" <<'PYEOF'
+import glob, os, sys
+import h5py
+emb_dir = sys.argv[1]
+files = sorted(glob.glob(os.path.join(emb_dir, "*", "*.h5")))
+if not files:
+    sys.exit(1)
+for f in files:
+    try:
+        with h5py.File(f, "r"):
+            pass
+    except Exception as exc:
+        print(f"[cache-check] UNREADABLE {f}: {exc}")
+        sys.exit(1)
+print(f"[cache-check] ok, {len(files)} h5 file(s) readable under {emb_dir}")
+PYEOF
+  then
+    echo "--- PARTIAL/CORRUPT embedding cache at $EMB_DIR -- removing and recomputing ---"
+    rm -rf "$EMB_DIR"
+  fi
+fi
+
 if [ "$MODE" = "embedding_pre_loading" ] && [ ! -f "$EMB_DIR/train/labels.h5" ]; then
   echo "--- cold embedding cache at $EMB_DIR -- precomputing first ---"
   TASKS="pre_computing_embeddings $TASKS"
