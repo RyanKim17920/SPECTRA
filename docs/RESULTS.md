@@ -457,7 +457,7 @@ Adding one is a method change, not a sweep, and nothing here tests it.
 
 ---
 
-## 6. Third backbone — `paige-ai/Virchow2` base reproduction
+## 6. Third backbone — `paige-ai/Virchow2`
 
 The portability work is only tested by a backbone it was not written against. Virchow2 is
 that test: a **timm** checkpoint (`AutoModel` cannot load it — its config.json has no
@@ -493,8 +493,76 @@ Waiv publish no per-dataset breakdown for Virchow2, so `pathorob_adapter.TARGETS
 average only and `pathorob_gate.py` renders the missing per-dataset cells as `-` rather than
 inventing them. The per-dataset column above is **ours**, not a reproduction of theirs.
 
-Not yet run: Virchow2 fine-tuning. The submitter's adapter path is a placeholder and `--go`
-refuses on it, so no THUNDER sweep can file base numbers under a fine-tuned run name.
+### Fine-tuning — job 375367, rank 32 / alpha 64, 2 × 192, 1500 steps
+
+Sized on a real probe (job 375350, not arithmetic): 2 × 192 peaks at 42.23 GiB of 79.19 at
+4.57 s/step, and gives **191 negatives per anchor — identical to both prior backbones**.
+2 × 256 also fits (55.39 GiB); it was deliberately not taken, because buying more negatives
+here would make the third backbone incomparable to the two the conclusions rest on. The
+loader reports `LoRA targets=128 = 4/block × 32 blocks, leaves=['fc1','fc2','proj','qkv']`,
+i.e. the fused QKV and packed SwiGLU both attached.
+
+**This run was preempted twice** (15:53→17:07 on n-3, 17:32→19:56 on n-6). `train_real.sbatch`
+has no resume, so each requeue restarts at step 0 and rewrites `runs/<run>/step_*` in place,
+while `eval_checkpoints.py` skips steps already present in `ri_curve.json`. The curve
+therefore started to mix trajectories. The attempt that ran to completion (17:32→19:45, all
+1500 steps) had its six checkpoints snapshotted before the third attempt could clobber them;
+the foreign points were stripped and recomputed by `eval_backfill.sbatch`. **Every point below
+is from that one continuous attempt.** See `ri_curve.json.mixed-attempts.bak` for the
+discarded mixed curve.
+
+| step | Avg RI | camelyon | tolkach_esca | tcga | `rel_l2_delta` |
+|---|---|---|---|---|---|
+| base | 0.8582 | 0.7989 | 0.9541 | 0.8218 | — |
+| **250** | **0.9035** | 0.9006 | 0.9673 | 0.8425 | 0.73–0.79 |
+| 500 | 0.8981 | 0.8898 | 0.9706 | 0.8339 | 0.77–0.79 |
+| 750 | 0.9000 | 0.8929 | 0.9701 | 0.8368 | 0.80–0.86 |
+| 1000 | 0.9000 | 0.8951 | 0.9687 | 0.8362 | 0.83–0.89 |
+| 1250 | 0.9009 | 0.8978 | 0.9693 | 0.8357 | 0.83–0.88 |
+| 1500 | 0.9014 | 0.8983 | 0.9694 | 0.8365 | 0.83–0.88 |
+
+**Waiv Table 1 fine-tuned: 0.918. Ours: 0.9035 at the selected checkpoint, Δ −0.0145.** Base
+→ fine-tuned is +0.0453. Same shape as the other two backbones: the direction and most of the
+magnitude reproduce, the published level does not.
+
+**The blind rule picks step 250, and that choice is inside the noise.** The rule is "best
+PathoROB checkpoint", applied per [`CAVEATS.md`](CAVEATS.md) before looking at any other
+benchmark. But the spread across all six points is 0.0054 with a mean of 0.9006, against a
+documented within-arm scatter of ±0.002–0.003 — step 250 is not separated from step 1500 by
+more than noise. The honest summary is "flat at ≈0.901 from step 250 onward", not "250 is
+optimal". Recording the cost rather than optimising it away: had the rule instead said "last
+checkpoint", the reported number would be 0.9014, and nothing else in this section changes.
+Every `rel_l2_delta` lands in 0.73–0.89, the same band as the existing runs, so the adapter is
+demonstrably applied at every point.
+
+### HEST retention (Virchow2, `clsmean` protocol) — base → step 250
+
+| cancer type | base | ft250 | Δ |
+|---|---|---|---|
+| IDC | 0.5970 | 0.5907 | −0.0063 |
+| PRAD | 0.3529 | 0.3804 | +0.0275 |
+| PAAD | 0.4779 | 0.4971 | +0.0192 |
+| SKCM | 0.6395 | 0.6244 | −0.0151 |
+| COAD | 0.2581 | 0.2936 | +0.0355 |
+| READ | 0.2072 | 0.2025 | −0.0047 |
+| CCRCC | 0.2719 | 0.2585 | −0.0134 |
+| LUNG | 0.5679 | 0.5715 | +0.0036 |
+| LYMPH_IDC | 0.2568 | 0.2561 | −0.0007 |
+| **avg** | **0.4032** | **0.4083** | **+0.0051** |
+
+There is no published counterpart for Virchow2 × `clsmean` on HEST, so these are our own
+reference for checkpoint-to-checkpoint retention only — the harness emits that note itself,
+and the 0.3747 figure elsewhere in this file is phikon-v2 `cls` and nothing else.
+
+**This is a third-backbone confirmation of §7's finding: fine-tuning does not damage
+retention.** The +0.0051 average is at the documented ±0.005 HEST scatter and the per-task
+signs are mixed (5 down, 4 up), so the claim is that retention is *preserved*, not improved.
+
+### THUNDER — in progress
+
+Base and fine-tuned sweeps are submitted (`vbase_*` / `vft250_*`) and draining. Complete so
+far: ocelot, pannuke (segmentation), tcga_tils (all three classification tasks). This section
+will be filled in when the sweep lands; nothing here should be quoted until then.
 
 ---
 
