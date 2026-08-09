@@ -47,10 +47,29 @@ if [ -f "$RUN_DIR/conditions_used.json" ]; then
   CONDS="--conditions-file $RUN_DIR/conditions_used.json"
 fi
 
+# The backbone is NOT inferable from the adapter for every backbone, so it must be passed.
+# build_model resolves it as: explicit --backbone, then $WAIV_BACKBONE, then the base id
+# recorded in the adapter's own config, then DEFAULT_BACKBONE (owkin/phikon-v2). For a timm
+# backbone that recorded base id comes back empty, so the chain falls all the way through to
+# phikon-v2 and the job loads a 24-block/1024-d encoder against a 32-block/1280-d adapter.
+# That is how backfill job 375504 died on a Virchow2 run: "adapter keys not consumed".
+# It fails loudly rather than scoring the wrong model, but it fails 20 minutes into a queue
+# wait, so read the backbone off the run's own config.json and pass it explicitly.
+BACKBONE="${WAIV_BACKBONE:-}"
+if [ -z "$BACKBONE" ] && [ -f "$RUN_DIR/config.json" ]; then
+  BACKBONE="$("$REPO/.venv/bin/python" -c "
+import json,sys
+print(json.load(open(sys.argv[1])).get('encoder',{}).get('backbone',''))" "$RUN_DIR/config.json")"
+fi
+BACKBONE_ARGS=()
+if [ -n "$BACKBONE" ]; then BACKBONE_ARGS=(--backbone "$BACKBONE"); fi
+echo "=== backbone ${BACKBONE:-<default: owkin/phikon-v2>} ==="
+
 "$REPO/.venv/bin/python" scripts/eval_checkpoints.py \
   --run-dir "$RUN_DIR" \
   --lora-rank "$LORA_RANK" --lora-alpha "$LORA_ALPHA" \
   --num-workers 12 \
+  "${BACKBONE_ARGS[@]}" \
   $CONDS
 
 echo "=== done $(date) ==="
