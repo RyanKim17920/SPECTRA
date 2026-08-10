@@ -1,1 +1,4 @@
 [08-09 15:47] ckpt guard started, watching v2rank64/v2rank128
+[08-09 19:08] SNAPSHOT runs/waiv-v2rank64-376087 -> complete_ckpts (6 checkpoints)
+[08-09 19:11] SNAPSHOT runs/waiv-v2rank128-376088 -> complete_ckpts (6 checkpoints)
+[08-09 19:11] both runs finished and snapshotted, guard exiting

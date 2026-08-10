@@ -145,9 +145,25 @@ def run_pathorob(args, ckpt: Path, step: int, paths: PathoRobPaths) -> dict:
     adapter_checks: dict[str, float] = {}
 
     for ds in args.datasets:
-        if (feat_dir / ds).exists():
-            print(f"[eval] features for {model_name}/{ds} already present, skipping extract")
-            continue
+        ds_dir = feat_dir / ds
+        if ds_dir.exists():
+            npz_count = len(list(ds_dir.glob("*.npz")))
+            if npz_count > 0:
+                print(f"[eval] features for {model_name}/{ds} already present "
+                      f"({npz_count} npz), skipping extract")
+                continue
+            # The directory exists but contains no *.npz files -- this is the same
+            # presence-vs-completeness bug that hit THUNDER embedding caches
+            # (fixed in run_thunder.sbatch).  Concretely: backfill job 376305 died in 46s
+            # because waiv_waiv_v2rank128_376088_s0001250/ already had camelyon/ (5 npz)
+            # and tolkach_esca/ (4 npz) complete but tcga/ EMPTY (0 files) -- left behind
+            # by the extractor process that was killed mid-run.  The old existence check
+            # saw tcga/ exists, skipped extraction, and run_robustness_index/read_results
+            # then failed: "Cannot find features for chunk 'Asterand' at .../tcga/Asterand.npz".
+            # Remove the stale empty dir so the extractor starts from a clean slate.
+            print(f"[eval] {model_name}/{ds} dir exists but has no *.npz files "
+                  f"(stale partial extract); removing and re-extracting")
+            shutil.rmtree(ds_dir)
 
         if is_full_ft_checkpoint(ckpt):
             cmd = [args.python, "scripts/extract_pathorob_features.py",
