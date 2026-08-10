@@ -558,6 +558,51 @@ and the 0.3747 figure elsewhere in this file is phikon-v2 `cls` and nothing else
 retention.** The +0.0051 average is at the documented ±0.005 HEST scatter and the per-task
 signs are mixed (5 down, 4 up), so the claim is that retention is *preserved*, not improved.
 
+### LoRA rank on a fused-QKV backbone — rank 32 is not the constraint
+
+**Motivation.** Virchow2's fine-tuning closes approximately 76% of the published base-to-fine-tuned gap: (0.9035 − 0.8582) / (0.918 − 0.858) ≈ 0.0453 / 0.060. That is below the ~90% for Midnight and ~101% for phikon-v2. One structural hypothesis: Virchow2's fused QKV makes nominal rank 32 a tighter effective constraint than on the other two backbones. The Virchow2 loader attaches 128 LoRA targets = 4/block × 32 blocks on leaves `['fc1','fc2','proj','qkv']`. phikon-v2 attaches 144 = 6/block × 24 blocks on `['query','key','value','dense','fc1','fc2']`; Midnight attaches 240 = 6/block × 40 blocks on the same leaves. On a fused `qkv` projection (1280 → 3840) a single rank-r LoRA gives q, k and v a **shared r-dimensional input subspace** — one `lora_A` matrix serving all three — whereas separate `query`/`key`/`value` modules give three independent `lora_A` matrices. "Rank 32" is therefore not the same knob across these architectures. The experiment tests whether doubling or quadrupling rank recovers the gap.
+
+**Design.** Three arms, identical in every other respect to the reference run (job 375367): lr 1e-4, weight decay 0.05, warmup 200, temperature 0.07, 2 × 192 groups (191 negatives/anchor), 1500 steps, Virchow2 backbone. Alpha is held at 2r throughout, matching the §5 convention, so the LoRA scaling factor alpha/r is constant at 2 and rank is the only thing that varies.
+
+| rank | alpha | trainable params | % of 655M | SLURM job |
+|---|---|---|---|---|
+| 32 (ref) | 64 | 24.1 M | 3.68% | 375367 |
+| 64 | 128 | 45.1 M | 6.67% | 376087 |
+| 128 | 256 | 87.1 M | 12.12% | 376088 |
+
+**Avg RI by step** (mean of camelyon, tolkach\_esca, tcga):
+
+| step | rank 32 | rank 64 | rank 128 |
+|---|---|---|---|
+| 250 | **0.9035** | 0.9023 | 0.9006 |
+| 500 | 0.8981 | 0.8067 | 0.8671 |
+| 750 | 0.9000 | 0.8999 | 0.8713 |
+| 1000 | 0.9000 | 0.8991 | 0.8712 |
+| 1250 | 0.9009 | 0.8968 | 0.8757 |
+| 1500 | 0.9014 | 0.8974 | 0.8758 |
+
+Base (no adapter) Avg RI = 0.8582. Waiv's published Virchow2 fine-tuned target = 0.918.
+
+**Summary** (plateau mean at steps ≥ 750, n = 4 per arm):
+
+| rank | plateau mean | all-point spread | `adapter_rel_l2_delta` range | trainable | % of 655M |
+|---|---|---|---|---|---|
+| 32 (ref) | **0.9006** | 0.0054 | 0.73–0.89 | 24.1 M | 3.68% |
+| 64 | 0.8983 | 0.0955 | 0.75–1.17 | 45.1 M | 6.67% |
+| 128 | 0.8735 | 0.0334 | 0.94–1.17 | 87.1 M | 12.12% |
+
+**The hypothesis is refuted.** Plateau mean is monotone decreasing in rank: 0.9006 → 0.8983 → 0.8735. Rank 64 is at best marginally worse than the reference (−0.0023); that difference is at the ±0.002–0.003 within-arm scatter floor, so it does not support a claim of improvement in either direction. However, every one of its four plateau points falls below the corresponding reference point, which rules out a benefit. Rank 128 is unambiguously worse: −0.0271, roughly 10× the scatter band. Increasing rank does not close the gap; it opens one.
+
+**A note on the step-500 collapse in rank 64.** At step 500 rank 64 reads 0.8067 — below the un-adapted base of 0.8582 — before recovering to 0.8999 by step 750. A mean taken across that dip would be misleading, which is why the plateau mean (steps ≥ 750) is the reported statistic: it excludes the transient collapse and measures the settled representation. The same discipline was applied in §5, where it distinguished between arms whose instability was early and transient and arms that were genuinely worse. The dip itself is information: rank 64 shows the largest all-point spread (0.0955), indicating that higher rank buys larger excursions during training, not a higher ceiling.
+
+**Mechanism: higher rank over-rotates.** The `adapter_rel_l2_delta` metric — ratio of the displacement (adapted minus base) to the base norm — shows that higher rank does not leave capacity unused; it displaces the representation further. Rank 32 stays in the 0.73–0.89 band throughout all six checkpoints: the adapter is active at every point (delta < 1) but does not outstrip the signal it is modifying. Ranks 64 and 128 both reach 1.17, meaning the adapter shifts the representation by more than the norm of the base embedding at their most aggressive checkpoints. Rank 128's floor of 0.94 — never below 0.94 across any checkpoint — indicates it over-rotates consistently from the outset, not transiently; that persistent drift is reflected in the much lower plateau mean (−0.0271 from the reference) rather than in high within-arm variance. Where drift is largest, robustness is lowest.
+
+**Consistency with §5.** The phikon-v2 rank sweep (§5) also found rank 32 best by plateau mean (0.8029), with rank 64 the lowest (0.7969) — non-monotone there, monotone here, but the same winner and the same conclusion: rank is not a lever on PathoROB. The present experiment extends that finding across the QKV-fusion boundary, which §5 could not test because phikon-v2 has split `query`/`key`/`value` modules. The fused-QKV geometry does not change the verdict.
+
+**What this means for the 76%.** Capacity is not the explanation for the lower gap-closed fraction on Virchow2. The fractions are ordered by base quality: phikon-v2 base 0.4686 → ~101%, Midnight 0.7589 → ~90%, Virchow2 0.8582 → ~76%. Higher base quality leaves less absolute headroom, and the fractions track headroom rather than architecture or LoRA rank. Note also that the 76% figure is itself sensitive to which checkpoint represents the arm: the reference plateau mean is 0.9006 and step 1500 is 0.9014, giving gap-closed fractions of approximately 71% and 72% respectively. The honest range is roughly 70–76%; the 76% (step 250, best PathoROB checkpoint under the blind selection rule) is at the upper end of that range.
+
+**Limits.** n = 1 seed per arm. This measures the PathoROB robustness axis only — the eval follower computes PathoROB, not HEST or THUNDER — so it says nothing about whether rank trades robustness against retention on Virchow2. Rank was varied with alpha pinned at 2× rank throughout, so rank and the alpha/rank scaling are not separated: it is possible that a different alpha/rank ratio at higher rank would behave differently, but that is not tested here.
+
 ### THUNDER — in progress
 
 Base and fine-tuned sweeps are submitted (`vbase_*` / `vft250_*`) and draining. Complete so
