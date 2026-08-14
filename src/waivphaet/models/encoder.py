@@ -61,6 +61,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel
 
+from waivphaet.models.pooling import POOL_HEAD_NAMES, build_pool_head
+
 DEFAULT_BACKBONE = "owkin/phikon-v2"
 
 #: The two pools ``clsmean`` concatenates, in the order it concatenates them. Named here
@@ -361,6 +363,19 @@ class EncoderConfig:
     #: (2048 at ``clsmean``), a protocol constant, and every eval path reads ``embed()``
     #: and never a projector.
     split_heads: tuple[str, ...] = ()
+    #: **Which pooling the non-CLS loss head uses** (``"mean"`` = off, the incumbent).
+    #:
+    #: RESULTS 9: ``mean`` is LINEAR, so ``d(mean)/d(t_i) = (1/N) I`` -- the direct
+    #: gradient reaching every patch token is the IDENTICAL vector, and a uniform
+    #: translation of the token cloud is exactly what THUNDER's biased
+    #: ``proj_dec = nn.Linear(d_encoder, d_model)`` absorbs into its bias. Only a pooling
+    #: whose gradient is token-DEPENDENT can express a preference about the tokens'
+    #: relative arrangement. See :mod:`waivphaet.models.pooling` for the variants and for
+    #: why the GeM default is over ``softplus`` rather than the textbook ``clamp``.
+    #:
+    #: Requires ``split_heads`` to include ``"mean"``: with the single concat projector
+    #: the pooled vector IS ``_pool``'s output, which is the eval protocol constant.
+    pool_head: str = "mean"
     #: ``None`` (the default) = **discover** the target leaf names from the loaded
     #: backbone by intersecting ``LORA_CANDIDATE_MODULES`` with the block Linears it
     #: actually has. Pass an explicit tuple only to deliberately narrow the set.
@@ -638,6 +653,33 @@ class WaivEncoder(nn.Module):
             )
         if len(set(self.split_heads)) != len(self.split_heads):
             raise ValueError(f"duplicate split head in {self.split_heads}")
+
+        # --- pooling for the non-CLS loss head (RESULTS 9's "the fix") -----------------
+        self.pool_head_name = str(cfg.pool_head or "mean")
+        if self.pool_head_name not in POOL_HEAD_NAMES:
+            raise ValueError(
+                f"unknown pool_head {self.pool_head_name!r}; valid are "
+                f"{list(POOL_HEAD_NAMES)}"
+            )
+        if self.pool_head_name != "mean" and "mean" not in self.split_heads:
+            raise ValueError(
+                f"pool_head={self.pool_head_name!r} requires split_heads to include "
+                f"'mean' (got {list(self.split_heads) or 'the single concat projector'}). "
+                "With the single concat head the pooled vector is _pool()'s output, which "
+                "is the EVAL protocol constant (PathoROB's reference row is "
+                "phikonv2_clsmean) -- repointing it would change what the run exports, not "
+                "what it optimises. On a cls-only split arm there is no mean head to pool."
+            )
+        #: ``None`` on ``pool_head='mean'`` ON PURPOSE. That arm then keeps the literal
+        #: ``patches.mean(dim=1)`` already inside :meth:`_pool_parts`, so it is the SAME
+        #: CODE as the currently-running split-head arm rather than merely the same
+        #: arithmetic -- no new module, no new parameters, no RNG draw, nothing to perturb.
+        self.pool_head = (
+            build_pool_head(self.pool_head_name, self.hidden_size)
+            if self.pool_head_name != "mean"
+            else None
+        )
+
         if self.split_heads:
             # Each head sees ONE pool, so its input is `hidden_size` -- NOT `embed_dim`.
             self.projector = None
@@ -762,8 +804,33 @@ class WaivEncoder(nn.Module):
                 "forward_split() requires an encoder built with cfg.split_heads; this one "
                 "has the single concat projector. Use forward()."
             )
-        parts = self.embed_parts(images)
-        return parts, {name: self.projectors[name](parts[name]) for name in self.split_heads}
+        tokens = self.tokens(images)
+        # ``parts`` keeps its old meaning EXACTLY: the two halves of ``_pool``'s clsmean.
+        # It is what ``pool_from_parts`` reassembles for the retention term, and that must
+        # stay the eval-time pooled embedding no matter which pooling the LOSS head uses.
+        parts = self._pool_parts(tokens)
+        head_in = parts
+        if self.pool_head is not None:
+            pooled = self.pool_head(tokens[:, self.num_prefix_tokens :, :])
+            head_in = {**parts, "mean": pooled}
+            # Published under its own key so the diagnostics see what the head ACTUALLY
+            # got, while ``pool_from_parts`` (which reads only cls/mean) is untouched.
+            parts = {**parts, "pool": pooled}
+        return parts, {name: self.projectors[name](head_in[name]) for name in self.split_heads}
+
+    def pool_head_metrics(self) -> dict[str, float]:
+        """Learned pooling state (GeM ``p``, LSE ``tau``, attention entropy, ...).
+
+        Empty on the default path. Logged every ``log_every`` step so that "the pooling
+        learned something" is an auditable number in ``history.json`` rather than an
+        inference from the loss curve -- a GeM that decays to ``p=1`` or an attention that
+        stays at uniform entropy 1.0 has quietly become the mean head again, and nothing
+        else in the run would say so.
+        """
+        if self.pool_head is None:
+            return {}
+        fn = getattr(self.pool_head, "extra_metrics", None)
+        return dict(fn()) if callable(fn) else {}
 
     @torch.no_grad()
     def encode(self, images: torch.Tensor, l2_normalize: bool = False) -> torch.Tensor:
@@ -795,6 +862,11 @@ class WaivEncoder(nn.Module):
             "lora_target_leaves": list(self.lora_target_leaves),
             "blocks": self.num_blocks,
             "split_heads": list(self.split_heads),
+            "pool_head": self.pool_head_name,
+            "pool_head_params": (
+                sum(p.numel() for p in self.pool_head.parameters())
+                if self.pool_head is not None else 0
+            ),
         }
 
     def merge_lora(self) -> nn.Module:

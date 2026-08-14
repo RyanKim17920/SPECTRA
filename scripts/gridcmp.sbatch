@@ -50,7 +50,12 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 ARM="${WAIV_ARM:?set WAIV_ARM to ctrl | grid24 | grid49}"
-RUN_NAME="gridcmp-${ARM}-${SLURM_JOB_ID:-local}"
+# SLURM_RESTART_COUNT is set (and increments) only on a REQUEUE. Including it means a
+# preempted-and-requeued attempt writes to a FRESH dir instead of restarting from step 0
+# on top of the previous attempt's checkpoints and ri_curve.json. Without this, the
+# follower skips steps it already recorded and the final curve marries attempt-1 RI points
+# to attempt-2 weights -- silent, and only visible at collection time.
+RUN_NAME="gridcmp-${ARM}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"

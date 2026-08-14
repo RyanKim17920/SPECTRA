@@ -30,6 +30,7 @@ from waivphaet.data.grid import build_grid_loader
 from waivphaet.data.pairs import build_pair_loader
 from waivphaet.data.repack import present_filenames
 from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
+from waivphaet.models.pooling import POOL_HEAD_NAMES
 from waivphaet.train.contrastive import TrainConfig, build_split_head_names, train
 
 
@@ -149,6 +150,25 @@ def parse_args():
                     help="w_mean, default 0.5. See --cls-weight: the 0.5/0.5 default is "
                          "scale neutrality, and a weight of 0.0 removes the head rather "
                          "than zero-multiplying it. Requires --split-heads.")
+    # --- POOLING FOR THE NON-CLS HEAD (RESULTS 9's "the fix") -----------------------------
+    ap.add_argument("--pool-head", default=None,
+                    choices=list(POOL_HEAD_NAMES),
+                    help="pooling for the NON-CLS split head. Default 'mean' = the "
+                         "incumbent, bit-identical to the running split-heads arm. mean is "
+                         "LINEAR, so d(mean)/d(t_i) = (1/N)*I: the direct gradient reaching "
+                         "every patch token is the IDENTICAL vector, the loss can only "
+                         "TRANSLATE the token cloud, and THUNDER's segmentation decoder "
+                         "(nn.Linear WITH A BIAS) absorbs a uniform translation into its "
+                         "bias -- the candidate mechanism for classification improving "
+                         "while segmentation does not. 'gem' (generalized mean, learnable "
+                         "p, over SOFTPLUS), 'attn' (one learned query, single "
+                         "cross-attention) and 'lse' (softmax-weighted, learnable tau) all "
+                         "have TOKEN-DEPENDENT gradients. 'gem_clamp' is the textbook "
+                         "clamp(x,eps)**p and is a DIAGNOSTIC ONLY: ViT tokens are "
+                         "LayerNorm'd and therefore ~zero-mean, so the clamp deletes about "
+                         "half of every token vector (measured and logged as "
+                         "pool_zero_fraction). Requires --split-heads with a mean head. "
+                         "Eval pooling is UNAFFECTED -- this is a training-time loss head.")
     ap.add_argument("--grad-checkpointing", action="store_true",
                     help="recompute block activations in backward. The negative count is "
                          "group_size-1, so more negatives means a bigger forward batch; "
@@ -222,6 +242,16 @@ def main() -> int:
                 "concat projector and one InfoNCE, so a per-head weight has nothing to "
                 "weight and would be silently ignored."
             )
+        if args.pool_head is not None:
+            raise SystemExit(
+                f"--pool-head {args.pool_head} requires --split-heads: without it the "
+                "pooled vector IS _pool()'s clsmean, i.e. the EVAL-time embedding, and the "
+                "eval pooling is a protocol constant (PathoROB's reference row is "
+                "phikonv2_clsmean). Repointing it there would change what the run exports "
+                "rather than what it optimises. The alternative poolings are TRAINING-TIME "
+                "loss heads only."
+            )
+    pool_head = "mean" if args.pool_head is None else args.pool_head
     cls_weight = 0.5 if args.cls_weight is None else args.cls_weight
     mean_weight = 0.5 if args.mean_weight is None else args.mean_weight
     split_head_names: tuple[str, ...] = ()
@@ -242,14 +272,32 @@ def main() -> int:
             split_head_names = build_split_head_names(cls_weight, mean_weight)
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
+        if pool_head != "mean" and "mean" not in split_head_names:
+            raise SystemExit(
+                f"--pool-head {pool_head} with --mean-weight {mean_weight}: the mean head "
+                "is not built at weight 0, so there is nothing for the alternative pooling "
+                "to pool. Raise --mean-weight or drop --pool-head."
+            )
+        if pool_head == "gem_clamp":
+            print(
+                "[train] WARNING: --pool-head gem_clamp is the TEXTBOOK clamp(x, eps)**p "
+                "GeM, which assumes post-ReLU x >= 0. ViT tokens are LayerNorm'd and so "
+                "~zero-mean: expect the clamp to delete ~half of every token vector, with "
+                "exactly zero gradient through the deleted entries. This is a DIAGNOSTIC "
+                "arm -- watch pool_zero_fraction in history.json. Use --pool-head gem "
+                "(softplus) for the real run.", flush=True,
+            )
         dropped = [h for h in ("cls", "mean") if h not in split_head_names]
         print(
             f"[train] SPLIT HEADS: {list(split_head_names)} at weights "
             f"cls={cls_weight} mean={mean_weight} -- L = "
             + " + ".join(
-                f"{cls_weight if h == 'cls' else mean_weight}*InfoNCE(proj_{h})"
+                f"{cls_weight if h == 'cls' else mean_weight}*InfoNCE(proj_{h}"
+                f"{'' if h == 'cls' or pool_head == 'mean' else f'<-{pool_head}'})"
                 for h in split_head_names
             )
+            + (f" | POOL HEAD: {pool_head} (token-dependent gradient; mean's is not)"
+               if pool_head != "mean" else "")
             + (
                 f" | {dropped} NOT BUILT (a zero-weight head would still update its "
                 "BatchNorm running stats)" if dropped else
@@ -395,6 +443,7 @@ def main() -> int:
         proj_out_dim=args.proj_out_dim, pooling=args.pooling,
         grad_checkpointing=args.grad_checkpointing,
         split_heads=split_head_names,
+        pool_head=pool_head,
     )
     print("[train] params:", model.trainable_parameter_summary())
 
@@ -449,11 +498,13 @@ def main() -> int:
         # later reader can tell a split-head run from a concat-head one.
         split_heads=args.split_heads,
         cls_weight=cls_weight, mean_weight=mean_weight,
+        pool_head=pool_head,
         encoder={"backbone": args.backbone, "use_lora": use_lora,
                  "lora_rank": args.lora_rank, "lora_alpha": args.lora_alpha,
                  "pooling": args.pooling, "proj_out_dim": args.proj_out_dim,
                  "grad_checkpointing": args.grad_checkpointing,
-                 "split_heads": list(split_head_names)},
+                 "split_heads": list(split_head_names),
+                 "pool_head": pool_head},
     )
     if ckpt_schedule is not None:
         cfg.ckpt_schedule = ckpt_schedule

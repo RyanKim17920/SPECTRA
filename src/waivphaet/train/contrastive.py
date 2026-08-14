@@ -268,7 +268,14 @@ def assert_split_head_inputs(
         # pool separation comparable across the three arms instead of existing only on the
         # one arm that could have the wiring bug.
         return {}
-    cls_vec, mean_vec = parts["cls"].detach().float(), parts["mean"].detach().float()
+    # ``"pool"`` is present only when an alternative pooling (gem/attn/lse) replaced the
+    # mean for the LOSS head; ``"mean"`` then still carries the true arithmetic mean,
+    # because ``pool_from_parts`` must keep reassembling the eval-time clsmean for the
+    # retention term. The wiring assertion has to run on what the head ACTUALLY received,
+    # so it reads "pool" when it exists -- otherwise a gem head fed a copy of CLS would
+    # sail past a check that was busy comparing CLS to an unused mean.
+    cls_vec = parts["cls"].detach().float()
+    mean_vec = parts.get("pool", parts["mean"]).detach().float()
     if cls_vec.shape != mean_vec.shape:
         raise ValueError(
             f"cls/mean head inputs differ in shape: {tuple(cls_vec.shape)} vs "
@@ -615,6 +622,13 @@ class TrainConfig:
     #: stats never updated) -- that is what makes the "only" arms actually single-head.
     cls_weight: float = 0.5
     mean_weight: float = 0.5
+    #: Pooling for the NON-CLS split head. ``"mean"`` = the incumbent, bit-identical to
+    #: the arm already running. See :mod:`waivphaet.models.pooling`: ``mean`` is linear, so
+    #: its per-token gradient is the same vector for every token and the loss can only
+    #: TRANSLATE the token cloud -- which THUNDER's biased segmentation decoder absorbs
+    #: into its bias. ``gem`` / ``attn`` / ``lse`` have token-dependent gradients.
+    #: Recorded here (not only in ``encoder``) so ``config.json`` names the objective.
+    pool_head: str = "mean"
     encoder: dict = field(default_factory=dict)
 
 
@@ -729,6 +743,7 @@ def save_projectors(model, out: Path) -> dict:
     if not heads:
         torch.save(model.projector.state_dict(), out / "projector.pt")
         return {"split_heads": False, "heads": [], "projector_pt": "projector.pt"}
+    _save_pool_head(model, out)
     for name in heads:
         torch.save(model.projectors[name].state_dict(), out / f"projector_{name}.pt")
     alias = heads[0]
@@ -745,8 +760,33 @@ def save_projectors(model, out: Path) -> dict:
             "-- skip loading it. Eval reads model.embed(); the projector is training-only."
         ) % alias,
     }
+    pool_name = str(getattr(model, "pool_head_name", "mean"))
+    manifest["pool_head"] = pool_name
+    if getattr(model, "pool_head", None) is not None:
+        manifest["pool_head_pt"] = "pool_head.pt"
     (out / "projector_heads.json").write_text(json.dumps(manifest, indent=2))
     return manifest
+
+
+def _save_pool_head(model, out: Path) -> None:
+    """Write ``pool_head.pt`` when the non-CLS head pools with learnable parameters.
+
+    GeM's ``p``, LSE's ``tau`` and the attention query/key are TRAINED, so a checkpoint
+    without them cannot be resumed or re-run faithfully -- and, unlike the projector, they
+    are not reconstructible from anything else in the directory. Only written when the
+    module exists, so the ``--pool-head mean`` and single-head artifacts are byte-for-byte
+    what they always were.
+
+    No eval path reads this file: every eval reads ``model.embed()``, whose pooling is the
+    protocol constant ``clsmean``. Both probe readers glob nothing and load by name, so an
+    extra file is inert to them (verified in ``test_probe_readers_ignore_pool_head_pt``).
+    """
+    pool = getattr(model, "pool_head", None)
+    if pool is None:
+        return
+    sd = pool.state_dict()
+    if sd:
+        torch.save(sd, out / "pool_head.pt")
 
 
 def load_projectors(model, out: Path) -> None:
@@ -763,6 +803,16 @@ def load_projectors(model, out: Path) -> None:
                 f"the {name} head built"
             )
         model.projectors[name].load_state_dict(torch.load(path, map_location="cpu"))
+    pool = getattr(model, "pool_head", None)
+    if pool is not None and pool.state_dict():
+        path = out / "pool_head.pt"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"checkpoint {out} has no pool_head.pt, but this model pools with "
+                f"{getattr(model, 'pool_head_name', '?')!r}, whose parameters are TRAINED "
+                "and are not recoverable from anything else in the directory"
+            )
+        pool.load_state_dict(torch.load(path, map_location="cpu"))
 
 
 def save_checkpoint(model, optimizer, step: int, cfg: TrainConfig, metrics: dict) -> Path:
@@ -841,6 +891,22 @@ def train(
                 "zero-weight head must not be BUILT (its BatchNorm running stats would "
                 "still update every step), so the two must agree exactly."
             )
+    # Same rule for the pooling: a config that says "gem" against an encoder that pools
+    # with the mean is a run whose name, config.json and objective all disagree, and
+    # nothing downstream could ever tell. Fail before any compute.
+    got_pool = str(getattr(model, "pool_head_name", "mean"))
+    if got_pool != cfg.pool_head:
+        raise ValueError(
+            f"cfg.pool_head={cfg.pool_head!r} but the encoder pools with {got_pool!r}. "
+            "The pooling is a property of the built encoder (it owns the learnable p / "
+            "tau / attention query), so the two must be built from the same value."
+        )
+    if cfg.pool_head != "mean" and not cfg.split_heads:
+        raise ValueError(
+            f"pool_head={cfg.pool_head!r} requires split_heads: with the single concat "
+            "projector the pooled vector IS the eval-time embedding, and the eval pooling "
+            "is a protocol constant. The alternative poolings are TRAINING-TIME loss heads."
+        )
     use_retention = cfg.retention_kl_weight > 0.0
     if use_retention:
         # Fail here, before any compute, rather than silently optimising a KL that is
@@ -935,6 +1001,10 @@ def train(
                         cfg.temperature, cfg.symmetric,
                     )
                     metrics.update(split_stats)
+                    # GeM's learned p / LSE's tau / the attention entropy. A pooling that
+                    # has quietly collapsed back to the mean (p -> 1, entropy -> 1.0) is
+                    # invisible in the loss curve and obvious here.
+                    metrics.update(model.pool_head_metrics())
                 else:
                     with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
                         # one forward per view; both views must see the same weights, so this

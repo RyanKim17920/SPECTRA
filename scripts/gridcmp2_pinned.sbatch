@@ -78,7 +78,9 @@ export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 ARM="${WAIV_ARM:?set WAIV_ARM to grid2 | grid12 | ctrlseed}"
-RUN_NAME="gridcmp2-${ARM}-${SLURM_JOB_ID:-local}"
+# See gridcmp.sbatch: SLURM_RESTART_COUNT keeps a requeued attempt out of the previous
+# attempt's run dir, so a preemption cannot silently mix two training trajectories.
+RUN_NAME="gridcmp2-${ARM}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"

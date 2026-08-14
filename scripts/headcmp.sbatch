@@ -58,7 +58,9 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 ARM="${WAIV_ARM:?set WAIV_ARM to split | clsonly | meanonly}"
-RUN_NAME="headcmp-${ARM}-${SLURM_JOB_ID:-local}"
+# See gridcmp.sbatch: SLURM_RESTART_COUNT keeps a requeued attempt out of the previous
+# attempt's run dir, so a preemption cannot silently mix two training trajectories.
+RUN_NAME="headcmp-${ARM}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"

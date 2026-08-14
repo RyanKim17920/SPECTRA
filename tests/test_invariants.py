@@ -1613,10 +1613,11 @@ class _SplitTinyEncoder(torch.nn.Module):
     """
 
     def __init__(self, heads=("cls", "mean"), hidden=8, n_tokens=7, num_prefix_tokens=1,
-                 d_proj=512, use_lora=True):
+                 d_proj=512, use_lora=True, pool_head="mean"):
         import torch.nn as nn
 
         from waivphaet.models.encoder import ProjectionHead, WaivEncoder
+        from waivphaet.models.pooling import build_pool_head
 
         super().__init__()
         self.cfg = types.SimpleNamespace(use_lora=use_lora, pooling="clsmean")
@@ -1625,13 +1626,15 @@ class _SplitTinyEncoder(torch.nn.Module):
         self.n_tokens = n_tokens
         self.num_prefix_tokens = num_prefix_tokens
         self.split_heads = tuple(heads)
+        self.pool_head_name = pool_head
+        self.pool_head = None if pool_head == "mean" else build_pool_head(pool_head, hidden)
         self.backbone = _FakeAdapterBackbone(hidden, hidden)
         self.projector = None
         self.projectors = nn.ModuleDict(
             {h: ProjectionHead(hidden, 16, d_proj) for h in heads}
         )
         for name in ("_pool", "_pool_parts", "pool_from_parts", "embed_parts",
-                     "forward_split"):
+                     "forward_split", "pool_head_metrics"):
             setattr(self, name, types.MethodType(getattr(WaivEncoder, name), self))
 
     def tokens(self, images):
@@ -1891,7 +1894,7 @@ def test_single_head_checkpoint_artifact_is_unchanged():
 
 
 def _fake_hf_encoder(monkeypatch, hidden=1024, n_tokens=197, split_heads=(),
-                     pooling="clsmean"):
+                     pooling="clsmean", pool_head="mean", tokens=None):
     """A REAL ``WaivEncoder`` over a fake HF backbone -- no download, real construction.
 
     This is what makes the width assertions meaningful: the ProjectionHeads below are
@@ -1899,7 +1902,10 @@ def _fake_hf_encoder(monkeypatch, hidden=1024, n_tokens=197, split_heads=(),
     """
     import waivphaet.models.encoder as E
 
-    tokens = torch.randn(3, n_tokens, hidden)
+    # ``tokens`` is injectable so two encoders can be built over the SAME backbone output,
+    # which is what makes "these two arms are byte-identical" a real comparison rather
+    # than a comparison of two different random draws.
+    tokens = torch.randn(3, n_tokens, hidden) if tokens is None else tokens
     backbone = _HFBackbone(tokens)
     backbone.config = types.SimpleNamespace(
         hidden_size=hidden, num_hidden_layers=2, patch_size=16, image_size=224,
@@ -1911,7 +1917,7 @@ def _fake_hf_encoder(monkeypatch, hidden=1024, n_tokens=197, split_heads=(),
     monkeypatch.setattr(E, "normalization_for", lambda _b: (E.IMAGENET_MEAN, E.IMAGENET_STD))
     model = E.WaivEncoder(E.EncoderConfig(
         backbone="owkin/phikon-v2", use_lora=False, pooling=pooling,
-        split_heads=tuple(split_heads),
+        split_heads=tuple(split_heads), pool_head=pool_head,
     ))
     return model, tokens
 
@@ -2163,3 +2169,443 @@ def test_both_probe_readers_skip_a_width_mismatched_projector():
         window = body[j:j + 1200]
         assert "model.embed_dim" in window, f"{rel}:{fn} loads projector.pt unguarded"
         assert "skipping projector" in window, f"{rel}:{fn} skips silently"
+
+
+# ======================================================================================
+# ALTERNATIVE TOKEN POOLINGS -- gem / attn / lse for the non-CLS loss head
+# ======================================================================================
+#
+# RESULTS 9's defect, restated: `mean` is LINEAR, so d(mean)/d(t_i) = (1/N) I and the direct
+# gradient reaching every patch token is the IDENTICAL vector. The loss can translate the
+# token cloud but never expresses a preference about the tokens' relative arrangement --
+# and a uniform translation is exactly what THUNDER's biased proj_dec absorbs into its
+# bias. G3 below is the entire point of the feature: it MEASURES the per-token gradient
+# spread and asserts the partition (mean == 0, the others >> 0).
+
+
+def _layernormed_tokens(b=4, n=196, d=64, seed=7):
+    """Tokens with the property that actually drives the sign problem: zero-mean channels.
+
+    The last op before a ViT's token sequence leaves the backbone is a LayerNorm, so every
+    token vector is EXACTLY zero-mean across its channels and ~half its entries are
+    negative. Random gaussians are only approximately that; applying the LayerNorm makes
+    the test's premise exact rather than statistical, which is what lets G4 assert a
+    ~50% clamp-zeroed fraction rather than "some".
+    """
+    g = torch.Generator().manual_seed(seed)
+    x = torch.randn(b, n, d, generator=g) * 2.0 + 0.3
+    return torch.nn.functional.layer_norm(x, (d,))
+
+
+# --- G3 THE CRITICAL GATE: d(pool)/d(t_i) must depend on i ------------------------------
+
+
+def test_G3_mean_pooling_gives_every_token_the_IDENTICAL_gradient():
+    """The defect, documented as a number. This test is SUPPOSED to show zero spread."""
+    from waivphaet.models.pooling import MeanPool, token_gradient_spread
+
+    x = _layernormed_tokens()
+    stats = token_gradient_spread(MeanPool(), x)
+    # ~1e-7 rather than a hard 0.0: the only difference between g_i and mean_i(g) is the
+    # rounding of the float32 mean reduction itself. That number IS the noise floor, and
+    # G3's 1e-2 margin for the alternatives sits five orders of magnitude above it.
+    assert stats["spread_max"] < 1e-6, stats
+    # and the underlying claim, directly: g_i == g_j for every pair
+    xg = x.clone().requires_grad_(True)
+    MeanPool()(xg).sum().backward()
+    g = xg.grad
+    assert torch.equal(g[:, 0, :], g[:, -1, :])
+    assert torch.allclose(g, torch.full_like(g, 1.0 / x.shape[1]))
+
+
+@pytest.mark.parametrize("name", ["gem", "gem_clamp", "attn", "lse"])
+def test_G3_alternative_poolings_have_token_DEPENDENT_gradients(name):
+    """(G3) The gate the whole change lives or dies on.
+
+    A variant whose per-token gradients are (near-)identical is just the mean wearing a
+    hat: it can still only translate the token cloud, so it cannot address the
+    segmentation null-space argument and is not worth a GPU. The margin is 1e-2, four
+    orders of magnitude above the float32 noise floor that `mean` measures at (exactly 0).
+    """
+    from waivphaet.models.pooling import build_pool_head, token_gradient_spread
+
+    torch.manual_seed(0)
+    x = _layernormed_tokens()
+    pool = build_pool_head(name, x.shape[-1])
+    stats = token_gradient_spread(pool, x)
+    assert stats["spread_min"] > 1e-2, (name, stats)
+    assert stats["max_abs_grad"] > 0.0, (name, stats)
+
+
+def test_G3_pool_head_registry_and_partition_are_consistent():
+    """The names the CLI offers, the ones the encoder accepts and the ones G3 claims are
+    token-dependent must be ONE list, not three that can drift apart."""
+    import waivphaet.models.pooling as P
+    from waivphaet.models.encoder import EncoderConfig
+
+    assert P.POOL_HEAD_NAMES == ("mean", "gem", "gem_clamp", "attn", "lse")
+    assert set(P.TOKEN_DEPENDENT_POOLS) == set(P.POOL_HEAD_NAMES) - {"mean"}
+    assert EncoderConfig().pool_head == "mean", "the default must remain the incumbent"
+    for n in P.POOL_HEAD_NAMES:
+        assert isinstance(P.build_pool_head(n, 8), torch.nn.Module)
+    with pytest.raises(ValueError, match="unknown pool head"):
+        P.build_pool_head("softmax", 8)
+
+
+# --- G4 SIGN HANDLING: what the clamp destroys, measured --------------------------------
+
+
+def test_G4_clamp_gem_zeroes_about_half_of_every_token_and_says_so():
+    """(G4) THE reason plain clamp-GeM is not the default.
+
+    GeM assumes post-ReLU x >= 0. LayerNorm'd ViT tokens are exactly zero-mean, so the
+    textbook clamp deletes ~half of every token vector -- silently, with the right shape.
+    The number has to be reported, so it is asserted here and logged as
+    ``pool_zero_fraction`` in history.json.
+    """
+    from waivphaet.models.pooling import GeMPool
+
+    x = _layernormed_tokens()
+    assert (x < 0).float().mean() > 0.4, "the fixture is not actually signed"
+
+    clamp = GeMPool(mode="clamp")
+    clamp(x)
+    frac = clamp.extra_metrics()["pool_zero_fraction"]
+    assert 0.4 < frac < 0.6, f"expected ~half the entries clamped away, measured {frac}"
+
+    # ... and those entries get EXACTLY zero gradient, which is the part that matters:
+    # the pooling cannot start discriminating between tokens in coordinates it cannot see.
+    xg = x.clone().requires_grad_(True)
+    GeMPool(mode="clamp")(xg).sum().backward()
+    dead = (xg.grad == 0).float().mean()
+    assert dead > 0.4, f"clamped entries should be gradient-dead, measured {dead}"
+
+
+@pytest.mark.parametrize("name", ["gem", "attn", "lse"])
+def test_G4_softplus_attn_and_lse_zero_nothing(name):
+    """(G4) The shipped variants must not destroy a single entry, nor kill a gradient."""
+    from waivphaet.models.pooling import build_pool_head
+
+    torch.manual_seed(0)
+    x = _layernormed_tokens()
+    pool = build_pool_head(name, x.shape[-1])
+    assert pool.extra_metrics().get("pool_zero_fraction", 0.0) == 0.0
+
+    xg = x.clone().requires_grad_(True)
+    out = pool(xg)
+    assert torch.isfinite(out).all()
+    out.sum().backward()
+    assert torch.isfinite(xg.grad).all()
+    assert (xg.grad == 0).float().mean() == 0.0, (
+        f"{name} produced dead gradients; only the clamp variant may"
+    )
+    if name == "gem":
+        pool(x)
+        assert pool.extra_metrics()["pool_zero_fraction"] == 0.0
+
+
+def test_G4_softplus_gem_keeps_the_ordering_the_clamp_destroys():
+    """Monotonicity is the whole reason softplus replaces the clamp: two tokens that
+    differ ONLY in their negative entries are indistinguishable to clamp-GeM and
+    distinguishable to softplus-GeM."""
+    from waivphaet.models.pooling import GeMPool
+
+    a = torch.tensor([[[-1.0, 2.0], [-3.0, 2.0]]])   # (1, 2, 2)
+    b = torch.tensor([[[-9.0, 2.0], [-0.5, 2.0]]])   # same positives, different negatives
+    assert torch.allclose(GeMPool(mode="clamp")(a), GeMPool(mode="clamp")(b)), (
+        "the clamp is supposed to be blind here -- if it is not, this test has no teeth"
+    )
+    assert not torch.allclose(GeMPool(mode="softplus")(a), GeMPool(mode="softplus")(b))
+
+
+def test_pool_head_learnable_state_is_reported_and_starts_where_documented():
+    from waivphaet.models.pooling import build_pool_head
+
+    torch.manual_seed(0)
+    x = _layernormed_tokens()
+    gem = build_pool_head("gem", 64)
+    assert gem.extra_metrics()["pool_gem_p"] == pytest.approx(3.0)
+    lse = build_pool_head("lse", 64)
+    assert lse.extra_metrics()["pool_lse_tau"] == pytest.approx(1.0)
+    attn = build_pool_head("attn", 64)
+    attn(x)
+    m = attn.extra_metrics()
+    # Non-degenerate but not peaked: the query is unit-VARIANCE per component (NOT unit
+    # norm), which puts the logits at std ~1 and keeps the attention from collapsing to
+    # the uniform weighting that would make this head literally the mean pooling. A
+    # unit-norm query measured entropy 0.99999 / G3 spread 6e-3 on real phikon-v2 tokens.
+    assert 0.5 < m["pool_attn_entropy"] < 0.99999, m
+    assert m["pool_attn_max"] > 1.5 / 196
+    # every variant's parameters must be TRAINABLE, or the "learnable p/tau" claim is false
+    for p in list(gem.parameters()) + list(lse.parameters()) + list(attn.parameters()):
+        assert p.requires_grad
+    assert [p.numel() for p in gem.parameters()] == [1]
+    assert [p.numel() for p in lse.parameters()] == [1]
+
+
+def test_lse_pooling_interpolates_mean_to_max():
+    """tau -> 0 is the mean, large tau is the max. The interpolation is the claim."""
+    from waivphaet.models.pooling import LSEPool
+
+    x = _layernormed_tokens(b=2, n=32, d=8)
+    tiny = LSEPool(tau_init=1e-6)
+    assert torch.allclose(tiny(x), x.mean(dim=1), atol=1e-4)
+    # tau is clamped at e^4 ~ 54.6 (see LSEPool.log_tau_max), so "max" here means
+    # decisively nearer the max than the mean, not the max to machine precision.
+    big = LSEPool(tau_init=50.0)
+    out, mx, mn = big(x), x.max(dim=1).values, x.mean(dim=1)
+    assert (out - mx).abs().max() < 0.05
+    assert (out - mx).abs().mean() * 20 < (mn - mx).abs().mean()
+
+
+# --- G5 SHAPES + EVAL ISOLATION ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("pool_head", ["gem", "gem_clamp", "attn", "lse"])
+def test_G5_pool_head_widths_are_hidden_and_embed_is_untouched(monkeypatch, pool_head):
+    """(G5) Each head's projector input is `hidden` (1024), and ``embed()`` at pooling
+    ``clsmean`` still returns 2048-d and is byte-identical to a non-pool-head run's.
+
+    Eval pooling is a PROTOCOL CONSTANT (PathoROB's reference row is ``phikonv2_clsmean``);
+    the alternative poolings are training-time loss heads and must not leak into it.
+    """
+    shared = torch.randn(3, 197, 1024)
+    plain, _ = _fake_hf_encoder(monkeypatch, split_heads=("cls", "mean"), tokens=shared)
+    model, _ = _fake_hf_encoder(monkeypatch, split_heads=("cls", "mean"),
+                                pool_head=pool_head, tokens=shared)
+
+    assert model.pool_head_name == pool_head and model.pool_head is not None
+    assert model.embed_dim == 2048
+    for name in ("cls", "mean"):
+        assert model.projectors[name].net[0].weight.shape[1] == 1024
+
+    images = torch.randn(3, 3, 224, 224)
+    emb = model.embed(images)
+    assert emb.shape == (3, 2048)
+    # THE eval-isolation assertion: byte-identical to the run without a pool head
+    assert torch.equal(emb, plain.embed(images))
+    assert torch.equal(model.embed_parts(images)["mean"], plain.embed_parts(images)["mean"])
+
+    parts, z = model.forward_split(images)
+    assert z["cls"].shape == z["mean"].shape == (3, 512)
+    # `parts` still carries the TRUE clsmean halves -- the retention term reassembles them
+    assert torch.equal(model.pool_from_parts(parts), emb)
+    # ... and the head's actual input is published separately and really is different
+    assert parts["pool"].shape == (3, 1024)
+    assert not torch.allclose(parts["pool"], parts["mean"])
+
+
+def test_G5_pool_head_mean_is_the_SAME_CODE_as_no_pool_head(monkeypatch):
+    """(G1/G5) ``--pool-head mean`` must not perturb the arm already running.
+
+    Guaranteed structurally, not numerically: on 'mean' the encoder builds NO pooling
+    module at all and keeps the literal ``patches.mean(dim=1)`` inside ``_pool_parts``. So
+    there is no new parameter, no new state_dict key and no RNG draw to shift the
+    projector init.
+    """
+    shared = torch.randn(3, 197, 1024)
+    plain, _ = _fake_hf_encoder(monkeypatch, split_heads=("cls", "mean"), tokens=shared)
+    explicit, _ = _fake_hf_encoder(monkeypatch, split_heads=("cls", "mean"),
+                                   pool_head="mean", tokens=shared)
+    assert plain.pool_head is None and explicit.pool_head is None
+    assert plain.state_dict().keys() == explicit.state_dict().keys()
+    assert not any("pool_head" in k for k in plain.state_dict())
+
+    images = torch.randn(3, 3, 224, 224)
+    p_parts, _ = plain.forward_split(images)
+    e_parts, _ = explicit.forward_split(images)
+    assert set(p_parts) == set(e_parts) == {"cls", "mean"}, "no 'pool' key on the mean arm"
+    for k in p_parts:
+        assert torch.equal(p_parts[k], e_parts[k])
+
+
+def test_pool_head_reads_num_prefix_tokens_from_the_encoder(monkeypatch):
+    """(G5) 1 on phikon-v2, 5 on Virchow2. The pooling modules never see the prefix slice
+    at all -- the ENCODER does it -- so this asserts the encoder passes the right window."""
+    import waivphaet.models.encoder as E
+
+    for num_prefix, n_tokens in ((1, 197), (5, 261)):
+        model, tokens = _fake_hf_encoder(monkeypatch, hidden=32, n_tokens=n_tokens,
+                                         split_heads=("cls", "mean"), pool_head="lse")
+        model.num_prefix_tokens = num_prefix
+        parts, _ = model.forward_split(torch.randn(3, 3, 224, 224))
+        expected = model.pool_head(tokens[:, num_prefix:, :])
+        assert torch.equal(parts["pool"], expected)
+        if num_prefix == 5:
+            naive = model.pool_head(tokens[:, 1:, :])     # the hardcoded-1 bug
+            assert not torch.allclose(parts["pool"], naive), "the test has no teeth"
+    assert E.POOL_PARTS == ("cls", "mean")
+
+
+def test_pool_head_requires_a_mean_split_head(monkeypatch):
+    with pytest.raises(ValueError, match="requires split_heads to include 'mean'"):
+        _fake_hf_encoder(monkeypatch, split_heads=(), pool_head="gem")
+    with pytest.raises(ValueError, match="requires split_heads to include 'mean'"):
+        _fake_hf_encoder(monkeypatch, split_heads=("cls",), pool_head="gem")
+    with pytest.raises(ValueError, match="unknown pool_head"):
+        _fake_hf_encoder(monkeypatch, split_heads=("cls", "mean"), pool_head="max")
+
+
+# --- the per-step wiring assertion must watch what the head ACTUALLY got -----------------
+
+
+def test_split_head_assertion_watches_the_POOLED_input_not_the_unused_mean():
+    """With a gem/attn/lse head, ``parts['mean']`` is still the true arithmetic mean (the
+    retention term needs it) but the head is fed ``parts['pool']``. If the assertion kept
+    reading 'mean' it would be comparing CLS against a vector nothing consumed, and a gem
+    head accidentally wired to CLS would sail straight past it."""
+    from waivphaet.train.contrastive import assert_split_head_inputs
+
+    cls = torch.randn(6, 8)
+    parts = {"cls": cls, "mean": torch.randn(6, 8), "pool": cls.clone()}
+    with pytest.raises(ValueError, match="SPLIT-HEAD WIRING BUG"):
+        assert_split_head_inputs(parts)
+    # and the legacy two-key form is untouched
+    stats = assert_split_head_inputs({"cls": cls, "mean": torch.randn(6, 8)})
+    assert stats["split_input_rel_distance"] > 0.5
+
+
+@pytest.mark.parametrize("pool_head", ["gem", "attn", "lse"])
+def test_pool_head_end_to_end_step_trains_the_pooling_parameters(pool_head):
+    """One real optimiser step through the shipped split-head loss: the pooling's own
+    parameters must receive gradient, or the "learnable p / tau / query" claim is empty."""
+    from waivphaet.train.contrastive import assert_split_head_inputs, split_head_info_nce
+
+    torch.manual_seed(0)
+    model = _SplitTinyEncoder(hidden=8, n_tokens=7, pool_head=pool_head)
+    batch = _split_batches(1)[0]
+    parts, az = model.forward_split(batch["anchor"])
+    _, pz = model.forward_split(batch["positive"])
+    stats = assert_split_head_inputs(parts)
+    assert stats["split_input_rel_distance"] > 1e-3
+    loss, metrics = split_head_info_nce(
+        az, pz, batch["group_id"], {"cls": 0.5, "mean": 0.5}, 0.07, False
+    )
+    loss.backward()
+    grads = {n: p.grad for n, p in model.pool_head.named_parameters()}
+    assert grads, "the pooling has no parameters to train"
+    for n, g in grads.items():
+        assert g is not None and torch.isfinite(g).all() and g.abs().sum() > 0, n
+    assert set(metrics) >= {"loss_cls", "loss_mean", "top1_cls", "top1_mean"}
+    assert set(model.pool_head_metrics()), "pooling state must be logged"
+
+
+def test_pool_head_checkpoint_roundtrips(tmp_path):
+    """GeM's p, LSE's tau and the attention query are TRAINED and are not reconstructible
+    from anything else in the directory, so they have to be in the checkpoint."""
+    from waivphaet.train.contrastive import load_projectors, save_projectors
+
+    torch.manual_seed(0)
+    model = _SplitTinyEncoder(hidden=8, pool_head="gem")
+    with torch.no_grad():
+        model.pool_head.p.fill_(4.25)
+    man = save_projectors(model, tmp_path)
+    assert man["pool_head"] == "gem" and man["pool_head_pt"] == "pool_head.pt"
+    assert (tmp_path / "pool_head.pt").exists()
+
+    fresh = _SplitTinyEncoder(hidden=8, pool_head="gem")
+    assert float(fresh.pool_head.p.detach()) == pytest.approx(3.0)
+    load_projectors(fresh, tmp_path)
+    assert float(fresh.pool_head.p.detach()) == pytest.approx(4.25)
+
+
+def test_mean_pool_head_checkpoint_artifact_is_unchanged(tmp_path):
+    """The arm already running must keep writing exactly the files it writes today."""
+    from waivphaet.train.contrastive import save_projectors
+
+    model = _SplitTinyEncoder(hidden=8, pool_head="mean")
+    man = save_projectors(model, tmp_path)
+    assert not (tmp_path / "pool_head.pt").exists()
+    assert man["pool_head"] == "mean" and "pool_head_pt" not in man
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "projector.pt", "projector_cls.pt", "projector_heads.json", "projector_mean.pt",
+    ]
+
+
+def test_train_refuses_a_config_pool_head_the_encoder_does_not_have():
+    """A run whose name says gem and whose encoder pools with the mean is a result nothing
+    downstream could ever catch. Fail before any compute."""
+    from waivphaet.train.contrastive import TrainConfig, train
+
+    model = _SplitTinyEncoder(hidden=8, pool_head="mean")
+    cfg = TrainConfig(split_heads=True, pool_head="gem", max_steps=1)
+    with pytest.raises(ValueError, match="the encoder pools with 'mean'"):
+        train(model, [], cfg, device="cpu")
+    assert TrainConfig().pool_head == "mean"
+
+
+# --- CLI plumbing ------------------------------------------------------------------------
+
+
+def test_pool_head_cli_flag_defaults_and_choices():
+    mod = _train_lora_module()
+    old = sys.argv
+    try:
+        sys.argv = ["prog", "--out-dir", "/tmp/x"]
+        args = mod.parse_args()
+    finally:
+        sys.argv = old
+    # None until passed -- that is how "was it given without --split-heads?" stays
+    # answerable, exactly as --cls-weight / --n-groups do.
+    assert args.pool_head is None
+
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "train_lora.py").read_text()
+    i = src.index('"--pool-head"')
+    block = src[i:i + 2000]
+    assert 'choices=list(POOL_HEAD_NAMES)' in block
+    for phrase in ("d(mean)/d(t_i)", "TOKEN-DEPENDENT", "SOFTPLUS", "DIAGNOSTIC ONLY",
+                   "LayerNorm", "Eval pooling is UNAFFECTED"):
+        assert phrase in block, f"--pool-head help must state {phrase!r}"
+
+
+def test_pool_head_without_split_heads_is_an_error(tmp_path):
+    """A silently-ignored objective flag is how two runs get labelled the same."""
+    repo = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, str(repo / "scripts" / "train_lora.py"),
+         "--out-dir", str(tmp_path / "x"), "--pool-head", "gem"],
+        capture_output=True, text=True, cwd=repo,
+        env={**os.environ, "PYTHONPATH": str(repo / "src")},
+    )
+    assert r.returncode != 0
+    out = r.stderr + r.stdout
+    assert "requires --split-heads" in out and "protocol constant" in out
+
+
+def test_pool_head_gem_clamp_warns_that_it_is_a_diagnostic():
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "train_lora.py").read_text()
+    i = src.index('pool_head == "gem_clamp"')
+    window = src[i:i + 900]
+    assert "WARNING" in window and "pool_zero_fraction" in window
+    assert "--pool-head gem" in window, "the warning must name the variant to use instead"
+
+
+def test_train_config_and_encoder_config_both_record_the_pooling():
+    """config.json is the only place a later reader can tell a gem run from a mean one."""
+    from waivphaet.models.encoder import EncoderConfig
+    from waivphaet.train.contrastive import TrainConfig
+
+    assert "pool_head" in dataclasses.asdict(TrainConfig())
+    assert EncoderConfig(split_heads=("cls", "mean"), pool_head="attn").pool_head == "attn"
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "train_lora.py").read_text()
+    assert "pool_head=pool_head" in src
+    assert '"pool_head": pool_head' in src, "the encoder block must record it too"
+
+
+def test_probe_readers_ignore_pool_head_pt():
+    """(G6) ``embed_probe.load_adapter`` and ``extract_pathorob_features.build_model`` must
+    tolerate the new checkpoints. Both load by NAME, never by globbing the directory, so an
+    extra pool_head.pt is inert -- and neither may start reading it, because the pooling is
+    a training-time loss head and every eval reads model.embed()."""
+    repo = Path(__file__).resolve().parents[1]
+    for rel, fn in (("scripts/embed_probe.py", "def load_adapter"),
+                    ("scripts/extract_pathorob_features.py", "def build_model")):
+        src = (repo / rel).read_text()
+        assert "pool_head" not in src, f"{rel} must not read the training-time pooling"
+        # The checkpoint reader must load BY NAME. A directory enumeration there would
+        # make every new artifact a potential crash for the whole RI follower -- which is
+        # exactly the class of launch blocker RESULTS 9 records for projector.pt.
+        body = src[src.index(fn):][:6000]
+        assert ".iterdir()" not in body and ".glob(" not in body, (
+            f"{rel}:{fn} enumerates the checkpoint dir; an extra artifact could break it"
+        )
