@@ -30,7 +30,7 @@ from waivphaet.data.grid import build_grid_loader
 from waivphaet.data.pairs import build_pair_loader
 from waivphaet.data.repack import present_filenames
 from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
-from waivphaet.train.contrastive import TrainConfig, train
+from waivphaet.train.contrastive import TrainConfig, build_split_head_names, train
 
 
 def parse_ckpt_schedule(value: str) -> list[int]:
@@ -124,6 +124,31 @@ def parse_args():
                          "contrastive --temperature: the similarity matrix is cosine, so at "
                          "tau=1 the row softmax over ~group_size candidates is near-uniform "
                          "and the term mostly measures noise.")
+    # --- SPLIT LOSS HEADS ----------------------------------------------------------------
+    # Training pools clsmean = cat([CLS, mean(patches)]) -> ONE projector -> ONE InfoNCE, so
+    # nothing forces BOTH halves to become invariant -- and the eval pooling disagrees
+    # (HEST and THUNDER-on-phikon-v2 read CLS only).
+    ap.add_argument("--split-heads", action="store_true",
+                    help="score CLS and mean SEPARATELY, each through its own hidden-d "
+                         "ProjectionHead: L = w_cls*InfoNCE(proj_cls(cls)) + "
+                         "w_mean*InfoNCE(proj_mean(mean)). Off = the single 2048-d concat "
+                         "head, bit-identical to every published run. Eval pooling is "
+                         "UNAFFECTED (it is a protocol constant) -- this changes the "
+                         "objective, not what embed() exports. Not usable with --grid.")
+    ap.add_argument("--cls-weight", type=float, default=None,
+                    help="w_cls, default 0.5. The defaults are 0.5/0.5 and NOT 1.0/1.0 on "
+                         "purpose: LOSS SCALE IS A CONTROLLED VARIABLE. Weights summing to "
+                         "1 keep the total gradient magnitude comparable to the single-head "
+                         "baseline, so the arm measures the structural split rather than "
+                         "silently doubling the effective learning rate. 0.0 REMOVES the "
+                         "head entirely -- it is not built, not run, and its BatchNorm "
+                         "running stats never update, which is what makes --cls-weight 1.0 "
+                         "--mean-weight 0.0 an actually-single-head arm rather than a "
+                         "zero-multiplied one. Requires --split-heads.")
+    ap.add_argument("--mean-weight", type=float, default=None,
+                    help="w_mean, default 0.5. See --cls-weight: the 0.5/0.5 default is "
+                         "scale neutrality, and a weight of 0.0 removes the head rather "
+                         "than zero-multiplying it. Requires --split-heads.")
     ap.add_argument("--grad-checkpointing", action="store_true",
                     help="recompute block activations in backward. The negative count is "
                          "group_size-1, so more negatives means a bigger forward batch; "
@@ -181,6 +206,57 @@ def main() -> int:
     # Resolve the historical defaults now that the "was it passed?" question is answered.
     n_groups = 4 if args.n_groups is None else args.n_groups
     group_size = 64 if args.group_size is None else args.group_size
+
+    # --- split loss heads -----------------------------------------------------------------
+    # Same rule as --grid above: a batching/objective flag that is silently ignored is how
+    # two runs end up labelled the same and trained differently, so it is an error.
+    if not args.split_heads:
+        passed = [
+            f"--{n.replace('_', '-')}"
+            for n in ("cls_weight", "mean_weight")
+            if getattr(args, n) is not None
+        ]
+        if passed:
+            raise SystemExit(
+                f"{' / '.join(passed)} requires --split-heads: without it there is a single "
+                "concat projector and one InfoNCE, so a per-head weight has nothing to "
+                "weight and would be silently ignored."
+            )
+    cls_weight = 0.5 if args.cls_weight is None else args.cls_weight
+    mean_weight = 0.5 if args.mean_weight is None else args.mean_weight
+    split_head_names: tuple[str, ...] = ()
+    if args.split_heads:
+        if args.grid:
+            raise SystemExit(
+                "--split-heads is not implemented for --grid: the grid loss scores one "
+                "(C*T, D) tensor and the per-head weighting has no validated form there. "
+                "Refusing rather than running an untested objective."
+            )
+        if args.pooling != "clsmean":
+            raise SystemExit(
+                f"--split-heads with --pooling {args.pooling}: the split is exactly the two "
+                "halves of clsmean, so any other training pooling makes it meaningless. "
+                "(Eval pooling is separate and stays clsmean regardless.)"
+            )
+        try:
+            split_head_names = build_split_head_names(cls_weight, mean_weight)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        dropped = [h for h in ("cls", "mean") if h not in split_head_names]
+        print(
+            f"[train] SPLIT HEADS: {list(split_head_names)} at weights "
+            f"cls={cls_weight} mean={mean_weight} -- L = "
+            + " + ".join(
+                f"{cls_weight if h == 'cls' else mean_weight}*InfoNCE(proj_{h})"
+                for h in split_head_names
+            )
+            + (
+                f" | {dropped} NOT BUILT (a zero-weight head would still update its "
+                "BatchNorm running stats)" if dropped else
+                " | weights sum to 1 so the total gradient magnitude stays comparable to "
+                "the single-head baseline (scale neutrality)"
+            )
+        )
 
     # --- Retention term requires a frozen teacher, which only LoRA gives us for free ---
     # Under --full-ft the "frozen base" and the student are the same weights, so the KL
@@ -318,6 +394,7 @@ def main() -> int:
         lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
         proj_out_dim=args.proj_out_dim, pooling=args.pooling,
         grad_checkpointing=args.grad_checkpointing,
+        split_heads=split_head_names,
     )
     print("[train] params:", model.trainable_parameter_summary())
 
@@ -368,10 +445,15 @@ def main() -> int:
         weight_decay=args.weight_decay, log_every=args.log_every, symmetric=args.symmetric,
         retention_kl_weight=args.retention_kl_weight,
         retention_kl_temperature=args.retention_kl_temperature,
+        # Record the objective, not just the run name: config.json is the only place a
+        # later reader can tell a split-head run from a concat-head one.
+        split_heads=args.split_heads,
+        cls_weight=cls_weight, mean_weight=mean_weight,
         encoder={"backbone": args.backbone, "use_lora": use_lora,
                  "lora_rank": args.lora_rank, "lora_alpha": args.lora_alpha,
                  "pooling": args.pooling, "proj_out_dim": args.proj_out_dim,
-                 "grad_checkpointing": args.grad_checkpointing},
+                 "grad_checkpointing": args.grad_checkpointing,
+                 "split_heads": list(split_head_names)},
     )
     if ckpt_schedule is not None:
         cfg.ckpt_schedule = ckpt_schedule

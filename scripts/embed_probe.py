@@ -94,7 +94,28 @@ def load_adapter(model, ckpt: Path) -> None:
     missing = getattr(out, "unexpected_keys", None)
     if missing:
         raise RuntimeError(f"adapter keys not consumed: {list(missing)[:5]}")
-    model.projector.load_state_dict(torch.load(ckpt / "projector.pt", map_location="cpu"))
+    # The projector is TRAINING-ONLY: this probe scores model.embed() and never touches
+    # it. Its input width is tied to the *training* objective -- 2048 for the single
+    # concat head at clsmean, but 1024 for a SPLIT head (--split-heads), which sees one
+    # pool. Load it when the widths agree (keeps the artifact faithful); skip loudly when
+    # they don't, exactly as load_full_ft_checkpoint below already did.
+    #
+    # Unguarded, this line hard-crashed the RI-curve follower on every checkpoint of a
+    # split-head run: size mismatch for net.0.weight, 1024 vs 2048. The probe's numbers do
+    # not depend on the projector at all, so a crash there loses the whole curve for
+    # nothing.
+    proj_sd = torch.load(ckpt / "projector.pt", map_location="cpu")
+    saved_in = proj_sd["net.0.weight"].shape[1]
+    if saved_in == model.embed_dim:
+        model.projector.load_state_dict(proj_sd)
+    else:
+        print(
+            f"[probe] skipping projector: trained with a {saved_in}-d input, "
+            f"evaluating at {model.embed_dim}-d (pooling={model.cfg.pooling}). "
+            "Projector is unused for feature extraction; LoRA backbone weights are "
+            "unaffected.",
+            flush=True,
+        )
 
 
 def load_full_ft_checkpoint(model, ckpt: Path) -> None:

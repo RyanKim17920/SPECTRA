@@ -63,6 +63,11 @@ from transformers import AutoModel
 
 DEFAULT_BACKBONE = "owkin/phikon-v2"
 
+#: The two pools ``clsmean`` concatenates, in the order it concatenates them. Named here
+#: so the split-head machinery and ``_pool`` cannot drift apart: ``pool_from_parts`` below
+#: reconstructs ``_pool``'s output from these and is tested for bitwise equality with it.
+POOL_PARTS: tuple[str, ...] = ("cls", "mean")
+
 # ImageNet stats -- what phikon-v2's own BitImageProcessor uses, and what both PathoROB
 # and plismbench feed it. Keep identical or the reproduced baseline drifts for free.
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -337,6 +342,25 @@ class EncoderConfig:
     lora_rank: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.0
+    #: **Split loss heads** (``()`` = off, the legacy single concat projector).
+    #:
+    #: The training pool ``clsmean`` is ``cat([CLS, mean(patches)])`` -> ONE projector ->
+    #: ONE InfoNCE. Nothing in that objective forces *both* halves to become invariant: it
+    #: can satisfy itself through whichever half is easier. That matters because the eval
+    #: pooling disagrees with the training pooling -- HEST and THUNDER-on-phikon-v2 read
+    #: CLS only. Setting this to ``("cls", "mean")`` builds ONE ``ProjectionHead`` PER
+    #: POOL, each taking ``hidden_size`` (not ``2*hidden_size``), and the trainer applies a
+    #: separate InfoNCE to each.
+    #:
+    #: A single-element tuple is a genuinely single-head run: the other head is NOT built,
+    #: so it burns no compute and -- the part that actually matters -- its
+    #: ``nn.BatchNorm1d`` running stats are never updated. A zero-*weighted* dead head
+    #: would still do both.
+    #:
+    #: ``embed_dim`` is deliberately UNTOUCHED by this: it is the eval-time pooled width
+    #: (2048 at ``clsmean``), a protocol constant, and every eval path reads ``embed()``
+    #: and never a projector.
+    split_heads: tuple[str, ...] = ()
     #: ``None`` (the default) = **discover** the target leaf names from the loaded
     #: backbone by intersecting ``LORA_CANDIDATE_MODULES`` with the block Linears it
     #: actually has. Pass an explicit tuple only to deliberately narrow the set.
@@ -603,9 +627,31 @@ class WaivEncoder(nn.Module):
         self.backbone = backbone
 
         self.embed_dim = self.hidden_size * (2 if cfg.pooling == "clsmean" else 1)
-        self.projector = ProjectionHead(
-            self.embed_dim, cfg.proj_hidden_dim, cfg.proj_out_dim, cfg.proj_use_bn
-        )
+        #: Which pools get their own loss head. ``()`` = the legacy single concat head,
+        #: which is the path every published number was produced on and is left
+        #: bit-identical (same module, same construction order, same RNG draws).
+        self.split_heads: tuple[str, ...] = tuple(cfg.split_heads or ())
+        bad = [h for h in self.split_heads if h not in POOL_PARTS]
+        if bad:
+            raise ValueError(
+                f"unknown split head(s) {bad}; valid names are {list(POOL_PARTS)}"
+            )
+        if len(set(self.split_heads)) != len(self.split_heads):
+            raise ValueError(f"duplicate split head in {self.split_heads}")
+        if self.split_heads:
+            # Each head sees ONE pool, so its input is `hidden_size` -- NOT `embed_dim`.
+            self.projector = None
+            self.projectors = nn.ModuleDict({
+                name: ProjectionHead(
+                    self.hidden_size, cfg.proj_hidden_dim, cfg.proj_out_dim, cfg.proj_use_bn
+                )
+                for name in self.split_heads
+            })
+        else:
+            self.projectors = None
+            self.projector = ProjectionHead(
+                self.embed_dim, cfg.proj_hidden_dim, cfg.proj_out_dim, cfg.proj_use_bn
+            )
 
     # --- pooling ------------------------------------------------------------------
 
@@ -623,10 +669,44 @@ class WaivEncoder(nn.Module):
             return torch.cat([cls, patches.mean(dim=1)], dim=1)
         raise ValueError(f"unknown pooling {self.cfg.pooling!r}")
 
+    def _pool_parts(self, tokens: torch.Tensor) -> dict[str, torch.Tensor]:
+        """The two pools ``clsmean`` concatenates, kept SEPARATE. Each is ``(B, hidden)``.
+
+        The slice is ``self.num_prefix_tokens``, read off the loaded backbone -- 1 on every
+        HF ViT/Dinov2, **5 on Virchow2** ([CLS] + 4 registers). Hardcoding ``tokens[:, 1:]``
+        here would silently average four register tokens into the "mean" head's input on
+        Virchow2: right shape, right dtype, no warning, just a worse number. Same rule and
+        the same source of truth as :meth:`_pool`, deliberately.
+        """
+        return {
+            "cls": tokens[:, 0, :],
+            "mean": tokens[:, self.num_prefix_tokens :, :].mean(dim=1),
+        }
+
+    def pool_from_parts(self, parts: dict[str, torch.Tensor]) -> torch.Tensor:
+        """Reassemble :meth:`_pool`'s output from :meth:`_pool_parts`, per ``cfg.pooling``.
+
+        Exists so the split-head trainer can still hand the retention term (and anything
+        else that wants "the embedding this run exports") exactly the vector the
+        single-head path would have produced, without a second backbone forward.
+        """
+        if self.cfg.pooling == "cls":
+            return parts["cls"]
+        if self.cfg.pooling == "mean":
+            return parts["mean"]
+        if self.cfg.pooling == "clsmean":
+            return torch.cat([parts["cls"], parts["mean"]], dim=1)
+        raise ValueError(f"unknown pooling {self.cfg.pooling!r}")
+
     # --- forward ------------------------------------------------------------------
 
-    def embed(self, images: torch.Tensor) -> torch.Tensor:
-        """uint8 NHWC (or normalised float NCHW) -> pooled embedding ``(B, embed_dim)``."""
+    def tokens(self, images: torch.Tensor) -> torch.Tensor:
+        """uint8 NHWC (or normalised float NCHW) -> raw ``(B, T, hidden)`` token sequence.
+
+        Split out of :meth:`embed` (pure code motion -- the default path is bit-identical)
+        so the split-head trainer can pool the SAME single forward two different ways
+        instead of running the backbone twice.
+        """
         if images.dtype == torch.uint8 or images.shape[-1] == 3:
             images = normalize_uint8(images, self.norm_mean, self.norm_std)
         if self.is_timm:
@@ -645,11 +725,45 @@ class WaivEncoder(nn.Module):
                 )
         else:
             tokens = self.backbone(pixel_values=images).last_hidden_state
-        return self._pool(tokens)
+        return tokens
+
+    def embed(self, images: torch.Tensor) -> torch.Tensor:
+        """uint8 NHWC (or normalised float NCHW) -> pooled embedding ``(B, embed_dim)``.
+
+        Unaffected by ``split_heads``: this is the eval-time export, and the eval pooling
+        is a protocol constant (PathoROB's reference row is ``phikonv2_clsmean``).
+        """
+        return self._pool(self.tokens(images))
+
+    def embed_parts(self, images: torch.Tensor) -> dict[str, torch.Tensor]:
+        """``{"cls": (B, hidden), "mean": (B, hidden)}`` from ONE backbone forward."""
+        return self._pool_parts(self.tokens(images))
 
     def forward(self, images: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.split_heads:
+            raise RuntimeError(
+                "this encoder was built with split loss heads "
+                f"{list(self.split_heads)}, so there is no single `projector` to call. "
+                "Use forward_split() (or embed() for the eval-time pooled embedding)."
+            )
         emb = self.embed(images)
         return emb, self.projector(emb)
+
+    def forward_split(
+        self, images: torch.Tensor
+    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+        """``(parts, projections)`` for the split-head objective, one backbone forward.
+
+        ``projections`` carries a key for each head that was BUILT -- a head omitted from
+        ``cfg.split_heads`` does not exist, is not run, and cannot update BatchNorm stats.
+        """
+        if not self.split_heads:
+            raise RuntimeError(
+                "forward_split() requires an encoder built with cfg.split_heads; this one "
+                "has the single concat projector. Use forward()."
+            )
+        parts = self.embed_parts(images)
+        return parts, {name: self.projectors[name](parts[name]) for name in self.split_heads}
 
     @torch.no_grad()
     def encode(self, images: torch.Tensor, l2_normalize: bool = False) -> torch.Tensor:
@@ -680,6 +794,7 @@ class WaivEncoder(nn.Module):
             ),
             "lora_target_leaves": list(self.lora_target_leaves),
             "blocks": self.num_blocks,
+            "split_heads": list(self.split_heads),
         }
 
     def merge_lora(self) -> nn.Module:

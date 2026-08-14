@@ -185,6 +185,156 @@ def grid_info_nce(
 
 
 # --------------------------------------------------------------------------------------
+# Split loss heads: CLS and mean scored SEPARATELY (PLAN.md 2's pooling mismatch)
+# --------------------------------------------------------------------------------------
+# Training pools ``clsmean`` = cat([CLS, mean(patch_tokens)]) -> 2048-d -> ONE
+# ProjectionHead -> ONE InfoNCE. Two things that hides:
+#
+# 1. A single concat loss does not force BOTH halves to become invariant. The objective
+#    can satisfy itself through whichever half is easier, and the eval pooling DISAGREES
+#    with the training pooling -- HEST and THUNDER-on-phikon-v2 read CLS only. So a run
+#    can look converged on the training objective while the half the downstream probes
+#    actually read barely moved.
+# 2. ``mean`` is linear: d(mean)/d(t_i) = (1/N) I, so the direct gradient reaching every
+#    patch token is the IDENTICAL vector. The loss can translate the token cloud but
+#    cannot express a preference about the tokens' relative arrangement.
+#
+# The split objective is
+#
+#     L = w_cls * InfoNCE(proj_cls(cls_vec)) + w_mean * InfoNCE(proj_mean(mean_vec))
+#
+# with a SEPARATE ProjectionHead per pool, each ``hidden``-d in (1024 on phikon-v2), not
+# 2048.
+#
+# WHY THE WEIGHTS DEFAULT TO 0.5 / 0.5 AND NOT 1.0 / 1.0
+# ------------------------------------------------------
+# Loss scale is a CONTROLLED VARIABLE here. At 1.0/1.0 the total gradient magnitude is
+# roughly twice the single-head baseline's, which for AdamW-with-warmup on the same LR
+# schedule is a silent learning-rate change -- and the experiment would then be measuring
+# "structural split PLUS 2x LR" against "baseline". 0.5/0.5 keeps the total comparable to
+# the single concat head, so the arm isolates the structural change. It is also exactly
+# the convex combination that makes the degenerate case check out: feed the SAME vector to
+# two heads holding the SAME weights and 0.5*L + 0.5*L == L, which is gate G5.
+#
+# WHY A ZERO-WEIGHT HEAD IS REMOVED RATHER THAN MULTIPLIED BY ZERO
+# ----------------------------------------------------------------
+# ``--cls-weight 1.0 --mean-weight 0.0`` must be a genuinely single-head run. A head that
+# is built and run at weight 0 still (a) burns a projector forward on every step and
+# (b) -- the part that actually corrupts the arm -- updates its ``nn.BatchNorm1d`` RUNNING
+# STATS every step, because BatchNorm's running-mean/var update happens in the forward
+# pass and is not gated by the loss weight. So ``build_split_head_names`` drops any
+# zero-weight head and the encoder never constructs it; ``forward_split`` then cannot run
+# what does not exist.
+
+
+def build_split_head_names(cls_weight: float, mean_weight: float) -> tuple[str, ...]:
+    """Which heads to BUILD, given the weights. A zero-weight head is not built at all."""
+    if cls_weight < 0.0 or mean_weight < 0.0:
+        raise ValueError(
+            f"split-head weights must be >= 0, got cls={cls_weight} mean={mean_weight}"
+        )
+    names = tuple(
+        n for n, w in (("cls", cls_weight), ("mean", mean_weight)) if w > 0.0
+    )
+    if not names:
+        raise ValueError(
+            "both split-head weights are 0: there would be no loss at all. Set at least "
+            "one of --cls-weight / --mean-weight above 0."
+        )
+    return names
+
+
+def assert_split_head_inputs(
+    parts: dict[str, torch.Tensor], min_rel_distance: float = 1e-3
+) -> dict[str, float]:
+    """THE assertion this feature lives or dies on: the two heads get DIFFERENT inputs.
+
+    If a wiring bug handed both heads the same pooled vector -- ``embed()`` twice, a
+    copy-pasted key, a ``parts["cls"]`` that is really the concat -- then
+    ``L_cls + L_mean`` is just ``2x`` one loss. That is a perfectly plausible falling
+    curve which measures nothing at all, and NO shape check catches it: both vectors are
+    ``(B, hidden)`` either way.
+
+    So it is asserted numerically, on the real batch, every step (a few microseconds on
+    ``(B, 1024)``), exactly like ``assert_same_condition_negatives``.
+
+    Returns the measured separation so it lands in ``history.json`` and the claim is
+    auditable after the fact rather than only at crash time.
+    """
+    if "cls" not in parts or "mean" not in parts:
+        # Defensive only. ``embed_parts`` always returns BOTH pools -- pooling is free
+        # next to the backbone forward -- so the train loop records this diagnostic on
+        # every arm, single-head ones included. That is deliberate: it makes the measured
+        # pool separation comparable across the three arms instead of existing only on the
+        # one arm that could have the wiring bug.
+        return {}
+    cls_vec, mean_vec = parts["cls"].detach().float(), parts["mean"].detach().float()
+    if cls_vec.shape != mean_vec.shape:
+        raise ValueError(
+            f"cls/mean head inputs differ in shape: {tuple(cls_vec.shape)} vs "
+            f"{tuple(mean_vec.shape)}; both heads take one pool, i.e. (B, hidden)"
+        )
+    scale = 0.5 * (cls_vec.norm(dim=-1) + mean_vec.norm(dim=-1)).clamp_min(1e-12)
+    rel = float(((cls_vec - mean_vec).norm(dim=-1) / scale).mean())
+    cos = float(F.cosine_similarity(cls_vec, mean_vec, dim=-1).mean())
+    if rel < min_rel_distance:
+        raise ValueError(
+            "SPLIT-HEAD WIRING BUG: the cls and mean heads received effectively the SAME "
+            f"input (mean relative distance {rel:.3e} < {min_rel_distance:.0e}, mean "
+            f"cosine {cos:.6f}). L_cls + L_mean would then be 2x one loss -- a falling "
+            "curve that measures nothing. Check that forward_split() pools the token "
+            "sequence twice (cls = tokens[:, 0], mean = tokens[:, num_prefix_tokens:]"
+            ".mean(1)) rather than handing both heads embed()."
+        )
+    return {"split_input_rel_distance": rel, "split_input_cosine": cos}
+
+
+def split_head_info_nce(
+    anchor_z: dict[str, torch.Tensor],
+    positive_z: dict[str, torch.Tensor],
+    group_id: torch.Tensor,
+    weights: dict[str, float],
+    temperature: float = 0.07,
+    symmetric: bool = False,
+) -> tuple[torch.Tensor, dict[str, float]]:
+    """``sum_h w_h * masked_info_nce(head h)``, with every head logged separately.
+
+    Per-head ``loss_<h>`` and ``top1_<h>`` go into ``history.json`` alongside the total.
+    Without them the three arms are uninterpretable: a falling total tells you nothing
+    about which pool moved.
+
+    ``loss`` is the WEIGHTED TOTAL (the quantity that is actually optimised) and ``top1``
+    is the weight-normalised mean of the per-head top-1s, so on a single-head arm both
+    reduce to that head's own numbers and the column keeps its usual meaning.
+    """
+    if set(anchor_z) != set(positive_z):
+        raise ValueError(f"head mismatch: anchors {sorted(anchor_z)} vs positives {sorted(positive_z)}")
+    active = [h for h in ("cls", "mean") if h in anchor_z]
+    if not active:
+        raise ValueError("no split heads to score")
+
+    total: torch.Tensor | None = None
+    metrics: dict[str, float] = {}
+    w_sum = sum(weights[h] for h in active)
+    top1 = 0.0
+    for h in active:
+        loss_h, m_h = masked_info_nce(
+            anchor_z[h], positive_z[h], group_id, temperature, symmetric
+        )
+        term = weights[h] * loss_h
+        total = term if total is None else total + term
+        metrics[f"loss_{h}"] = m_h["loss"]
+        metrics[f"top1_{h}"] = m_h["top1"]
+        metrics[f"weight_{h}"] = float(weights[h])
+        metrics["negatives_per_anchor"] = m_h["negatives_per_anchor"]
+        top1 += weights[h] * m_h["top1"]
+    metrics["loss"] = float(total.detach())
+    metrics["top1"] = top1 / max(w_sum, 1e-12)
+    metrics["n_heads"] = float(len(active))
+    return total, metrics
+
+
+# --------------------------------------------------------------------------------------
 # Retention term: relational KL against the frozen base model (PLAN.md 2, "frozen-teacher
 # anchor" -- scoped there as optional, never built until now). OFF by default.
 #
@@ -452,6 +602,19 @@ class TrainConfig:
     #: resolve neighbourhood structure at the same scale as the objective it trades
     #: against, and avoids inventing a second arbitrary constant. Also unknown (risk 4).
     retention_kl_temperature: float = 0.07
+    #: Split loss heads (see the block comment above :func:`build_split_head_names`).
+    #: False = the single concat projector, i.e. the path every published number was
+    #: produced on, left bit-identical. True scores CLS and mean SEPARATELY, each through
+    #: its own ``hidden``-d ProjectionHead.
+    split_heads: bool = False
+    #: Weights in ``L = w_cls * InfoNCE(cls) + w_mean * InfoNCE(mean)``. They sum to 1 by
+    #: default ON PURPOSE: loss scale is a controlled variable, and 1.0/1.0 would double
+    #: the total gradient magnitude relative to the single-head baseline, which is a
+    #: silent LR change rather than the structural comparison this experiment is for.
+    #: A weight of exactly 0 REMOVES its head (not built, never run, its BatchNorm running
+    #: stats never updated) -- that is what makes the "only" arms actually single-head.
+    cls_weight: float = 0.5
+    mean_weight: float = 0.5
     encoder: dict = field(default_factory=dict)
 
 
@@ -523,16 +686,83 @@ def evaluate_heldout(model, loader, cfg: TrainConfig, device, n_batches: int) ->
             continue
         anchor = batch["anchor"].to(device, non_blocking=True)
         positive = batch["positive"].to(device, non_blocking=True)
-        _, az = model(anchor)
-        _, pz = model(positive)
-        _, m = masked_info_nce(
-            az, pz, batch["group_id"].to(device), cfg.temperature, cfg.symmetric
-        )
+        gid = batch["group_id"].to(device)
+        if cfg.split_heads:
+            _, az = model.forward_split(anchor)
+            _, pz = model.forward_split(positive)
+            _, m = split_head_info_nce(
+                az, pz, gid,
+                {"cls": cfg.cls_weight, "mean": cfg.mean_weight},
+                cfg.temperature, cfg.symmetric,
+            )
+        else:
+            _, az = model(anchor)
+            _, pz = model(positive)
+            _, m = masked_info_nce(az, pz, gid, cfg.temperature, cfg.symmetric)
         tot["loss"] += m["loss"]
         tot["top1"] += m["top1"]
         n += 1
     model.train()
     return {f"heldout_{k}": v / max(n, 1) for k, v in tot.items()}
+
+
+def save_projectors(model, out: Path) -> dict:
+    """Write the projector artifact(s), single-head or split, and return the manifest.
+
+    Single head: ``projector.pt``, exactly as before -- byte-for-byte the same call.
+
+    Split heads: one file PER HEAD (``projector_cls.pt`` / ``projector_mean.pt``), because
+    a single ``projector.pt`` would either silently save one of the two or crash on a
+    ModuleDict state_dict that no reader expects.
+
+    A ``projector.pt`` is written as well, aliasing the first built head. That is not
+    decoration: ``build_model`` in ``scripts/extract_pathorob_features.py`` loads
+    ``projector.pt`` UNCONDITIONALLY on the LoRA-adapter path, so omitting it turns the
+    eval follower into a FileNotFoundError. With it present, that reader finds a 1024-d
+    input against a 2048-d ``clsmean`` eval and prints its "skipping projector" line --
+    which is correct and benign: every eval path reads ``model.embed()`` and never a
+    projector, and the LoRA backbone weights are what carry the fine-tune.
+    ``projector_heads.json`` records which head the alias is, so the artifact is
+    unambiguous rather than merely present.
+    """
+    heads = tuple(getattr(model, "split_heads", ()) or ())
+    if not heads:
+        torch.save(model.projector.state_dict(), out / "projector.pt")
+        return {"split_heads": False, "heads": [], "projector_pt": "projector.pt"}
+    for name in heads:
+        torch.save(model.projectors[name].state_dict(), out / f"projector_{name}.pt")
+    alias = heads[0]
+    torch.save(model.projectors[alias].state_dict(), out / "projector.pt")
+    manifest = {
+        "split_heads": True,
+        "heads": list(heads),
+        "files": {n: f"projector_{n}.pt" for n in heads},
+        "projector_pt_alias": alias,
+        "note": (
+            "projector.pt is a COPY of projector_%s.pt, present only so readers that load "
+            "it unconditionally do not crash. It is a one-pool head, so its input width is "
+            "`hidden` (1024 on phikon-v2) and any clsmean (2048-d) eval will -- correctly "
+            "-- skip loading it. Eval reads model.embed(); the projector is training-only."
+        ) % alias,
+    }
+    (out / "projector_heads.json").write_text(json.dumps(manifest, indent=2))
+    return manifest
+
+
+def load_projectors(model, out: Path) -> None:
+    """Inverse of :func:`save_projectors`: restore every head from ``out``. Round-trip."""
+    heads = tuple(getattr(model, "split_heads", ()) or ())
+    if not heads:
+        model.projector.load_state_dict(torch.load(out / "projector.pt", map_location="cpu"))
+        return
+    for name in heads:
+        path = out / f"projector_{name}.pt"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"checkpoint {out} has no {path.name}: it was not written by a run with "
+                f"the {name} head built"
+            )
+        model.projectors[name].load_state_dict(torch.load(path, map_location="cpu"))
 
 
 def save_checkpoint(model, optimizer, step: int, cfg: TrainConfig, metrics: dict) -> Path:
@@ -557,7 +787,7 @@ def save_checkpoint(model, optimizer, step: int, cfg: TrainConfig, metrics: dict
         from safetensors.torch import save_file
         save_file(backbone_sd, str(out / "backbone.safetensors"))
 
-    torch.save(model.projector.state_dict(), out / "projector.pt")
+    save_projectors(model, out)
     torch.save({"optimizer": optimizer.state_dict(), "step": step}, out / "optim.pt")
     # metrics.json is the completeness sentinel -- written LAST.
     (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
@@ -591,6 +821,26 @@ def train(
     device = torch.device(device)
     if cfg.retention_kl_weight < 0.0:
         raise ValueError(f"retention_kl_weight must be >= 0, got {cfg.retention_kl_weight}")
+    if cfg.split_heads:
+        # Fail before any compute if the config and the model disagree about which heads
+        # exist -- a mismatch here is exactly the "plausible curve measuring nothing"
+        # failure mode this feature is guarding against.
+        if cfg.grid:
+            raise ValueError(
+                "split_heads is not implemented for the GRID sampler: grid_info_nce scores "
+                "one (C*T, D) tensor and the per-head weighting has no validated form "
+                "there. Refusing rather than running an untested objective."
+            )
+        want = build_split_head_names(cfg.cls_weight, cfg.mean_weight)
+        got = tuple(getattr(model, "split_heads", ()) or ())
+        if got != want:
+            built = list(got) if got else "the single concat projector"
+            raise ValueError(
+                f"cls_weight={cfg.cls_weight} / mean_weight={cfg.mean_weight} require the "
+                f"heads {list(want)}, but the encoder was built with {built}. A "
+                "zero-weight head must not be BUILT (its BatchNorm running stats would "
+                "still update every step), so the two must agree exactly."
+            )
     use_retention = cfg.retention_kl_weight > 0.0
     if use_retention:
         # Fail here, before any compute, rather than silently optimising a KL that is
@@ -662,19 +912,43 @@ def train(
                 positive = batch["positive"].to(device, non_blocking=True)
                 gid = batch["group_id"].to(device, non_blocking=True)
 
-                with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
-                    # one forward per view; both views must see the same weights, so this
-                    # is a single graph, not two independent steps
-                    anchor_emb, az = model(anchor)
-                    _, pz = model(positive)
-                    # Frozen-teacher forward for the retention term. Guarded so that at the
-                    # default weight of 0.0 NOTHING here runs -- no extra forward, no extra
-                    # tensor, no RNG touched -- and the step stays bit-identical.
-                    teacher_emb = (
-                        retention_teacher_embed(model, anchor)
-                        if use_retention else None
+                if cfg.split_heads:
+                    with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
+                        # ONE backbone forward per view, pooled two ways. Each head runs on
+                        # its own view's batch, exactly as the single-head path calls the
+                        # projector once per view -- so BatchNorm sees the same batches it
+                        # always did, just through per-pool heads.
+                        anchor_parts, az = model.forward_split(anchor)
+                        _, pz = model.forward_split(positive)
+                        anchor_emb = model.pool_from_parts(anchor_parts)
+                        teacher_emb = (
+                            retention_teacher_embed(model, anchor)
+                            if use_retention else None
+                        )
+                    # The load-bearing check, run every step for the same reason
+                    # assert_same_condition_negatives is: a violation still produces a
+                    # plausible falling curve. See assert_split_head_inputs.
+                    split_stats = assert_split_head_inputs(anchor_parts)
+                    loss, metrics = split_head_info_nce(
+                        az, pz, gid,
+                        {"cls": cfg.cls_weight, "mean": cfg.mean_weight},
+                        cfg.temperature, cfg.symmetric,
                     )
-                loss, metrics = masked_info_nce(az, pz, gid, cfg.temperature, cfg.symmetric)
+                    metrics.update(split_stats)
+                else:
+                    with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
+                        # one forward per view; both views must see the same weights, so this
+                        # is a single graph, not two independent steps
+                        anchor_emb, az = model(anchor)
+                        _, pz = model(positive)
+                        # Frozen-teacher forward for the retention term. Guarded so that at the
+                        # default weight of 0.0 NOTHING here runs -- no extra forward, no extra
+                        # tensor, no RNG touched -- and the step stays bit-identical.
+                        teacher_emb = (
+                            retention_teacher_embed(model, anchor)
+                            if use_retention else None
+                        )
+                    loss, metrics = masked_info_nce(az, pz, gid, cfg.temperature, cfg.symmetric)
                 # two forward views per anchor, so a "step" moves 2 * batch tiles
                 n_images = int(anchor.shape[0]) * 2
             if teacher_emb is not None:

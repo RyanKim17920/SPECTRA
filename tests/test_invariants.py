@@ -7,6 +7,7 @@ a positive that isn't co-registered, or a negative that leaks acquisition signal
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import importlib.util
 import json
 import os
@@ -1587,3 +1588,578 @@ def test_grid_heldout_eval_runs_at_its_own_narrower_geometry():
     assert set(out) == {"heldout_loss", "heldout_top1"}
     assert out["heldout_loss"] > 0 and 0.0 <= out["heldout_top1"] <= 1.0
     assert model.training, "evaluate_heldout must restore train mode"
+
+
+# ======================================================================================
+# SPLIT LOSS HEADS -- CLS and mean scored separately, one ProjectionHead each
+# ======================================================================================
+#
+# The failure this whole block exists for: if a wiring bug fed BOTH heads the same pooled
+# vector, `L_cls + L_mean` is just 2x one loss. The curve falls, the top1 rises, every
+# shape checks out -- and the experiment measures nothing. No shape assertion can see it,
+# so it gets numerical must-fail tests here AND a per-step assertion in the train loop.
+
+
+class _SplitTinyEncoder(torch.nn.Module):
+    """Minimal split-head model that runs the REAL ``WaivEncoder`` pooling/forward code.
+
+    Only ``self`` is fake: ``_pool``, ``_pool_parts``, ``pool_from_parts``,
+    ``embed_parts`` and ``forward_split`` are the shipped implementations, bound here so
+    they can be exercised without downloading a 1.2 GB backbone. Same idiom as
+    ``_seg_shim`` above.
+
+    ``images`` is a ``(B, T, hidden)`` token tensor -- the backbone stand-in is per-token,
+    which is exactly what makes cls and mean genuinely different vectors.
+    """
+
+    def __init__(self, heads=("cls", "mean"), hidden=8, n_tokens=7, num_prefix_tokens=1,
+                 d_proj=512, use_lora=True):
+        import torch.nn as nn
+
+        from waivphaet.models.encoder import ProjectionHead, WaivEncoder
+
+        super().__init__()
+        self.cfg = types.SimpleNamespace(use_lora=use_lora, pooling="clsmean")
+        self.hidden_size = hidden
+        self.embed_dim = 2 * hidden
+        self.n_tokens = n_tokens
+        self.num_prefix_tokens = num_prefix_tokens
+        self.split_heads = tuple(heads)
+        self.backbone = _FakeAdapterBackbone(hidden, hidden)
+        self.projector = None
+        self.projectors = nn.ModuleDict(
+            {h: ProjectionHead(hidden, 16, d_proj) for h in heads}
+        )
+        for name in ("_pool", "_pool_parts", "pool_from_parts", "embed_parts",
+                     "forward_split"):
+            setattr(self, name, types.MethodType(getattr(WaivEncoder, name), self))
+
+    def tokens(self, images):
+        return self.backbone(images)
+
+    def embed(self, images):
+        return self._pool(self.tokens(images))
+
+
+def _split_batches(n_batches=3, n_groups=2, group_size=6, hidden=8, n_tokens=7, seed=11):
+    """Constraint-satisfying collated batches whose pixels are ``(B, T, hidden)`` tokens."""
+    out = []
+    for i in range(n_batches):
+        _, batch = _fake_collated(n_groups=n_groups, group_size=group_size, seed=seed + i)
+        n = n_groups * group_size
+        g = torch.Generator().manual_seed(2000 + i)
+        batch["anchor"] = torch.randn(n, n_tokens, hidden, generator=g)
+        batch["positive"] = torch.randn(n, n_tokens, hidden, generator=g)
+        out.append(batch)
+    return out
+
+
+# --- G3(a) THE CRITICAL ONE: the two heads must get genuinely DIFFERENT inputs ---------
+
+
+def test_split_heads_receive_genuinely_different_inputs():
+    """cls_vec and mean_vec must differ by a real margin on a real batch, not merely in
+    dtype/shape. If they did not, L_cls + L_mean would be 2x one loss."""
+    from waivphaet.train.contrastive import assert_split_head_inputs
+
+    torch.manual_seed(0)
+    model = _SplitTinyEncoder()
+    images = torch.randn(12, 7, 8)
+    parts = model.embed_parts(images)
+
+    assert set(parts) == {"cls", "mean"}
+    assert parts["cls"].shape == parts["mean"].shape == (12, 8)
+    # not the same object, not the same values, and not close
+    assert parts["cls"].data_ptr() != parts["mean"].data_ptr()
+    assert not torch.allclose(parts["cls"], parts["mean"])
+
+    stats = assert_split_head_inputs(parts)
+    # a REAL margin: the two pools are order-1 apart relative to their own norms
+    assert stats["split_input_rel_distance"] > 0.5, stats
+    assert abs(stats["split_input_cosine"]) < 0.5, stats
+
+    # ... and the two heads then produce different projections, which is the thing the
+    # loss actually sees.
+    _, z = model.forward_split(images)
+    assert not torch.allclose(z["cls"], z["mean"])
+
+
+def test_split_head_input_assertion_MUST_FAIL_when_both_heads_get_the_same_vector():
+    """The wiring bug, simulated: hand both heads the identical pooled vector.
+
+    This is the test that has to RAISE. Without it the bug is invisible -- same shapes,
+    same dtype, a perfectly plausible falling loss curve.
+    """
+    from waivphaet.train.contrastive import assert_split_head_inputs
+
+    torch.manual_seed(0)
+    v = torch.randn(12, 8)
+    with pytest.raises(ValueError, match="SPLIT-HEAD WIRING BUG"):
+        assert_split_head_inputs({"cls": v, "mean": v})
+    # a *copy* is just as wrong as the same object, and must fail identically
+    with pytest.raises(ValueError, match="SPLIT-HEAD WIRING BUG"):
+        assert_split_head_inputs({"cls": v, "mean": v.clone()})
+    # and near-identical (a bug that adds a whisker of noise) is caught too
+    with pytest.raises(ValueError, match="SPLIT-HEAD WIRING BUG"):
+        assert_split_head_inputs({"cls": v, "mean": v + 1e-9 * torch.randn_like(v)})
+
+
+def test_split_head_input_assertion_MUST_FAIL_on_a_concat_width_input():
+    """Feeding a head the 2048-d concat instead of one 1024-d pool is a width bug, and
+    ``ProjectionHead`` would raise somewhere far away. Catch it at the source."""
+    from waivphaet.train.contrastive import assert_split_head_inputs
+
+    torch.manual_seed(0)
+    cls = torch.randn(12, 8)
+    with pytest.raises(ValueError, match="differ in shape"):
+        assert_split_head_inputs({"cls": cls, "mean": torch.randn(12, 16)})
+
+
+def test_split_head_loss_is_not_two_copies_of_one_loss():
+    """End to end: the per-head losses must be genuinely different numbers."""
+    from waivphaet.train.contrastive import split_head_info_nce
+
+    torch.manual_seed(0)
+    model = _SplitTinyEncoder()
+    _, batch = _fake_collated(n_groups=2, group_size=6, seed=3)
+    a = torch.randn(12, 7, 8)
+    p = torch.randn(12, 7, 8)
+    _, az = model.forward_split(a)
+    _, pz = model.forward_split(p)
+    loss, m = split_head_info_nce(
+        az, pz, batch["group_id"], {"cls": 0.5, "mean": 0.5}, temperature=0.07
+    )
+    assert {"loss_cls", "loss_mean", "top1_cls", "top1_mean"} <= set(m)
+    assert m["loss_cls"] != m["loss_mean"], "the two heads produced identical losses"
+    assert abs(m["loss"] - (0.5 * m["loss_cls"] + 0.5 * m["loss_mean"])) < 1e-5
+
+
+# --- G3(b) a zero-weight head is ABSENT, not zero-multiplied ---------------------------
+
+
+def test_zero_weight_head_is_not_built_at_all():
+    from waivphaet.train.contrastive import build_split_head_names
+
+    assert build_split_head_names(0.5, 0.5) == ("cls", "mean")
+    assert build_split_head_names(1.0, 0.0) == ("cls",)
+    assert build_split_head_names(0.0, 1.0) == ("mean",)
+    with pytest.raises(ValueError, match="both split-head weights are 0"):
+        build_split_head_names(0.0, 0.0)
+    with pytest.raises(ValueError, match=">= 0"):
+        build_split_head_names(-1.0, 1.0)
+
+
+def test_mean_head_is_absent_and_gets_no_gradient_at_mean_weight_zero():
+    """(G3b) ``--mean-weight 0`` must remove the head, not multiply it by zero.
+
+    Absence is checked structurally (no module, no parameter, no state_dict entry) and
+    dynamically (a full training run leaves gradient only on cls-head parameters).
+    """
+    import waivphaet.train.contrastive as C
+
+    torch.manual_seed(0)
+    model = _SplitTinyEncoder(heads=("cls",))
+
+    # structural: the head does not exist anywhere in the module tree
+    assert model.split_heads == ("cls",)
+    assert "mean" not in model.projectors
+    assert not any(k.startswith("projectors.mean.") for k in model.state_dict()), \
+        sorted(model.state_dict())
+    with pytest.raises(KeyError):
+        # forward_split cannot run what was never built
+        model.projectors["mean"]
+
+    batches = _split_batches(n_batches=2)
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = C.TrainConfig(
+            out_dir=str(Path(tmp) / "run"), max_steps=len(batches), warmup_steps=1,
+            log_every=1, eval_every=10**9, ckpt_every=10**9, amp_dtype="none",
+            n_groups=2, group_size=6,
+            split_heads=True, cls_weight=1.0, mean_weight=0.0,
+            # no optimizer step on the last micro-batch, so .grad survives for inspection
+            grad_accum=10**9,
+        )
+        summary = C.train(model, batches, cfg, device="cpu")
+
+    got_grad = {n for n, p in model.named_parameters() if p.grad is not None}
+    assert any(n.startswith("projectors.cls.") for n in got_grad), got_grad
+    assert not any(n.startswith("projectors.mean.") for n in got_grad), got_grad
+    # the history records the single head and nothing about a phantom one
+    rec = summary["history"][0]
+    assert "loss_cls" in rec and "loss_mean" not in rec
+    assert rec["n_heads"] == 1.0
+    assert rec["loss"] == pytest.approx(rec["loss_cls"])
+    assert rec["top1"] == pytest.approx(rec["top1_cls"])
+
+
+def test_a_zero_weighted_head_would_still_move_its_batchnorm_stats():
+    """WHY removal, not multiplication by zero -- with teeth.
+
+    ``ProjectionHead`` contains ``nn.BatchNorm1d``. Its running mean/var update happens in
+    the FORWARD pass and is not gated by the loss weight, so a head built at weight 0 keeps
+    mutating state every step while contributing nothing. That is not a single-head arm.
+    """
+    from waivphaet.models.encoder import ProjectionHead
+
+    torch.manual_seed(0)
+    head = ProjectionHead(8, 16, 512).train()
+    bn = head.net[1]
+    before = bn.running_mean.clone()
+    loss = 0.0 * head(torch.randn(12, 8)).sum()   # weight 0: contributes nothing
+    loss.backward()
+    assert not torch.equal(bn.running_mean, before), (
+        "if this ever passes, a zero-weighted head is harmless and the removal could be "
+        "dropped -- until then, do not build a head you are not training"
+    )
+
+
+def test_train_refuses_a_model_whose_heads_disagree_with_the_weights():
+    """A config asking for two heads against a one-head model is the silent-arm bug."""
+    import waivphaet.train.contrastive as C
+
+    torch.manual_seed(0)
+    model = _SplitTinyEncoder(heads=("cls",))
+    batches = _split_batches(n_batches=1)
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = C.TrainConfig(
+            out_dir=str(Path(tmp) / "run"), max_steps=1, warmup_steps=1, log_every=1,
+            eval_every=10**9, ckpt_every=10**9, amp_dtype="none", n_groups=2, group_size=6,
+            split_heads=True, cls_weight=0.5, mean_weight=0.5,
+        )
+        with pytest.raises(ValueError, match="require the heads"):
+            C.train(model, batches, cfg, device="cpu")
+
+
+# --- G3(c) checkpoint round-trip preserves BOTH projectors -----------------------------
+
+
+def test_checkpoint_roundtrip_preserves_both_projectors():
+    import waivphaet.train.contrastive as C
+
+    torch.manual_seed(0)
+    model = _SplitTinyEncoder(heads=("cls", "mean"))
+    # make the two heads genuinely different so a "saved one twice" bug cannot pass
+    with torch.no_grad():
+        for p in model.projectors["mean"].parameters():
+            p.add_(torch.randn_like(p))
+    saved = {k: v.clone() for k, v in model.state_dict().items() if k.startswith("projectors.")}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        manifest = C.save_projectors(model, out)
+        assert manifest["split_heads"] and manifest["heads"] == ["cls", "mean"]
+        assert (out / "projector_cls.pt").exists() and (out / "projector_mean.pt").exists()
+        # projector.pt must exist too: extract_pathorob_features.build_model loads it
+        # UNCONDITIONALLY on the adapter path, so its absence is a crashed eval follower.
+        assert (out / "projector.pt").exists()
+        alias = json.loads((out / "projector_heads.json").read_text())["projector_pt_alias"]
+        assert alias == "cls"
+        # it is a real head's weights, and a one-pool head, so a clsmean eval will skip it
+        proj_sd = torch.load(out / "projector.pt", map_location="cpu")
+        assert proj_sd["net.0.weight"].shape[1] == model.hidden_size != model.embed_dim
+
+        torch.manual_seed(999)
+        fresh = _SplitTinyEncoder(heads=("cls", "mean"))
+        assert not torch.equal(
+            fresh.state_dict()["projectors.mean.net.0.weight"],
+            saved["projectors.mean.net.0.weight"],
+        ), "the fresh model already matches; the round-trip would be vacuous"
+        C.load_projectors(fresh, out)
+
+    for k, v in saved.items():
+        assert torch.equal(fresh.state_dict()[k], v), f"{k} did not round-trip"
+
+
+def test_single_head_checkpoint_artifact_is_unchanged():
+    """The default path must still write exactly one ``projector.pt`` and no manifest."""
+    import waivphaet.train.contrastive as C
+
+    torch.manual_seed(0)
+    model = _TinyEncoder()
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        manifest = C.save_projectors(model, out)
+        assert manifest["split_heads"] is False
+        assert sorted(p.name for p in out.iterdir()) == ["projector.pt"]
+        fresh = _TinyEncoder()
+        C.load_projectors(fresh, out)
+    for k, v in model.projector.state_dict().items():
+        assert torch.equal(fresh.projector.state_dict()[k], v)
+
+
+# --- G4 shapes: head inputs are `hidden`, embed() is untouched, prefix tokens are read --
+
+
+def _fake_hf_encoder(monkeypatch, hidden=1024, n_tokens=197, split_heads=(),
+                     pooling="clsmean"):
+    """A REAL ``WaivEncoder`` over a fake HF backbone -- no download, real construction.
+
+    This is what makes the width assertions meaningful: the ProjectionHeads below are
+    built by the shipped ``__init__``, at the real phikon-v2 hidden size.
+    """
+    import waivphaet.models.encoder as E
+
+    tokens = torch.randn(3, n_tokens, hidden)
+    backbone = _HFBackbone(tokens)
+    backbone.config = types.SimpleNamespace(
+        hidden_size=hidden, num_hidden_layers=2, patch_size=16, image_size=224,
+        model_type="dinov2",
+    )
+    monkeypatch.setattr(E, "AutoModel",
+                        types.SimpleNamespace(from_pretrained=lambda *_a, **_k: backbone))
+    monkeypatch.setattr(E, "is_timm_backbone", lambda _b: False)
+    monkeypatch.setattr(E, "normalization_for", lambda _b: (E.IMAGENET_MEAN, E.IMAGENET_STD))
+    model = E.WaivEncoder(E.EncoderConfig(
+        backbone="owkin/phikon-v2", use_lora=False, pooling=pooling,
+        split_heads=tuple(split_heads),
+    ))
+    return model, tokens
+
+
+def test_split_head_widths_are_hidden_and_embed_stays_2048(monkeypatch):
+    """(G4) proj_cls in == proj_mean in == hidden (1024); ``embed()`` still 2048-d."""
+    model, _ = _fake_hf_encoder(monkeypatch, split_heads=("cls", "mean"))
+
+    assert model.hidden_size == 1024
+    assert model.embed_dim == 2048, "eval pooling width must not follow the training split"
+    assert model.projector is None
+    for name in ("cls", "mean"):
+        w = model.projectors[name].net[0].weight
+        assert w.shape[1] == 1024, f"{name} head takes {w.shape[1]}-d, expected hidden=1024"
+
+    images = torch.randn(3, 3, 224, 224)
+    assert model.embed(images).shape == (3, 2048)
+    parts = model.embed_parts(images)
+    assert parts["cls"].shape == (3, 1024) and parts["mean"].shape == (3, 1024)
+    # and the split really is the two halves of what embed() exports
+    assert torch.equal(model.embed(images), model.pool_from_parts(parts))
+    assert torch.equal(model.embed(images)[:, :1024], parts["cls"])
+
+    _, z = model.forward_split(images)
+    assert z["cls"].shape == z["mean"].shape == (3, 512)
+    with pytest.raises(RuntimeError, match="no single `projector`"):
+        model(images)
+
+
+def test_single_head_encoder_is_structurally_unchanged(monkeypatch):
+    """Default construction: one 2048-d concat projector, no ModuleDict, no forward_split."""
+    model, _ = _fake_hf_encoder(monkeypatch)
+    assert model.split_heads == ()
+    assert model.projectors is None
+    assert model.projector.net[0].weight.shape[1] == 2048 == model.embed_dim
+    emb, z = model(torch.randn(3, 3, 224, 224))
+    assert emb.shape == (3, 2048) and z.shape == (3, 512)
+    with pytest.raises(RuntimeError, match="requires an encoder built with cfg.split_heads"):
+        model.forward_split(torch.randn(3, 3, 224, 224))
+
+
+def test_split_encoder_rejects_an_unknown_head_name(monkeypatch):
+    import waivphaet.models.encoder as E
+
+    with pytest.raises(ValueError, match="unknown split head"):
+        _fake_hf_encoder(monkeypatch, split_heads=("cls", "patchmax"))
+    with pytest.raises(ValueError, match="duplicate split head"):
+        _fake_hf_encoder(monkeypatch, split_heads=("cls", "cls"))
+    assert E.POOL_PARTS == ("cls", "mean")
+
+
+@pytest.mark.parametrize("num_prefix_tokens,n_tokens", [(1, 197), (5, 261)])
+def test_pool_parts_reads_num_prefix_tokens_from_the_encoder(num_prefix_tokens, n_tokens):
+    """(G4) The mean head's slice must come from the ENCODER, never a hardcoded 1.
+
+    phikon-v2 emits 1 prefix token, Virchow2 emits 5 ([CLS] + 4 registers). Averaging the
+    registers in is right-shape, right-dtype, no-warning, just a worse number -- so the
+    5-prefix case gets a numerical test against the model card's own expression.
+    """
+    from waivphaet.models.encoder import WaivEncoder
+
+    torch.manual_seed(0)
+    tokens = torch.randn(3, n_tokens, 32, dtype=torch.float64)
+    shim = _PoolOnly("clsmean", num_prefix_tokens)
+    parts = WaivEncoder._pool_parts(shim, tokens)
+
+    assert torch.equal(parts["cls"], tokens[:, 0, :])
+    assert torch.equal(parts["mean"], tokens[:, num_prefix_tokens:, :].mean(dim=1))
+    # consistent with _pool, which is what every published number came through
+    assert torch.equal(
+        torch.cat([parts["cls"], parts["mean"]], dim=1), shim.pool(tokens)
+    )
+    if num_prefix_tokens == 5:
+        naive = tokens[:, 1:, :].mean(dim=1)     # the hardcoded-1 bug
+        assert not torch.allclose(parts["mean"], naive), "the test has no teeth"
+
+
+# --- G5 scale neutrality: 0.5/0.5 on the SAME input reproduces the single-head loss ----
+
+
+def test_split_weights_are_scale_neutral_not_a_hidden_lr_change():
+    """(G5) Same vector into both heads, weights 0.5/0.5 -> exactly the single-head loss.
+
+    This is the check that 0.5/0.5 is a convex combination rather than a doubled learning
+    rate in disguise. It also fails loudly if someone "helpfully" changes the defaults to
+    1.0/1.0, which would make the arm measure 'split PLUS 2x LR'.
+    """
+    import copy
+
+    from waivphaet.train.contrastive import (
+        TrainConfig, masked_info_nce, split_head_info_nce,
+    )
+    from waivphaet.models.encoder import ProjectionHead
+
+    torch.manual_seed(0)
+    head = ProjectionHead(8, 16, 512).eval()   # eval(): BN in inference mode, so the two
+    twin = copy.deepcopy(head)                 # calls below cannot differ via BN stats
+    _, batch = _fake_collated(n_groups=2, group_size=6, seed=5)
+    gid = batch["group_id"]
+    a, p = torch.randn(12, 8), torch.randn(12, 8)
+
+    single, m_single = masked_info_nce(head(a), head(p), gid, 0.07)
+    total, m_split = split_head_info_nce(
+        {"cls": head(a), "mean": twin(a)}, {"cls": head(p), "mean": twin(p)},
+        gid, {"cls": 0.5, "mean": 0.5}, temperature=0.07,
+    )
+
+    assert m_split["loss_cls"] == pytest.approx(m_split["loss_mean"], abs=0.0)
+    err = abs(float(total.detach()) - float(single.detach()))
+    assert err < 1e-6, f"0.5/0.5 is not scale-neutral: |split - single| = {err:e}"
+    assert m_split["top1"] == pytest.approx(m_single["top1"])
+
+    # 1.0/1.0 would NOT be -- that is precisely why it is not the default.
+    doubled, _ = split_head_info_nce(
+        {"cls": head(a), "mean": twin(a)}, {"cls": head(p), "mean": twin(p)},
+        gid, {"cls": 1.0, "mean": 1.0}, temperature=0.07,
+    )
+    assert float(doubled.detach()) == pytest.approx(
+        2.0 * float(single.detach()), rel=1e-6
+    )
+
+    # and the shipped defaults really are the scale-neutral ones
+    cfg = TrainConfig()
+    assert (cfg.cls_weight, cfg.mean_weight) == (0.5, 0.5)
+    assert cfg.cls_weight + cfg.mean_weight == 1.0
+    assert cfg.split_heads is False
+
+
+# --- CLI / config plumbing -------------------------------------------------------------
+
+
+def _train_lora_module():
+    src = Path(__file__).resolve().parents[1] / "scripts" / "train_lora.py"
+    spec = importlib.util.spec_from_file_location("_train_lora_split_test", str(src))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_split_head_cli_flags_and_defaults():
+    mod = _train_lora_module()
+    old = sys.argv
+    try:
+        sys.argv = ["prog", "--out-dir", "/tmp/x"]
+        args = mod.parse_args()
+    finally:
+        sys.argv = old
+    assert args.split_heads is False
+    # None until passed -- that is how "was it given without --split-heads?" stays
+    # answerable, exactly as --n-groups/--group-size do for --grid.
+    assert args.cls_weight is None and args.mean_weight is None
+
+
+def test_split_head_help_states_the_scale_neutrality_rationale():
+    """The 0.5/0.5 default is a controlled variable, and the help text has to say so."""
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "train_lora.py").read_text()
+    lo = src.index("--cls-weight")
+    hi = src.index("--grad-checkpointing")
+    block = src[lo:hi].lower()
+    assert "0.5" in block
+    assert "scale" in block or "gradient magnitude" in block
+    assert "learning rate" in block
+    assert "batchnorm" in block, "the zero-weight-head removal rationale must be stated"
+
+
+def test_split_head_weights_without_the_flag_are_an_error(tmp_path):
+    """A silently-ignored objective flag is how two runs get labelled the same."""
+    import subprocess
+
+    repo = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, str(repo / "scripts" / "train_lora.py"),
+         "--out-dir", str(tmp_path / "x"), "--cls-weight", "1.0"],
+        capture_output=True, text=True, cwd=repo,
+        env={**os.environ, "PYTHONPATH": str(repo / "src")},
+    )
+    assert r.returncode != 0
+    assert "requires --split-heads" in (r.stderr + r.stdout)
+
+
+def test_split_heads_and_grid_are_mutually_exclusive(tmp_path):
+    import subprocess
+
+    repo = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, str(repo / "scripts" / "train_lora.py"),
+         "--out-dir", str(tmp_path / "x"), "--split-heads", "--grid"],
+        capture_output=True, text=True, cwd=repo,
+        env={**os.environ, "PYTHONPATH": str(repo / "src")},
+    )
+    assert r.returncode != 0
+    assert "not implemented for --grid" in (r.stderr + r.stdout)
+
+
+def test_train_config_records_the_split_head_objective():
+    """config.json is the only place a later reader can tell the arms apart."""
+    import waivphaet.train.contrastive as C
+
+    cfg = C.TrainConfig(split_heads=True, cls_weight=1.0, mean_weight=0.0)
+    d = json.loads(json.dumps(dataclasses.asdict(cfg)))
+    assert d["split_heads"] is True
+    assert d["cls_weight"] == 1.0 and d["mean_weight"] == 0.0
+
+
+def test_split_head_history_logs_both_terms_separately():
+    """Without per-head loss and top1 in history.json the three arms are uninterpretable."""
+    import waivphaet.train.contrastive as C
+
+    torch.manual_seed(0)
+    model = _SplitTinyEncoder(heads=("cls", "mean"))
+    batches = _split_batches(n_batches=3)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "run"
+        cfg = C.TrainConfig(
+            out_dir=str(out), max_steps=len(batches), warmup_steps=1, log_every=1,
+            eval_every=10**9, ckpt_every=10**9, amp_dtype="none", n_groups=2, group_size=6,
+            split_heads=True, cls_weight=0.5, mean_weight=0.5,
+        )
+        C.train(model, batches, cfg, device="cpu")
+        hist = json.loads((out / "history.json").read_text())
+    assert len(hist) == 3
+    for rec in hist:
+        for k in ("loss", "loss_cls", "loss_mean", "top1", "top1_cls", "top1_mean",
+                  "split_input_rel_distance", "split_input_cosine"):
+            assert k in rec, f"{k} missing from history.json"
+        assert rec["loss"] == pytest.approx(0.5 * rec["loss_cls"] + 0.5 * rec["loss_mean"])
+        assert rec["loss_cls"] != rec["loss_mean"]
+        assert rec["split_input_rel_distance"] > 1e-3
+
+
+def test_both_probe_readers_skip_a_width_mismatched_projector():
+    """A split-head checkpoint's projector.pt is 1024-d while the clsmean eval is 2048-d.
+
+    Both readers that load it -- ``embed_probe.load_adapter`` and
+    ``extract_pathorob_features.build_model`` -- must SKIP it and say so, not raise. They
+    score ``model.embed()``; the projector is training-only. Unguarded, the LoRA branch of
+    ``embed_probe`` hard-crashed the RI-curve follower on every checkpoint of a split-head
+    run (size mismatch for net.0.weight, 1024 vs 2048) and lost the whole curve for a
+    tensor it never reads.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    for rel, fn in (("scripts/embed_probe.py", "load_adapter"),
+                    ("scripts/extract_pathorob_features.py", "build_model")):
+        src = (repo / rel).read_text()
+        i = src.index(f"def {fn}(")
+        body = src[i:i + 6000]
+        j = body.index('projector.pt')
+        window = body[j:j + 1200]
+        assert "model.embed_dim" in window, f"{rel}:{fn} loads projector.pt unguarded"
+        assert "skipping projector" in window, f"{rel}:{fn} skips silently"
