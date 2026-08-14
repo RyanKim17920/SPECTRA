@@ -985,11 +985,16 @@ Two caveats hold this to "appears":
   negatives" is simultaneously "fewer conditions". GRID12's 199 negatives come with 12 conditions;
   the 1199-negative arm below comes with **2**. This family cannot separate the two either — it only
   removes the *sampler* confound, not the C/T one.
-- **`gridcmp2-grid2-380890`** (grid `C=2 T=1200`, 1199 neg/row) has finished training and is being
-  evaluated; it extends the family by another 2.6 nats and is what would settle saturation.
-- Between-run seed variance is **still unpriced**. `gridcmp2-ctrlseed-380889` (CTRL, seed 1) has
-  finished training and its RI curve is still being computed. Until it lands, −0.0093 is an n=1
-  difference against an unmeasured noise floor.
+- **`gridcmp2-grid2-380890`** (grid `C=2 T=1200`, 1199 neg/row) has now landed: last-three mean
+  **0.8197**, step-1500 final 0.8206. Against GRID12's 0.8034 at 199 negatives that is +0.0163
+  over another 1.8 nats, so within the grid family the trend does *not* flatten at ~100 after
+  all — the 99→199 flat step is a local dip, not a saturation point. The "appears to saturate
+  near ~100" reading above is therefore itself weakened; the supportable statement is that the
+  grid family's negatives response is non-monotone between 99 and 199 and resumes rising by 1199.
+- Between-run seed variance is **now priced**. `gridcmp2-ctrlseed-380889` (CTRL, seed 1) has
+  landed. Per-metric floors are in §12.3; the avg-RI floor is **0.0070** (max |ctrl − ctrlseed|
+  over steps 750–1500, n=2). The −0.0093 sampler effect is ~1.3× that floor — still the
+  smallest margin in §8 relative to noise, and the one most in need of a third seed.
 
 ### 8.7 Negatives memory ceiling — where the grid actually stops (sizing probes)
 
@@ -1084,8 +1089,11 @@ from `ri_curve.json`; base phikon-v2 is 0.469 and the published waiv target is 0
 
 **SPLIT beats CLSONLY by +0.0091 at 1500 (+0.0079 at peak) and CTRL by +0.0066 (+0.0121 at peak).**
 Both split-head margins are larger than the −0.0093 sampler effect of §8.6, so the ordering
-SPLIT > CTRL > CLSONLY ≫ MEANONLY is not a marginal one — with the standing caveat that seed
-variance is still unpriced (§8.6) and every arm here is n=1. MEANONLY is the only arm still rising
+SPLIT > CTRL > CLSONLY ≫ MEANONLY is not a marginal one — and the avg-RI seed floor has since
+been measured at **0.0070** (§12.3), so SPLIT−CLSONLY (+0.0091) and SPLIT−CTRL (+0.0066) sit at
+1.3× and 0.9× that floor. The SPLIT ≫ MEANONLY gap is 27× it; the two smaller gaps are not.
+Every arm here is n=1 and the floor is n=2, so the floor bounds noise, it does not certify
+significance. MEANONLY is the only arm still rising
 at 1500; the other three peak by step 500–750 and decay (below).
 
 **Camelyon carries almost the whole MEANONLY collapse.** SPLIT→MEANONLY is −0.1880 average RI, and
@@ -1196,7 +1204,17 @@ cross-scanner pairs. At 2×2 token blocks (32 px) that falls to 12.2%; at **4×4
 
 ---
 
-## 11. Token-dependent pooling — a NULL RESULT (jobs 381014/381015/381016)
+## 11. Token-dependent pooling (jobs 381014/381015/381016)
+
+> **This section's original heading read "a NULL RESULT" and its conclusion read "no effect".
+> The heading's first clause survives; the leap from it does not — see §12.** On RI the four
+> pooling arms are formally indistinguishable: the spread is 0.0035 and the measured avg-RI seed
+> floor is 0.0070 (§12.3). What is WITHDRAWN is the inference from "RI did not move" to "these
+> arms are the same model". An external readout (HEST, §12.2) places GeM second of six arms and
+> SPLIT first, above CTRL, GRID2, GRID49 and MEANONLY. Against a properly computed HEST seed
+> floor (2 SE = 0.0075) SPLIT clears it at +2.4 SE, but **GeM reaches only +1.9 SE and the
+> CTRL/GRID2/GRID49 middle does not separate at all**. So this is a reason to withhold the null
+> verdict, not a reason to assert the opposite one. §11.1 is corrected in place.
 
 §9.3 says the mean head cannot be a robustness head because `∂m/∂t_i = (1/N)·I` is identical at
 every token. The obvious repair is to make the pooling *token-dependent*, so the gradient can
@@ -1229,12 +1247,29 @@ about a third of the §8.6 sampler effect. GeM is nominally on top and ATTN nomi
 ordering is stable across camelyon, tolkach_esca and every checkpoint — but stability is not
 significance when the whole range is 0.0035.
 
-**This ranking is not decidable and must not be quoted as one.** The control that would establish
-the noise floor — `gridcmp2-ctrlseed-380889`, CTRL re-run at seed 1 — has finished training but
-has **not** produced its RI curve (eval job 381441 in flight; `gridcmp2-grid2-380890` / 381442
-alongside it). Until that lands there is no measured seed variance for this pipeline, so a 0.0035
-spread across four n=1 runs is indistinguishable from four draws of the same distribution. The
-honest reading today is **no effect**: token-dependent pooling did not move RI.
+**This ranking is not decidable on RI and must not be quoted as one.** The control that would
+establish the noise floor — `gridcmp2-ctrlseed-380889`, CTRL re-run at seed 1 — has since landed
+(§12.3): the avg-RI floor is **0.0070**, which is *twice* the entire 0.0035 four-arm spread. So on
+RI the four arms are formally indistinguishable, exactly as suspected.
+
+**CORRECTION — "indistinguishable on RI" was written up as "no effect", and that step does not
+follow.** The original text here concluded "The honest reading today is **no effect**:
+token-dependent pooling did not move RI." The first clause is still right; the framing built on
+it is withdrawn. Of these four arms only GeM has an external readout, and on HEST (§12.2) GeM
+scores **0.4310** against CTRL's 0.4241, GRID2's 0.4224, GRID49's 0.4222 and MEANONLY's 0.4161 —
+second of the six arms measured, behind SPLIT's 0.4331. That readout contains no PathoROB kNN
+table at all. But it does **not** license a positive claim either, for three reasons:
+
+- **GeM does not clear the HEST floor.** Its +0.0070 margin over CTRL is **+1.9 SE** against
+  2 SE = 0.0075 (§12.2) — suggestive, not established. SPLIT, which is not a pooling arm, is the
+  only arm on the high side that does clear it (+2.4 SE).
+- **HEST does not separate GeM from SPLIT** (−0.0021, well inside noise), and **LSE and ATTN have
+  no HEST number at all**, so the §11.1 four-arm ordering is untested externally except for GeM.
+- The RI conclusion is unchanged: token-dependent pooling did not move avg RI beyond the seed floor.
+
+**Net position: this is UNRESOLVED, not null and not positive.** The arms are indistinguishable on
+RI, and the only external readout that touches one of them cannot resolve the differences it
+shows. Calling it a null result asserted more than the evidence carried; so would calling GeM a win.
 
 ### 11.2 The poolers *were* token-dependent — the failure is not a plumbing bug
 
@@ -1286,8 +1321,571 @@ their optimum is not established here.
 
 ### 11.4 Standing caveats
 
-- Every arm is **n=1, seed 0**. The seed-variance control (§8.6, job 381441) is the blocking
-  measurement for all of §11 and for the smaller margins in §9.1.
+- Every arm is **n=1, seed 0**. The seed-variance control has landed (§12.3): avg-RI floor
+  0.0070, which exceeds the whole §11 spread. n=2 bounds noise; it does not certify significance.
 - All arms are reported at step 1500, which §9.4 shows is past their optimum by 0.005–0.007 RI.
+  §12.2 records HEST moving the *other* way over the same span for both SPLIT and GeM (−0.0063,
+  −0.0023 at step 500). Neither clears 2 SE, so it is not a finding, but nothing supports using RI
+  curves as checkpoint selectors. The slide-LOCO version of that story is **retracted** — §12.6.
 - The pooling never reaches evaluation directly (it is not in the exported embedding), so §11
   bounds the effect of pooling *as a training signal*, not of pooling as a readout.
+
+---
+
+## 12. CORRECTION to §9/§11 — a leakage-free tcga readout, and what RI actually measures
+
+This section reverses a conclusion recorded earlier the same day. It is written as a correction,
+in the manner of §8.6, rather than folded silently into the sections above.
+
+**What was asserted.** §11 was titled "a NULL RESULT" and closed with "the honest reading today is
+**no effect**". The reading behind it went further than the heading: the arms that *gain* avg RI
+(SPLIT, GeM, LSE) also show *lower* `ID_performance`, `OOD_performance`, `prediction_performance`
+and `balanced_accuracy` than the arms that lose it (CTRL, GRID49, MEANONLY) — see the §9.2 table,
+where MEANONLY has the best probe balanced accuracy and the worst RI. Read one way, that says an
+arm buys RI by degrading the representation, and that `RI = SO/(SO+OS)` may be rewarding nothing
+more than the de-clustering of a neighbourhood. On that reading every RI gain in §8/§9/§11 is
+hollow and the ranking is an artefact.
+
+**That reading is refuted, by two readouts that share no machinery with PathoROB's kNN table.**
+Slide-level leave-one-center-out logistic regression on tcga (§12.1) puts MEANONLY **below both
+ctrl seeds at 5 of 5 fixed regularisation strengths**, while putting it **above** them at 5/5 on
+the within-center probe. HEST gene expression (§12.2), scored on **held-out whole slides**, puts
+MEANONLY **−2.1 SE** below CTRL and SPLIT **+2.4 SE** above it, both clearing a properly computed
+seed floor. A metric that only rewarded neighbourhood de-clustering could not predict either.
+The "hollow gain" reading and the §11 "null result" framing are **withdrawn**; RI and the
+kNN-derived performance metrics measure two different real axes that genuinely trade off (§12.5).
+
+**Four things in the first version of this section were themselves wrong and are retracted here:**
+every ×floor ratio computed against a `max`-over-C denominator (§12.0 explains why those
+denominators are invalid; §12.1/§12.3 give the fixed-C replacements); a first-pass HEST seed floor
+of 0.0003 that was an artefact of per-task errors cancelling (§12.2); the slide-LOCO seed floor
+itself, which has now moved **0.0016 → 0.0104 → 0.0214** and is still only a bound (§12.3); and
+the "training over-specialises / early checkpoint peak" story, which is now **dead** rather than
+merely unsupported — the whole ctrl trajectory is smaller than the gap between two seeds (§12.6).
+
+**Read this section as: directions established, magnitudes unsettled.** What survives is
+**sign unanimity across the regularisation grid**, **agreement between two independent readouts
+with unrelated noise models**, and **the two ends of the HEST table**. No individual ×floor ratio
+survives, and none is load-bearing. A 3–4 seed study is being scoped; until it lands the floor is
+a two-point bound and the magnitudes here cannot be stated properly.
+
+### 12.0 METHODOLOGY — `max` over the regularisation grid manufactured effects that do not exist
+
+**This is worth more than any individual number in §12.** Every linear-probe figure in the
+`readout_*.json` family was reported as the **maximum over `C_GRID = [1e-4, 1e-3, 1e-2, 1e-1, 1.0]`**,
+with the maximum taken **on the metric being reported** and no held-out selection. Two things
+follow, and the second one is the damaging one:
+
+1. Max-over-C is **optimistically biased** on every absolute level. This was known and was
+   originally written off as harmless because the bias applies to every arm alike.
+2. **It is not harmless, because different arms and different checkpoints peak at different C.**
+   A "max-over-C seed floor" compares two *differently-selected* models, so it is not a floor at
+   all — it measures the agreement of two argmaxes, not the noise between two seeds. When that
+   artificially tight floor is used as the denominator, it manufactures large "×floor" effects
+   out of nothing.
+
+The damage is quantified in `waiv_eval_feats/results/fixed_C_analysis.md` (with
+`ladder_fixedC.txt`, `step_curve.json`, `step_chain_manifest.txt`). On slide-LOCO the max-over-C
+seed floor is 0.0016 while the widest **fixed-C** floor is **0.0104 — 6.7× wider**. On tile-linear
+LOCO it is 0.0004 against 0.0111, **26.7× wider**. Ratios computed against the former are inflated
+by those factors.
+
+**Rules going forward, and they apply to every probe number in this document:**
+
+- **Read probe figures at fixed C.** A max-over-C figure may be quoted as a level, never as the
+  basis of a between-arm or between-checkpoint ×floor claim.
+- **The seed floor must be computed at the same fixed C as the comparison it scales.** A floor at
+  one C and a delta at another is not a ratio of anything.
+- **Prefer sign agreement across the whole C grid to any single ratio.** "Worse at 5 of 5 fixed C"
+  is a claim that survives; "−14.5× the floor" was not.
+- Per-C floors are themselves unstable at n=2 and go degenerate (one is 0.0000, giving a
+  meaningless +227× ratio). Scale against the **widest** fixed-C floor, which is the conservative
+  choice, and treat it as a bound on noise rather than a significance test.
+
+This does **not** touch the kNN or silhouette columns (no C is selected; k=1 is a fixed choice,
+not a maximum), the RI/PathoROB metrics of §1–§11 (no linear probe), or HEST (§12.2, ridge with a
+fixed protocol).
+
+**Three methodology failures now, and all three made effects look realer than they were.** Record
+them together, because they are easy to repeat:
+
+1. **`max` over a hyperparameter grid, selected on the reported metric** (this section). Inflated
+   the slide-LOCO floor tightness by 6.7× and the tile-linear one by 26.7×.
+2. **A difference of averages, where per-task errors cancel** (§12.2). Made the HEST seed floor
+   read 0.0003 when the honest value from per-task dispersion is 0.0075 — a 25× understatement.
+3. **A seed floor estimated from two runs is a BOUND, not an estimate, and can be off by an order
+   of magnitude** (§12.3). This one moved from 0.0016 → 0.0104 → **0.0214** as better
+   measurements arrived, and it is still only a bound. Two points cannot estimate a spread.
+
+The common shape: **every one of them shrank a denominator**, and a shrunken denominator turns
+noise into a finding. When a result depends on a ×floor ratio, interrogate the floor first.
+
+### 12.1 Slide-level LOCO on tcga — leakage-proof by construction
+
+Mean-pool each of the **272** tcga slides to one vector, then leave-one-medical-center-out
+logistic regression over the 8 centers, 4 classes. No tile-level neighbourhood is involved at any
+point, so the same-slide artifact of §12.4 cannot reach it. Sources:
+`/admin/home/ryan.kim/waiv_eval_feats/results/readout_{ARMS,BASELINE,DYNRANGE}.json`, flattened in
+`readout_summary.{json,md}`.
+
+**Reported at fixed C, per §12.0.** An earlier pass at this section reported max-over-C and its
+×floor ratios (−14.8× slide-LOCO, −7.8× tile-linear LOCO, "−1.0× indistinguishable" on ID
+centers). **Those ratios are RETRACTED**; the levels were real but the denominators were not.
+Everything below is at fixed C, from `fixed_C_analysis.md`.
+
+**Slide-LOCO, every C, step 1500.** Δ is (meanonly − mean of the two ctrl seeds); the last column
+scales it by the **widest** fixed-C floor for this probe, 0.0104 at C=0.1.
+
+| C | base | ctrl (s0) | ctrlseed (s1) | per-C floor | meanonly | Δ vs ctrl-pair | ÷0.0104 |
+|---|---|---|---|---|---|---|---|
+| 1e-4 | 0.8719 | 0.8568 | 0.8490 | 0.0078 | 0.8271 | −0.0258 | −2.5× |
+| 1e-3 | 0.8557 | 0.8542 | 0.8516 | 0.0026 | 0.8323 | −0.0206 | −2.0× |
+| 1e-2 | 0.8698 | 0.8651 | 0.8641 | 0.0010 | 0.8401 | −0.0245 | −2.4× |
+| 1e-1 | 0.8672 | 0.8563 | 0.8667 | **0.0104** | 0.8427 | −0.0188 | −1.8× |
+| 1.0  | 0.8594 | 0.8641 | 0.8667 | 0.0026 | 0.8323 | −0.0331 | −3.2× |
+
+**MEANONLY is worse on slide-LOCO at 5 of 5 fixed C. No choice of C rescues it.** That unanimity
+is the verdict, and it stands.
+
+**The MAGNITUDE, however, is not reliably outside seed variance — state both framings.** The
+delta ranges −0.0188 to −0.0331 across C. Scaled against the **step-1500** floor (0.0104) that is
+**−1.8× to −3.2×**; scaled against the **step-500** floor (0.0214, §12.3) it is only
+**−0.9× to −1.5×**, i.e. at or barely past one floor. **The floor estimate itself ranges
+0.0104–0.0214 and there is no principled basis for choosing between them** — it varies by step
+and by C, and n=2 seeds cannot pin it. So: **direction established, magnitude unsettled.** Do not
+quote "−1.8× to −3.2×" without this qualification.
+
+Summary across all four linear probes (all tcga, step 1500, all from `fixed_C_analysis.md`):
+
+| probe | axis | meanonly worse at | ÷widest fixed-C floor | widest floor | verdict |
+|---|---|---|---|---|---|
+| slide-level LOCO (n=272) | cross-center | **5 / 5 C** | −1.8× to −3.2× @1500 floor; **−0.9× to −1.5× @500 floor** | 0.0104–0.0214 | **worse, unanimous**; magnitude unsettled |
+| tile-linear LOCO, all centers | cross-center | **5 / 5 C** | −0.1× to −1.1× | 0.0111 | worse, unanimous; magnitude within noise |
+| tile-linear LOCO, ID centers | cross-center | **4 / 5 C** | +0.4× to −1.8× | 0.0108 | worse at 4/5, reaching −1.8× |
+| tile-linear in-group (slide-grp) | within-center | **0 / 5 C** | +0.7× to +2.0× | 0.0047 | **better, unanimous** |
+
+**CORRECTION — the ID-centers row is not a null.** It was first recorded as "−1.0×,
+indistinguishable", which was itself a max-over-C artifact (§12.0). At fixed C it is adverse at
+**4 of 5 C and reaches −1.8× the floor**. That correction *strengthens* the meanonly verdict and
+makes it uniform across probe variants rather than dependent on one of them.
+
+Two probes with no C to select at all, so §12.0 does not apply and the step-1500 n=2 floors stand:
+
+| metric | ctrl (s0) | ctrlseed (s1) | floor | meanonly | ×floor |
+|---|---|---|---|---|---|
+| kNN@1, same-slide excluded | 0.7197 | 0.7240 | 0.0043 | 0.7403 | **+4.3** |
+| silhouette vs `medical_center` | −0.0199 | −0.0173 | 0.0026 | +0.0054 | **+9.2** |
+
+**The split is clean and it runs along the cross-center / within-center axis, not along probe
+quality.** All **three** cross-center probes are adverse for MEANONLY — 5/5 C, 5/5 C and 4/5 C —
+and the single within-center probe is favourable at 5/5 C, with +4.3 floors on same-slide-excluded
+kNN@1 alongside it. **The only reversal in the whole set is the one that changes axis.** That is
+the shape a *trade-off* has, not the shape "MEANONLY is simply a worse model" has, and it is not
+the shape "RI is meaningless" predicts either — a meaningless RI would not be tracked by a probe
+built without it.
+
+What successive corrections have *shrunk* is the **magnitude** of the cross-center penalty, never
+its direction. On the tile-level probes the per-C margins mostly sit inside the floor, and after
+the step-500 floor landed (§12.3) even slide-LOCO is only 0.9–1.5× floor on the pessimistic
+reading. **Treat every magnitude here as unsettled pending a proper multi-seed study.**
+
+**What the direction finding rests on — and it is not any single magnitude:**
+
+1. **5/5-C unanimity on slide-LOCO**, plus 5/5 and 4/5 on the two tile-level cross-center probes,
+   against 0/5 on the within-center probe. Sign agreement is robust to the floor being unknown.
+2. **Independent agreement from HEST** (§12.2), where MEANONLY is last at **−2.1 SE** below CTRL
+   against a floor derived from per-task seed differences (SE 0.0037) that has **nothing to do
+   with slide-LOCO** — different dataset, different task, different probe, different noise model.
+
+Two independent readouts agreeing on direction is the claim. A single ×floor ratio is not.
+
+**The mechanism is visible in the silhouette column.** Silhouette against `medical_center` is
+**positive** for MEANONLY (+0.0054) and **negative** for both ctrl seeds (−0.0199, −0.0173):
+ctrl actively destroys medical-center structure in the embedding, MEANONLY retains it. Retained
+center structure is exactly what helps a within-center probe and hurts a cross-center one.
+
+**One coincidence to not read into.** MEANONLY's tcga ID-centers figure is 0.8106 and the untuned
+base's tcga tile-linear LOCO figure is also 0.8106. Different probes, different rows, no relation.
+
+**Camelyon is a different dataset and its figures must be kept separate** — untuned base camelyon
+tile-linear LOCO is 0.9833 and slide-LOCO is 1.0000 (§12.6).
+
+### 12.2 HEST, 5-task subset — external, and the ends of the table ARE separated
+
+Ridge on frozen embeddings, Pearson r per gene over the top-50 HVGs, on the SKCM / COAD / READ /
+PAAD / LUNG subset of HEST. Nothing in this pipeline touches PathoROB. Summaries under
+`/data/ryan.kim/hest_work/`, mirrored to `results_backup/hest_sub5/` (`/data` is volatile).
+
+**Protocol notes — four things, three of them limits:**
+
+- **The protocol is "2–3 coarse, slide-disjoint folds per task" — NOT leave-one-patient-out.**
+  `third_party/HEST` `bench/benchmark.py:355-369` discovers fixed folds from each task's `splits/`
+  directory (`n_splits = len(listdir)//2`, then `train_i.csv` / `test_i.csv`). **11 folds total**
+  across the subset: SKCM 2 folds / 2 samples, COAD 2/4, READ 2/4, PAAD 3/3, LUNG 2/2. They are
+  **coarse**: COAD fold 0 trains on a *single* slide (`TENX111`) and tests on the other three, then
+  swaps. Only PAAD is a genuine leave-one-out; SKCM and LUNG are 2-sample swaps that are
+  leave-one-out only by degenerate coincidence. **All 11 folds are disjoint** — zero train/test
+  overlap, verified on the `sample_id` column.
+  **Say "slide-disjoint", not "patient-disjoint" — and treat that as settled, not pending.**
+  Slide-level disjointness is **verified**. Patient-level disjointness **cannot be verified from
+  the local data at all**: the split unit is `sample_id` = one ST slide, and direct inspection
+  found **no patient/donor identifier anywhere** under `/data/ryan.kim/hest_bench/` — the `.h5ad`
+  `obs` fields are per-spot QC and spatial only (`array_row`, `in_tissue`, `pxl_col_in_fullres`,
+  `total_counts`, …), and no accompanying metadata file carries donor IDs. Whether two slides
+  share a donor is **not answerable from what is on disk**. This is a closed question, not an open
+  action item — nobody should be sent to go and check.
+  **Nothing downstream depends on it.** The mechanism argued below — that a feature encoding
+  slide-specific identity has no counterpart in a held-out slide and therefore cannot transfer —
+  rests **only on slide-disjointness**, which holds at 11/11 folds.
+  The "leave-one-patient-out" claim in the docstring at `src/waivphaet/eval/hest_adapter.py:23`
+  is wrong and should be read as slide-level.
+- **The 5-task subset was selected on prior effect size — this bounds the magnitudes, not the
+  ranks.** `hest_arms.sbatch:28-31` picked these five of the benchmark's nine because they "carry
+  the largest |delta| vs base in the prior ft1500 sweep". So the **absolute** deltas are upper
+  bounds, not unbiased estimates of a full 9-task run: read CTRL's +0.0132 over base and SPLIT's
+  +0.0223 that way. It does **not** threaten the rank correlations below, for a specific reason —
+  the selection used deltas from a **different arm family** (the earlier ft500–ft3500 CLS-pooling
+  checkpoints) against base, and was blind both to the current arms' relative ordering and to RI
+  entirely. It selects tasks where fine-tuning moves the needle **at all**, not tasks where these
+  arms rank any particular way.
+- **Not comparable to the published phikon-v2 0.3747.** `scripts/run_hest.py:138-142` stamps every
+  summary with this warning: the published row is phikon-v2 **CLS**, ours is `clsmean`. These are
+  checkpoint-to-checkpoint reference numbers and nothing else.
+- **The readout is uniform across arms.** HEST scores through `self.encoder.embed(x)`
+  (`hest_adapter.py:126`) with `pooling="clsmean"` for every run, so SPLIT / GeM / MEANONLY are all
+  read through an **identical** head — the arm-specific projector heads are training-only. This is
+  what makes the comparison fair; it also means MEANONLY is not scored on its own pooling.
+
+**Alignment gate passed** before any arm was read: the base run reproduces the existing full
+9-task `base_clsmean` to **+0.00000 on all five shared tasks**, so the subset is a genuine subset
+of the same protocol.
+
+RI and `prediction_performance` below are **last-three-checkpoint means** (steps 1000/1250/1500),
+the convention §8.2/§8.6 use, averaged over camelyon / tolkach_esca / tcga. **Both conventions are
+in circulation and they differ** — SPLIT's `prediction_performance` is 0.8958 as a last-3 mean and
+0.8949 at step 1500 — so every PathoROB figure in §12 is on the last-3-mean convention and is
+labelled as such. Rankings are identical either way.
+
+| arm | HEST (5-task avg) | avg RI (last-3) | `prediction_performance` (last-3) |
+|---|---|---|---|
+| `headcmp-split-380856` | 0.4331 | 0.8205 | 0.8958 |
+| `poolcmp-gem-381014` | 0.4310 | 0.8216 | 0.8954 |
+| `gridcmp-ctrl-380777` | 0.4241 | 0.8127 | 0.9057 |
+| `gridcmp2-ctrlseed-380889` | 0.4238 | 0.8058 | 0.9047 |
+| `gridcmp2-grid2-380890` | 0.4224 | 0.8197 | 0.9025 |
+| `gridcmp-grid49-380779` | 0.4222 | 0.7973 | 0.9106 |
+| `headcmp-meanonly-380858` | 0.4161 | 0.6276 | 0.9099 |
+| untuned base | 0.4109 | — | — |
+
+**The HEST seed floor has now landed — and computing it correctly is itself a methodology lesson.**
+The naive floor is |ctrl − ctrlseed| on the 5-task average = **0.0003**. **Do not use that number.**
+It is small because per-task seed errors **cancel**, not because the estimate is precise. The
+per-task differences are an order of magnitude larger and offsetting:
+
+| | SKCM | COAD | READ | PAAD | LUNG |
+|---|---|---|---|---|---|
+| ctrl − ctrlseed | +0.0061 | −0.0022 | +0.0101 | −0.0011 | −0.0116 |
+
+SD = 0.0084 over five tasks, so the standard error on a 5-task average is
+**SE = 0.0084/√5 = 0.0037**, and **2 SE = 0.0075**. That is 25× the naive figure.
+**Generalisable lesson, alongside §12.0: an average-of-averages difference can look tiny purely
+because per-task errors cancel. Always derive the floor from the per-task spread.**
+
+Against 2 SE = 0.0075, measuring every arm from CTRL:
+
+| arm | HEST | vs ctrl | verdict |
+|---|---|---|---|
+| `headcmp-split` | 0.4331 | +0.0090 | **+2.4 SE — REAL** |
+| `poolcmp-gem` | 0.4310 | +0.0070 | +1.9 SE — marginal |
+| `poolcmp-gem` @500 | 0.4287 | +0.0046 | +1.2 SE — noise |
+| `headcmp-split` @500 | 0.4268 | +0.0028 | +0.7 SE — noise |
+| `gridcmp-ctrl` | 0.4241 | — | reference |
+| `gridcmp2-ctrlseed` | 0.4238 | −0.0003 | the seed pair |
+| `gridcmp2-grid2` | 0.4224 | −0.0017 | −0.5 SE — noise |
+| `gridcmp-grid49` | 0.4222 | −0.0019 | −0.5 SE — noise |
+| `headcmp-meanonly` | 0.4161 | −0.0079 | **−2.1 SE — REAL** |
+| untuned base | 0.4109 | −0.0132 | **−3.5 SE — every arm beats base** |
+
+**Established: SPLIT > CTRL, and MEANONLY < CTRL.** Both clear 2 SE, and MEANONLY's direction here
+independently agrees with its 5/5-fixed-C loss on slide-LOCO (§12.1).
+
+**NOT established: the middle of the table.** CTRL / CTRLSEED / GRID2 / GRID49 span 0.0019 — a
+quarter of one SE. **Do not rank within that group.** GeM at +1.9 SE is marginal and should be
+called suggestive, not real. Fold-level dispersion is the reason to stay conservative here:
+SPLIT's per-fold values are SKCM [0.6886, 0.5604], COAD [0.2840, 0.3346], READ [0.2322, 0.1231],
+PAAD [0.4420, 0.5940, 0.4419], LUNG [0.5505, 0.5726] — within-task spreads of 0.02–0.15 from two
+folds on four of the five tasks. The 2 SE figure is n=2 seeds over 5 tasks and bounds noise; it
+does not certify significance.
+
+**The gains are not broad-based — read the per-task breakdown, not the average.**
+
+| task | base | split | gem | ctrl | grid2 | grid49 | meanonly |
+|---|---|---|---|---|---|---|---|
+| SKCM | 0.5844 | 0.6245 | 0.6227 | 0.6079 | 0.5991 | 0.6022 | 0.6005 |
+| COAD | 0.2560 | 0.3093 | 0.3052 | 0.3046 | 0.3021 | 0.2974 | 0.2687 |
+| READ | **0.1865** | 0.1777 | 0.1764 | 0.1737 | 0.1721 | 0.1734 | 0.1663 |
+| PAAD | 0.4771 | 0.4926 | 0.4913 | 0.4840 | 0.4821 | 0.4849 | 0.4781 |
+| LUNG | 0.5503 | 0.5615 | 0.5596 | **0.5502** | 0.5565 | 0.5530 | 0.5671 |
+
+**READ regresses below base for every tuned arm** and LUNG is flat for CTRL (0.5502 vs 0.5503).
+The headline averages are carried almost entirely by **SKCM and COAD** — which is precisely what
+the effect-size-based task selection above would be expected to produce.
+
+**Correlations against the PathoROB metrics — n=7 arms** (the six above plus CTRLSEED), PathoROB
+figures as last-three-checkpoint means. Computed here, not transcribed:
+
+| PathoROB metric | Pearson | p | Spearman | p |
+|---|---|---|---|---|
+| `confounder_insensitivity` | **+0.873** | 0.010 | +0.857 | 0.014 |
+| `avg_robustness_index` | +0.713 | 0.072 | +0.857 | 0.014 |
+| `ID_performance` | **−0.919** | 0.003 | −0.821 | 0.023 |
+| `OOD_performance` | −0.915 | 0.004 | −0.821 | 0.023 |
+| `prediction_performance` | −0.900 | 0.006 | −0.786 | 0.036 |
+| `balanced_accuracy` | −0.751 | 0.052 | −0.536 | 0.215 |
+
+**The pattern is not driven by the MEANONLY outlier.** Dropping it (n=6) preserves every sign and
+most of the magnitude: RI +0.648, CI +0.845, ID −0.890, OOD −0.885, `prediction_performance`
+−0.892, `balanced_accuracy` −0.912. That robustness check is what makes these usable — an earlier
+pass withheld them on the grounds that they might be computed over noise, and that objection is
+now answered by the seed floor above and by this leave-one-out check. **State the n=7 and treat
+the p-values as fragile**; five points of freedom will not survive much scrutiny.
+
+**RI is close to a restatement of `confounder_insensitivity`, and CI is the better predictor.**
+CI beats RI on Pearson (+0.873 vs +0.713) and ties it on Spearman. If a single PathoROB scalar is
+wanted as a proxy for external performance, the evidence here points at CI, not avg RI. The two
+track each other closely across arms — GeM CI 0.7892 → RI 0.8216, CTRL 0.6966 → 0.8127, MEANONLY
+0.4129 → 0.6276.
+
+**The mechanism, and why the fold coarseness cuts in our favour.** HEST fits ridge on one set of
+whole slides and predicts on **entirely held-out slides**. A feature encoding slide-specific
+identity — scanner, staining batch, section artefacts — has no counterpart in the test slide and
+**cannot transfer**. `confounder_insensitivity` measures precisely the absence of such features,
+and RI is nearly a restatement of it. The PathoROB kNN metrics, by contrast, are computed inside a
+neighbour table where slide-identity features **can** help retrieval. That is why HEST comes out
+at +0.87 with CI and −0.92 with `ID_performance`: same embeddings, opposite exposure to the
+confound. Two consequences of the fold structure reinforce this rather than undermining it:
+
+- **The coarseness strengthens the confounder argument.** With train sets as small as *one* slide
+  (COAD fold 0), slide-specific features are **maximally** penalised — there is no second training
+  slide over which to average them out.
+- **It also explains the seed-floor trap above.** Two folds per task is a high-variance estimator,
+  which is exactly why per-task seed differences reached ±0.0116 on LUNG while the 5-task mean
+  cancelled to 0.0003.
+
+**Provenance of the seed floor is clean.** The per-task differences feeding SE come from the
+**rebuilt** ctrlseed run (job **381610**, results dir `sub5_ctrlseed_clsmean::26-08-14-21-01-29`),
+which contains all five tasks including READ 0.1636. The two crashed earlier attempts never wrote
+a summary at all and contribute nothing.
+
+**Step 500 is WORSE than step 1500 on HEST for BOTH arms whose RI peaks at 500** — SPLIT −0.0063
+and GeM −0.0023 (`sub5_gem500_clsmean`, job 381578, not yet mirrored to `results_backup/`).
+Neither margin clears 2 SE, so **this is not a finding**. What makes it worth recording is that
+**two independently trained arms reproduce the same divergence in the same direction**: in each
+case RI says step 500 and HEST says step 1500. A single arm would be an anecdote; two arms
+agreeing is a **caution** with something behind it. RI curves should not be used as checkpoint
+selectors, and there is no evidence they can be. The slide-LOCO version of the "early peak" story
+is outright retracted — see §12.6.
+
+**Reproducibility gap.** The arm→checkpoint mapping for these runs lives only in an ephemeral
+scratchpad `hest_arms.sbatch`, not in the repo's `scripts/`, and none of these HEST values appear
+in `waiv_published.json`, `PLAN.md` or `README.md`. Recording them here is the only durable copy.
+
+### 12.3 Per-metric seed floors — measured, n=2
+
+`gridcmp-ctrl-380777` (seed 0) against `gridcmp2-ctrlseed-380889` (seed 1), identical in every
+other respect. Floor = **max |ctrl − ctrlseed| over steps 750, 1000, 1250, 1500** — the *max*, not
+the mean over those steps; the two differ (mean avg-RI would be 0.0069, mean CI 0.0179) and the
+max is the conservative choice. Recomputed from `ri_curve.json`; `balanced_accuracy` is **0.0014**
+(an earlier note said 0.0015).
+
+| quantity | floor | | per-dataset RI | floor |
+|---|---|---|---|---|
+| avg RI | **0.0070** | | camelyon | **0.0143** |
+| `prediction_performance` | 0.0020 | | tcga | 0.0064 |
+| `OOD_performance` | 0.0022 | | tolkach_esca | 0.0028 |
+| `ID_performance` | 0.0017 | | | |
+| `balanced_accuracy` | 0.0014 | | | |
+| `confounder_insensitivity` | 0.0216 | | | |
+
+**Do not apply the avg-RI floor to the other metrics.** It is 3.5–5× looser than the
+`ID_performance` / `OOD_performance` / `prediction_performance` / `balanced_accuracy` floors,
+because camelyon's own RI floor (0.0143) dominates the average. Judging a 0.010 move in
+`prediction_performance` against 0.0070 understates it by a factor of ~3.5.
+
+Every "×floor" in this document is a scale reference, never a p-value.
+
+**tcga linear-probe floors — the max-over-C values are RETRACTED.** Per §12.0 a max-over-C floor
+compares two differently-selected models and is not a noise floor. Use the fixed-C column:
+
+| probe | max-over-C "floor" (RETRACTED) | widest fixed-C floor | inflation |
+|---|---|---|---|
+| slide-level LOCO | ~~0.0016~~ | **0.0104** (at C=0.1) | 6.7× |
+| tile-linear LOCO, all centers | ~~0.0004~~ | **0.0111** (at C=0.1) | 26.7× |
+| tile-linear LOCO, ID centers | ~~0.0062~~ | **0.0108** (at C=1.0) | 1.7× |
+| tile-linear in-group | ~~0.0022~~ | **0.0047** (at C=1e-4) | 2.2× |
+
+Per-C floors vary by an order of magnitude within a single probe and one of them is **0.0000**
+(in-group at C=0.1, which would give a nonsense +227× ratio). Scale against the widest.
+
+**The slide-LOCO floor is also STEP-dependent, and at step 500 it is twice as large again.**
+`ctrlseed@500` was extracted and scored against `ctrl@500` (both recomputed here from the feature
+dirs via `readout_arms.slide_probe`):
+
+| C | ctrl@500 | ctrlseed@500 | floor@500 | floor@1500 |
+|---|---|---|---|---|
+| 1e-4 | 0.8594 | 0.8568 | 0.0026 | 0.0078 |
+| 1e-3 | 0.8516 | 0.8578 | 0.0063 | 0.0026 |
+| **1e-2** | 0.8667 | **0.8880** | **0.0214** | 0.0010 |
+| 1e-1 | 0.8667 | 0.8729 | 0.0062 | 0.0104 |
+| 1.0 | 0.8667 | 0.8719 | 0.0052 | 0.0026 |
+
+**Two runs identical apart from the random seed differ by 0.0214** — 13× the 0.0016 originally
+reported and 2× the step-1500 floor. Note also that `ctrlseed@500` at C=1e-2 scores **0.8880**,
+which is **above untuned base at the same C (0.8698)** — a seed replicate alone can clear base.
+
+**So the slide-LOCO floor is somewhere in 0.0104–0.0214 with no principled way to choose.** It is
+not a constant: it varies by step and by C, and n=2 cannot pin it. Every slide-LOCO magnitude in
+§12 should be read against that range, not against a single number.
+
+**n=2 bounds noise; it does not certify significance — and this floor has now moved by an order of
+magnitude, twice.** Two seeds give a single difference, not a variance estimate. A proper 3–4 seed
+study is being scoped; when it lands the floor becomes an SD rather than a two-point bound and
+these magnitudes can be stated properly. Until then: **directions established, magnitudes
+unsettled.** The kNN and silhouette floors in §12.1 are unaffected by C but carry the same n=2
+caveat.
+
+### 12.4 Leakage — it was in *our* probes, and PathoROB is CLEAR
+
+**Our earlier tile-level kNN probes leaked, badly.** On tcga with only the query tile itself
+excluded, base phikon-v2 scores **kNN@1 = 0.9983** on a 4-class problem. With same-slide
+neighbours excluded it scores **0.7777**. That is a **22.1-point** artifact, and its cause is
+structural: 8160 tiles / 272 slides = **exactly 30 tiles per slide**, so a query's nearest
+neighbour is almost always another crop of the same slide. Camelyon shows the same defect an order
+of magnitude smaller (0.9952 → 0.9379, −5.7 points). Any tile-level kNN number in this repo that
+does not say "same-slide excluded" is not a generalisation measurement.
+
+**PathoROB itself does NOT have this defect — checked and cleared.**
+`third_party/PathoROB/pathorob/robustness_index/robustness_index_utils.py:511-529` implements
+`filter_out_query_case_from_neighbors`, which takes `group_id = meta["slide_id"].values` and keeps
+only `[i for i in knn_indices[q] if group_id[i] != query_group_id]` (line 519). It is called at
+`evaluate_knn_accuracy:546`, and the **same filtered `knn_indices`** is what reaches
+`evaluate_embeddings(dataset, meta, knn_indices)` at `robustness_index.py:172`, which is where the
+SS/SO/OS/OO counts that define RI are built. So the SS/SO/OS/OO table is same-slide-free and
+`RI = SO/(SO+OS)` was never inflated by the artifact above. The RI numbers throughout §1–§11 stand
+on this point.
+
+**A separate, real PathoROB defect, recorded for completeness.** Line 527,
+`result = [row[:min_nr_neighbors] for row in result]`, truncates *every* query's neighbour list to
+the **global minimum** survivor count across all queries. The consequence is that the reported
+`k_opt` (11 on camelyon, 61 on tcga) may not be the k actually used, since the effective neighbour
+count is capped by the single worst-case query. This affects every arm identically — it is a
+property of the harness and the dataset, not of the model — so it does not bias any between-arm
+comparison in this document. It does mean `k_opt` should not be quoted as "the optimal k".
+
+### 12.5 The corrected interpretation — RI and the kNN performance metrics are two real axes
+
+Both are computed from the same SS/SO/OS/OO counts, and they weight them differently:
+
+- **`RI = SO/(SO+OS)`** penalises neighbourhoods clustered by **medical center**. It is a
+  **cross-center transfer** metric.
+- **`ID = SS/(SS+OS)`**, **`OOD = SO/(SO+OO)`** and `prediction_performance` reward same-class
+  retrieval *regardless of center*. They are **within-center retrieval** metrics.
+
+An arm that retains center structure scores well on the second group and badly on the first. That
+is not a pathology of either metric; it is the trade-off both are correctly reporting. MEANONLY is
+the clean demonstration, and §12.1 measures both halves independently of the kNN table, **at every
+fixed C**: worse across centers at **5/5 C** on slide-LOCO, better within-center at **5/5 C** on
+the in-group probe, plus +4.3 floors on same-slide-excluded kNN@1. The silhouette column names the
+mechanism. **The unanimity is the evidence; the magnitudes are unsettled** — the slide-LOCO floor
+is only bounded to 0.0104–0.0214 (§12.3), which puts that delta anywhere from −0.9× to −3.2×.
+
+**Consequences:**
+
+1. **The "hollow gain" reading is refuted.** A metric that merely rewarded neighbourhood
+   de-clustering would not predict which arm loses a cross-center probe containing no kNN table —
+   yet MEANONLY loses that probe at every C while winning the within-center one at every C, and
+   loses HEST by 2.1 SE on held-out slides. Two real axes trading off, not an artefact of how RI
+   is built. **The load-bearing evidence is 5/5-C sign unanimity plus agreement from a second,
+   independent readout with its own noise model — not any ×floor magnitude.** The slide-LOCO
+   magnitudes are unsettled while its floor is only bounded to 0.0104–0.0214 (§12.3).
+2. **§11's "null result" framing is withdrawn** (§11, §11.1) — but §11 itself resolves to
+   **unresolved**. SPLIT clears 2 SE on HEST; GeM, the only *pooling* arm with a HEST number,
+   reaches only +1.9 SE, and LSE/ATTN have none.
+3. **The §12.2 correlations ARE admissible**, now that the seed floor exists and the pattern
+   survives dropping the MEANONLY outlier. Note what they say: `confounder_insensitivity` predicts
+   external performance **better than avg RI** (+0.873 vs +0.713 Pearson). RI is close to a
+   restatement of CI, and CI is the sharper instrument. State n=7 and treat the p-values as fragile.
+4. **§9.2's standing rule is unchanged and now has a mechanism.** "Training loss, top-1, and
+   balanced accuracy must never be used for model selection on this objective" was right; §12.2
+   adds `prediction_performance` (−0.900), `ID_performance` (−0.919) and `OOD_performance`
+   (−0.915) to the list of metrics that move *against* external performance, and explains why —
+   they are computed inside a neighbour table where slide-identity features help.
+5. **RI (better: CI) is the admissible selection signal for a configuration** — subject to §12.6 on
+   what *avg* RI is a readout of. Whether it selects a **checkpoint** is untested and the evidence
+   leans against: the slide-LOCO early-peak story is retracted (§12.6), and on HEST step 500 is
+   *worse* than step 1500 for both arms whose RI peaks at 500 (§12.2).
+
+### 12.6 Two live concerns
+
+**Camelyon is saturated, and it dominates avg RI.** The untuned base already scores **1.0000**
+slide-level LOCO on camelyon (n=97 slides) and 0.9833 tile-linear LOCO. There is no quality
+headroom left on a linear or slide-level probe. At the same time camelyon carries the overwhelming
+majority of the between-arm variance in avg RI: across the six arms at step 1500 the covariance
+decomposition attributes **86%** of `var(avg RI)` to camelyon (recomputed here; an earlier note
+said ~90%), against 8% tcga and 5%
+tolkach_esca (sd 0.1774 vs 0.0179 vs 0.0112). So **avg RI is largely a readout on the one dataset
+with no headroom.**
+
+This is a live concern about using **avg RI for selection**, and it is a *different* claim from
+the one withdrawn above: RI is not meaningless (§12.5 settles that), but avg-RI's *composition* is
+lopsided, and a per-dataset RI table — which §8.2, §9.1 and §11.1 all already print — is the
+honest object. The camelyon figures in this paragraph are **text-only**, verified from
+`waiv_eval_feats/results/camelyon_base_only.log`; that run's JSON was overwritten by a later
+tcga-only re-run, so `readout_BASELINE.json` now contains **tcga only** and has no camelyon
+counterpart.
+
+**DEAD — the early-peak / checkpoint-ladder hypothesis.** An earlier pass recorded a ctrl
+slide-LOCO trajectory peaking early (ctrl@250 = 0.8792) and degrading, and read it as training
+over-specialising. **That peak was a max-over-C artifact.** The full six-point ctrl ladder at
+fixed C (all values recomputed here from the feature dirs; the checked-in
+`ladder_fixedC.txt` / `step_curve.json` are stale and hold only 3 steps / 5 rows):
+
+| step | 1e-4 | 1e-3 | 1e-2 | 1e-1 | 1.0 |
+|---|---|---|---|---|---|
+| 250 | 0.8490 | 0.8542 | **0.8792** | 0.8693 | 0.8615 |
+| 500 | **0.8594** | 0.8516 | 0.8667 | 0.8667 | **0.8667** |
+| 750 | 0.8568 | **0.8568** | 0.8641 | 0.8641 | **0.8667** |
+| 1000 | 0.8505 | **0.8568** | 0.8651 | **0.8703** | 0.8641 |
+| 1250 | 0.8542 | 0.8542 | 0.8651 | 0.8563 | 0.8615 |
+| 1500 | 0.8568 | 0.8542 | 0.8651 | 0.8563 | 0.8641 |
+| *spread* | 0.0104 | 0.0052 | 0.0151 | 0.0141 | 0.0052 |
+| *argmax* | 500 | 750/1000 | 250 | 1000 | 500/750 |
+
+**Every per-C trajectory spread (0.0052–0.0151) is below the 0.0214 seed floor**, and the argmax
+step wanders across C with no pattern — 500, 750/1000, 250, 1000, 500/750, i.e. **every step in
+the ladder is the winner at some C**, two of them only as ties.
+
+**Conclusion: PLISM training does not measurably change tcga cross-center transfer across steps
+250–1500. There is no early peak and there is no trend.** This is a **dead hypothesis**, not an
+unsupported one — the entire trajectory is smaller than the noise between two seeds of the same
+config. Do not write "training over-specialises", do not write "peaks early then degrades", and
+do not reopen this without a multi-seed ladder.
+
+The corroboration previously claimed from the **0.8818 step-300 smoke datapoint is dropped** —
+there is no robust peak for it to corroborate. It should not have been used regardless: it is
+`WAIV-smoke-s300` in `readout_DYNRANGE.json`, i.e. `waiv_lora_smoke369019`, a **different arm** and
+a smoke run from a prior session. The stale `WAIV-s1500` row in the same file (0.8984, *above*
+base) is likewise a different arm and cuts the other way.
+
+**What remains open: the two external readouts disagree on the SIGN of the training effect.** On
+HEST every arm is above base — CTRL +0.0132 and SPLIT +0.0223, i.e. **+3.5 SE** and beyond, the
+firmest margins anywhere in §12 (though §12.2 notes the task selection makes these upper bounds).
+On tcga slide-LOCO base is above ctrl@1500 at 4 of 5 fixed C and **below** it
+at C=1.0, with per-C margins of 0.0015–0.0151 — **every one of them inside the 0.0214 seed
+floor.** So on slide-LOCO the "every arm is below base" claim is **not unanimous and entirely
+within noise**, and it should not be stated at all. The sharpest illustration: `ctrlseed@500`
+scores **0.8880** at C=1e-2, comfortably **above** base's 0.8698 at the same C — a mere seed
+replicate clears base, so slide-LOCO cannot currently separate any arm from base in either
+direction. Base does still hold a clear advantage on all three **tile-level** probes at 5/5 C.
+This is a genuinely open question and should be left open rather than resolved in either
+direction from the current data.
