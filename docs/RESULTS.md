@@ -36,25 +36,56 @@ already **above** their reported base (+0.0169) and just under their fine-tuned 
 0.4167; that is a protocol artefact, not evidence we are near Mascaret. Only the base→FT
 delta is a valid comparison.
 
+### Virchow2 (ours: LoRA, step 250)
+
+| benchmark | base ours | base published | fine-tuned ours | Waiv Virchow2 |
+|---|---|---|---|---|
+| PathoROB Avg RI ↑ | 0.8582 | 0.858 | **0.9035** | 0.918 |
+| THUNDER mean Δ over 4 tasks ↑ | — | — | **+1.42** | +0.62 |
+| HEST Avg Pearson ↑ | 0.4032 | 0.4034 | **0.4083** | 0.4135 |
+
+Virchow2 **is** a like-for-like comparison on all three axes. An earlier draft of this file
+said Waiv publish nothing but a PathoROB average for this backbone; that was wrong, and it
+came from reading `collect_thunder.py`'s `PUBLISHED` dict (which held only phikon-v2) as if it
+described the paper rather than what had been transcribed into this repo. arXiv:2607.22861
+Table 2 gives Virchow2 THUNDER per task and Tables 1/3 give its HEST. All of it is now
+transcribed in [`waiv_published.json`](waiv_published.json) — Tables 1–4, with the Patho-Bench
+grand-average row cross-checked against Table 1 for all 20 models.
+
+Our Virchow2 base reproduces their reported base to **0.0002 on HEST** (0.4032 vs 0.4034) and
+**0.0002 on RI** (0.8582 vs 0.858), which is what licenses the comparison.
+
 Reading:
 
 - **PathoROB.** phikon-v2 lands *on* Waiv's Phaet number (0.8080 vs 0.806, ~100% of the
   headroom). Midnight reaches 0.9080 against Mascaret's 0.924 — 90.3% of the headroom, and
-  plainly short. A full fine-tuning pilot on phikon-v2 peaked lower, at 0.8007 (§4).
-- **THUNDER.** All 16 of Waiv's datasets are now covered, so every task average — segmentation
-  included — is over the same sets as theirs. We match or beat Waiv on **7 of the 8
-  model × task pairs** (§2). The sole loss is Midnight segmentation (−0.33 vs their +1.6);
-  phikon-v2 segmentation is a win in the sense that we regress less (−0.12 vs their −1.2).
-  The mean-over-4-tasks figure still hides composition: see §2.
-- **HEST is the weak axis of the reconstruction, on both backbones, 2 of 2.** phikon-v2
+  plainly short. Virchow2 reaches 0.9035 against 0.918 — ~76% (honest range 70–76%, §6).
+  A full fine-tuning pilot on phikon-v2 peaked lower, at 0.8007 (§4). Robustness now
+  reproduces on **3 of 3** backbones, and the gap-closed fraction falls monotonically as the
+  base gets stronger — 0.4686 → ~101%, 0.7589 → 90.3%, 0.8582 → ~76% — which tracks remaining
+  headroom rather than architecture (§6 rules out LoRA rank as the explanation).
+- **THUNDER.** All 16 of Waiv's datasets are now covered on all three backbones, so every task
+  average — segmentation included — is over the same sets as theirs. We match or beat Waiv on
+  **11 of the 12 comparable model × task pairs** (§2, §6) — Virchow2 contributes four, all wins,
+  from Table 2. The sole loss is Midnight segmentation (−0.33 vs their +1.6); phikon-v2
+  segmentation is a win in the sense that we regress less (−0.12 vs their −1.2). The
+  mean-over-4-tasks figure still hides composition: see §2. Across all three backbones the
+  gain is carried by classification and **not** by segmentation — 32 of 36 classification
+  model × dataset pairs improve (sign test p ≈ 2×10⁻⁶) against 3 of 12 segmentation pairs
+  (p ≈ 0.15). Segmentation is flat-to-slightly-negative on every backbone (−0.12, −0.33,
+  −0.12); the consistent sign, not any single cell, is what makes that worth stating.
+- **HEST is the weak axis of the reconstruction, on all three backbones, 3 of 3.** phikon-v2
   +0.0047 (step 1000) / +0.0078 (step 2000) against Waiv's Phaet +0.0196; Midnight +0.0011
   (step 500) against their Mascaret +0.0215. Read against the benchmark's dynamic range
   (0.3252–0.4229, span 0.0977), not against zero: our Midnight delta is ~1% of that span,
   Waiv's ~22%. With the Midnight run in, this is no longer a phikon-v2 quirk — it is a
   consistent gap in the recipe. A sweep over every checkpoint on both backbones (§2) shows
   the best in range is +0.0098 (phikon-v2, step 3500) and +0.0035 (Midnight, step 250), so
-  the gap is intrinsic, not a checkpoint-selection artefact. Retention is where the
-  reconstruction falls short.
+  the gap is intrinsic, not a checkpoint-selection artefact. Virchow2 adds a third instance
+  at +0.0051 against their +0.0101 — the closest of the three, but still half — and it sits
+  **at** the ±0.005 within-arm scatter of the benchmark: retention preserved, not retention
+  improved. Retention is where the reconstruction falls short, and it now does so on every
+  backbone tried, on all three of which Waiv publish a HEST number we can be measured against.
 
 Per-dataset PathoROB, for completeness:
 
@@ -68,6 +99,20 @@ Per-dataset PathoROB, for completeness:
 | Midnight base (Waiv T1) | 0.478 | 0.941 | 0.858 | 0.759 |
 | ours step 500 | **0.8844** | **0.9683** | **0.8712** | **0.9080** |
 | Waiv Mascaret | 0.907 | 0.972 | 0.893 | 0.924 |
+| Virchow2 base (ours) | 0.7989 | 0.9541 | 0.8218 | 0.8582 |
+| Virchow2 base (Waiv T1) | 0.799 | 0.954 | 0.822 | 0.858 |
+| ours step 250 | **0.9006** | **0.9673** | **0.8425** | **0.9035** |
+| Waiv Virchow2 | 0.935 | 0.969 | 0.849 | 0.918 |
+
+Waiv publish the per-dataset breakdown for Virchow2 too — arXiv:2607.22861 Table 1, transcribed
+in [`waiv_published.json`](waiv_published.json). An earlier draft had `—` in these cells on the
+same mistaken belief corrected in §1. Our Virchow2 base reproduces theirs to **≤0.0002 on every
+dataset** (0.7989/0.9541/0.8218 against 0.799/0.954/0.822).
+
+Where their fine-tuning beats ours is **camelyon on the two stronger backbones**: 0.907 vs our
+0.8844 on Midnight, 0.935 vs our 0.9006 on Virchow2. That single dataset accounts for
+essentially the whole average shortfall on both — on tolkach_esca and tcga we are within
+0.004–0.022. phikon-v2 is the exception, where we edge them on camelyon (0.7169 vs 0.702).
 
 
 ---
@@ -270,6 +315,35 @@ possible. It is strictly more granular than what they released.
 | pannuke | — | — | — | — | — | — | — | — | — | 61.8 | 61.5 | −0.3 |
 | segpath_epithelial | — | — | — | — | — | — | — | — | — | 70.9 | 69.1 | −1.8 |
 | segpath_lymphocytes | — | — | — | — | — | — | — | — | — | 63.8 | 63.6 | −0.1 |
+
+### Virchow2, base → step 250 (F1 ×100)
+
+| dataset | kNN base | ft | Δ | lin base | ft | Δ | few base | ft | Δ | seg base | ft | Δ |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **bach** | 78.6 | 80.8 | +2.1 | 76.6 | 80.5 | +4.0 | 80.7 | 76.4 | **−4.3** | — | — | — |
+| bracs | 54.1 | 56.1 | +1.9 | 61.3 | 63.4 | +2.1 | 51.8 | 56.0 | +4.1 | — | — | — |
+| **break_his** | 79.7 | 72.7 | **−6.9** | 73.2 | 78.3 | +5.1 | 57.4 | 65.1 | +7.7 | — | — | — |
+| ccrcc | 91.4 | 91.9 | +0.5 | 93.7 | 92.5 | −1.2 | 80.0 | 88.4 | +8.4 | — | — | — |
+| crc | 94.3 | 94.9 | +0.6 | 91.5 | 95.1 | +3.6 | 91.3 | 95.8 | +4.5 | — | — | — |
+| esca | 86.7 | 86.0 | −0.7 | 88.7 | 89.3 | +0.6 | 70.2 | 77.3 | +7.2 | — | — | — |
+| mhist | 73.4 | 77.8 | +4.4 | 83.7 | 84.7 | +1.0 | 68.5 | 70.6 | +2.2 | — | — | — |
+| patch_camelyon | 90.6 | 90.1 | −0.5 | 94.6 | 94.4 | −0.2 | 79.0 | 90.2 | +11.2 | — | — | — |
+| tcga_crc_msi | 65.3 | 65.8 | +0.5 | 69.7 | 69.3 | −0.4 | 56.5 | 62.7 | +6.2 | — | — | — |
+| tcga_tils | 88.3 | 88.8 | +0.5 | 90.8 | 91.2 | +0.5 | 86.4 | 87.0 | +0.6 | — | — | — |
+| **tcga_uniform** | 70.5 | 68.0 | **−2.5** | 78.5 | 77.6 | −1.0 | 57.4 | 60.0 | +2.6 | — | — | — |
+| wilds | 97.6 | 98.1 | +0.5 | 96.6 | 98.6 | +2.0 | 93.8 | 96.5 | +2.7 | — | — | — |
+| ocelot | — | — | — | — | — | — | — | — | — | 79.5 | 80.3 | +0.9 |
+| pannuke | — | — | — | — | — | — | — | — | — | 62.8 | 62.3 | −0.5 |
+| segpath_epithelial | — | — | — | — | — | — | — | — | — | 70.6 | 69.8 | −0.8 |
+| segpath_lymphocytes | — | — | — | — | — | — | — | — | — | 63.2 | 63.1 | −0.0 |
+
+**`tcga_uniform` is the only dataset that regresses on all three backbones** (phikon-v2 −8.2
+kNN, Midnight −2.6 kNN, Virchow2 −2.5 kNN), and it is phikon-v2's single worst result
+anywhere in this record. `break_his` is the largest winner on all three (+12.5 / +16.1 kNN,
+and +7.7 few-shot on Virchow2 despite its −6.9 kNN). Virchow2's few-shot column carries its
+gain almost alone: +11.2 on patch_camelyon and +8.4 on ccrcc against a kNN column that nets
++0.03 overall (§2) — the base kNN is already the strongest of the three backbones (80.87),
+leaving least to add.
 
 All 16 datasets are present and all four are folded into the §2 segmentation averages.
 Exact segpath F1 fractions: lymphocytes phikon-v2 0.6065 → 0.6130, Midnight 0.6375 → 0.6364;
@@ -603,11 +677,70 @@ Base (no adapter) Avg RI = 0.8582. Waiv's published Virchow2 fine-tuned target =
 
 **Limits.** n = 1 seed per arm. This measures the PathoROB robustness axis only — the eval follower computes PathoROB, not HEST or THUNDER — so it says nothing about whether rank trades robustness against retention on Virchow2. Rank was varied with alpha pinned at 2× rank throughout, so rank and the alpha/rank scaling are not separated: it is possible that a different alpha/rank ratio at higher rank would behave differently, but that is not tested here.
 
-### THUNDER — in progress
+### THUNDER — complete, 40/40 both arms
 
-Base and fine-tuned sweeps are submitted (`vbase_*` / `vft250_*`) and draining. Complete so
-far: ocelot, pannuke (segmentation), tcga_tils (all three classification tasks). This section
-will be filled in when the sweep lands; nothing here should be quoted until then.
+Both sweeps landed: `vbase_*` and `vft250_*`, 40 cells each (12 classification × 3 tasks +
+4 segmentation × 1), all 16 of the paper's datasets. Collected with
+`scripts/collect_thunder.py --model vbase_clsmean vbase_cls` (and `vft250_*`); the split
+pooling is the same Midnight-style convention documented in §3 — `clsmean` for the 12
+classification sets, `cls` for the 4 segmentation sets, because 2560-d `clsmean` does not
+fit the segmentation decoder on ViT-H.
+
+| task | base | ft (step 250) | Δ (pp) | Δ (%) | n |
+|---|---|---|---|---|---|
+| kNN | 80.87 | 80.91 | **+0.03** | +0.04% | 12 |
+| linear probing | 83.25 | 84.59 | **+1.34** | +1.61% | 12 |
+| few-shot | 72.75 | 77.16 | **+4.41** | +6.07% | 12 |
+| segmentation | 69.01 | 68.89 | **−0.12** | −0.17% | 4 |
+| **mean over 4 tasks** | **76.47** | **77.89** | **+1.42** | **+1.85%** | — |
+
+**Retention holds on the third backbone.** +1.42 is a real mean gain, and the sign pattern
+matches both prior backbones exactly: classification up, segmentation marginally down. It is
+the smallest of the three means (+2.29 phikon-v2, +2.21 Midnight, +1.42 Virchow2), and the
+ordering is the same one PathoROB shows — the stronger the base, the less the recipe adds.
+
+**The composition differs sharply from the other two, and the mean hides it.** Virchow2's
+gain is almost entirely few-shot (+4.41), while kNN is flat at **+0.03** — against +4.92 on
+phikon-v2 and +2.19 on Midnight. Virchow2's base kNN is 80.87, the strongest base kNN of the
+three (phikon-v2 70.28, Midnight 78.25), so there is least headroom exactly where the other
+two backbones gained most. Quoting +1.42 without this is quoting an average over a column
+that did not move and a column that moved 4.4 points.
+
+**Segmentation regresses on all three backbones** (−0.12, −0.33, −0.12). No single figure is
+significant on 4 datasets — a sign test over the 12 segmentation model × dataset pairs gives
+3/12 improving, p ≈ 0.15 — but the sign is identical on three independently chosen
+architectures, which is worth more than any one cell. Against that, 32 of 36 classification
+pairs improve (p ≈ 2×10⁻⁶). The honest summary of the recipe's effect on downstream
+performance is *classification yes, segmentation no*, on every backbone tested.
+
+**Δ-vs-Δ against Waiv: we win Virchow2, and the record becomes 11 of 12.** Waiv *do* publish
+Virchow2 THUNDER — arXiv:2607.22861 Table 2, transcribed in
+[`waiv_published.json`](waiv_published.json). On the 4 tasks we share:
+
+| task | Waiv base | Waiv FT | Waiv Δ | our Δ | ours − Waiv |
+|---|---|---|---|---|---|
+| kNN | 82.9 | 82.6 | **−0.30** | +0.03 | +0.34 |
+| linear probing | 84.8 | 85.1 | +0.30 | **+1.34** | +1.04 |
+| few-shot | 73.9 | 76.6 | +2.70 | **+4.41** | +1.71 |
+| segmentation | 68.2 | 68.0 | −0.20 | −0.12 | +0.08 |
+| **mean** | 77.45 | 78.07 | **+0.62** | **+1.42** | **+0.79** |
+
+Our fine-tuning moves Virchow2 more than theirs does on all four shared tasks, and their own
+kNN column goes *down* (−0.30) where ours is flat (+0.03). Adding these four to §2's eight
+makes the record **11 of 12 model × task pairs where our Δ ≥ Waiv's**; the sole loss is still
+Midnight segmentation. Two caveats keep this honest: Waiv score 6 THUNDER tasks, and the two
+we do not run (calibration, adversarial attack) are excluded from every mean above — their
+Virchow2 FT adversarial score of 7.7 is rank 1 in the whole roster, and it is not in our +1.42.
+And our absolute level sits below theirs even where our Δ is larger (our Virchow2 FT mean
+77.89 vs their 78.07), because our base reproduction starts ~1 point low.
+
+**Provenance.** Both arms ran to completion uninterrupted after repeated preemption: base job
+375369 COMPLETED in 29h21m (13 prior PREEMPTED attempts), fine-tuned job 375910 in 32h08m
+(7 prior PREEMPTED + 1 NODE_FAIL). Because `run_thunder.sbatch` restarts from scratch on
+requeue, only a clean single attempt yields a trustworthy cell; both final attempts were
+clean, so no cell in this table mixes attempts. n = 1 seed per arm, as everywhere in this
+record — the THUNDER cells carry no error bars, and the confidence in the +1.42 rests on the
+consistency of the sign across datasets, not on any per-cell interval.
 
 ---
 
@@ -683,3 +816,218 @@ benefit rather than merely failing to detect one.
 
 The term ships behind `--retention-kl-weight`, default **0.0**, bit-identical to the published
 training path when off.
+
+---
+
+## 8. Batch geometry — negatives per row, not query rows
+
+Every result above varies the loss, the rank, or the checkpoint. None varies how the batch is
+*shaped*. The same-condition constraint (`PLAN.md` §2) makes that shape load-bearing in a way
+standard InfoNCE does not: negatives come only from within a condition-homogeneous group, so
+negatives per row is `group_size - 1`, capped by the group rather than the batch, and the
+positives are **query-only** — they never serve as negatives, because each carries a different
+random condition and so cannot form a condition-homogeneous candidate set. Half the forward
+compute produces embeddings used in exactly one row. SimCLR gets `2N-2` negatives from `2N`
+images; this gets `N-1`.
+
+That suggests an alternative: share **one tile set across all condition groups**, so every image
+is both an anchor in its own group and a valid query against every other group. PLISM supports
+it — verified 91/91 slides, all `(16278, 224, 224, 3)`, one shared `keys.json`, so tile *i* is the
+same tissue under every condition. Writing `C` = conditions and `T` = tiles at budget `B = C·T`:
+
+```
+negatives per row   N = T - 1 = B/C - 1
+query rows          R = C(C-1)T = B(C-1)        <- linear in C, T cancels
+total pairs         R·N = B(C-1)(B/C - 1)       <- maximised at C = T = sqrt(B)
+```
+
+At `B ≈ 2400` the pair-count optimum `C = T = 49` coincides with the 50-condition training split.
+Both the pair-count objective and the `R·log N` objective point at large `C`. The experiment below
+tests whether either is the right thing to optimise.
+
+### 8.1 Negatives saturation sweep — no cliff (job 380742)
+
+Before restructuring anything, the question was whether few negatives *saturate* the objective.
+Three arms, existing sampler, all at 2400 images/step, 300 steps, phikon-v2 rank 32 — varying only
+the grouping:
+
+| arm | `n_groups`×`group_size` | neg/row | top1 plateau | loss floor | f>0.98 | 1st≥0.95 | 1st≥0.99 | MI est | ceiling `log(N+1)` |
+|---|---|---|---|---|---|---|---|---|---|
+| A | 6×200 | 199 | 0.9383 | 0.2236 | 0.00 | 150 | never | 5.075 | 5.298 |
+| B | 12×100 | 99 | 0.9613 | 0.1387 | 0.00 | 85 | never | 4.466 | 4.605 |
+| C | 24×50 | 49 | 0.9742 | 0.0827 | 0.15 | 50 | never | 3.829 | 3.912 |
+| ref | 2×32 (369019) | 31 | 0.9844 | 0.0531 | 0.70 | 20 | **70** | 3.413 | 3.466 |
+
+Raw loss is not comparable across arms — random-guess loss is `log(N+1)`, which differs — so the
+saturation reads are top-1 and the fraction of steps above 0.98.
+
+**Control.** Arm A ran 300 steps against 1500–4000-step references, so the comparison is made over
+the references' first 300 steps: arm A top1 0.912/0.927/0.939 at steps 100/200/300, against
+virchow2-191 at 0.849/0.927/0.919 and midnight-191 at 0.833/0.893/0.951; ref-31 sits at 0.984 flat.
+Arm A lands on the 191-negative references and ref-31 is cleanly separated, so the probe is sound.
+
+**Result: 49 negatives does not saturate**, and there is no threshold anywhere — plateau, loss
+floor, and both saturation fractions move smoothly and monotonically from 199 → 99 → 49 → 31. The
+fraction of the MI ceiling extracted rises as N falls (95.8% → 97.0% → 97.9% → 98.5%) while the
+absolute MI falls. "N_min" is a choice of margin, not a measured edge.
+
+### 8.2 Three-arm downstream comparison (jobs 380777/380778/380779)
+
+Since saturation is not the constraint, the question moves downstream. Three arms, 1500 steps,
+2400 images/step, phikon-v2, rank 32/alpha 64, lr 1e-4, τ=0.07, seed 0, identical held-out split —
+geometry is the only difference. CTRL is the existing pair sampler; the other two use the new grid.
+
+PathoROB average RI:
+
+| step | CTRL 6×200 | GRID24 C=24 T=100 | GRID49 C=49 T=49 |
+|---|---|---|---|
+| 250 | 0.7865 | 0.7835 | 0.7688 |
+| 500 | 0.8128 | 0.7974 | 0.7890 |
+| 750 | 0.8131 | 0.8026 | 0.7954 |
+| 1000 | 0.8124 | 0.8038 | 0.7963 |
+| 1250 | 0.8126 | 0.8042 | 0.7983 |
+| 1500 | **0.8130** | **0.8049** | **0.7973** |
+| neg/row | 199 | 99 | 48 |
+| query rows | 1,200 | 55,200 | 115,248 |
+
+Last-three-checkpoint means: CTRL **0.8127**, GRID24 **0.8043** (Δ −0.0084), GRID49 **0.7973**
+(Δ −0.0154). CTRL's plateau is 0.8128 ± 0.0004 across steps 500–1500, which is the
+empirical within-run checkpoint noise — tighter than the ±0.005 band §2 quotes, and it makes the
+GRID24 gap ~20× the noise.
+
+**Ordering tracks negatives per row at every checkpoint and runs inversely to query rows.** The
+grid restructuring buys 46–96× the query rows and loses RI. Spacing is close to linear in
+`log(negatives)`: 0.0121 RI/nat between CTRL and GRID24, 0.0098 between GRID24 and GRID49 — about
+0.008 RI per doubling of negatives, the same `log N` dependence the InfoNCE bound predicts, showing
+up in a downstream robustness metric.
+
+Per-dataset at step 1500, this is a **camelyon-only effect**. TCGA (0.7841 / 0.7820 / 0.7798) and
+Tolkach (0.9304 / 0.9304 / 0.9296) are tied across all three arms; camelyon carries essentially all
+of it (0.7244 / 0.7022 / 0.6826). Camelyon is the dataset where base RI is 0.019, so it has the most
+headroom and is the noisiest of the three.
+
+### 8.3 The confound — what this does NOT establish
+
+At fixed `B`, `C` and `T` are coupled: this varied negatives and conditions **together, in opposite
+directions**. The data cannot distinguish "more negatives helped" from "fewer conditions helped."
+The negatives reading is the mechanistically plausible one and matches the `log N` bound, but it is
+not established. One arm separates them: **grid C=12, T=200** — N=199, identical to CTRL, but 12
+conditions and 26,400 rows instead of 6 and 1,200. Tie ⇒ negatives is the only variable.
+
+Also unmeasured: **between-run seed variance**. Every gap here is n=1, and ±0.0004 is *within*-run
+checkpoint drift, not run-to-run. A CTRL seed repeat is the cheapest way to price the ±0.008 claims.
+
+### 8.4 Incidental — the current sampler at a larger batch beats the published number
+
+CTRL is the *existing* sampler, just at 2400 images/step instead of 768 (1200 anchors vs 384, at
+essentially unchanged negatives per row, 199 vs 191). It plateaus at **0.8130**, above Waiv's
+published 0.806 and above this repo's prior best 0.8080 (run 369043 at step 1000) — and it clears
+all three datasets individually, not merely on average. The cheapest available win is not the grid;
+it is a larger batch on the sampler that already exists. Confounded by total images and step count
+against 369043, and n=1, so it needs a seed repeat before it is more than a lead.
+
+One detail the average hides: CTRL's plateau is a *balance*, not a stasis. Camelyon rises
+monotonically the whole way (0.7162 → 0.7244) while TCGA and Tolkach drift down (0.7864 → 0.7841,
+0.9356 → 0.9304). For checkpoint selection that matters — step 1500 is best for camelyon, step 500
+for the other two, and the flat average conceals the choice.
+
+### 8.5 Two bugs the gates caught
+
+Both would have produced a plausible falling loss curve.
+
+1. **OOM.** 2400 images in one forward makes each gradient-checkpoint recompute a 7.2 GiB
+   transient; the pair path gets a 2× smaller one free by running its two views separately. Fixed
+   with a forward micro-chunk.
+2. **The fix was itself wrong.** `ProjectionHead` contains `nn.BatchNorm1d`, so chunking *through*
+   the projector computed BN statistics per 600-image chunk rather than over all 2400 — measured
+   drift **1.65**, a different objective, not a rounding difference. GRID24 had already passed its
+   smoke test that way because 2400/600 divides evenly; it only surfaced when GRID49's 2401 images
+   left a trailing chunk of 1 and BatchNorm refused. Now only the per-image backbone is chunked and
+   the projector runs once over the full batch — verified 0.0 drift. **Never micro-chunk through a
+   batch-coupled layer.** The regression test uses a BatchNorm projector in train mode; the original
+   test used a plain-Linear projector in eval mode and was structurally incapable of seeing this.
+
+Measured cost: grid 55.98 GiB / 395–405 img/s at 2401 images vs pair 65.0 GiB / 409 img/s at 2400
+(the micro-chunk lowers the peak). Chunked output is not *bit*-identical across chunk sizes (~1e-7,
+different GEMM kernels), so `grid_forward_chunk` is recorded in `config.json` and must not vary
+within a comparison.
+
+The grid ships behind `--grid --grid-conditions C --grid-tiles T`, bit-identical to the existing
+path when off (20/20 per-step losses, verified against a pristine snapshot).
+
+---
+
+## 9. CLS/mean loss separation — IN FLIGHT (jobs 380856/380857/380858)
+
+Training pools `clsmean` and applies **one** InfoNCE to the concatenation. Two consequences worth
+testing. First, nothing forces both halves to become invariant — the objective may lean on whichever
+is easier — and this matters because eval pooling *disagrees* with training pooling: HEST and
+THUNDER-on-phikon-v2 read CLS only (§2). Second, `mean` is linear, so `d(mean)/d(t_i) = (1/N)·I` and
+the direct gradient reaching every patch token is the **identical vector**; the loss can translate
+the token cloud but never expresses a preference about the tokens' relative arrangement.
+
+That second point has a sharp corollary for segmentation. THUNDER's `get_segmentation_embeddings`
+returns raw patch tokens, and its decoder is `proj_dec = nn.Linear(d_encoder, d_model)` **with a
+bias** (`task_specific_models.py:103`). For any constant `c`, `proj_dec(t_i + c) = W·t_i + (W·c + b)`
+— a trained decoder simply learns `b - W·c` and produces identical masks. **A uniform translation of
+the token cloud is exactly in the null space of the segmentation decoder**, and a uniform translation
+is precisely what the mean head's first-order gradient requests. This is a candidate mechanism for
+the standing result that classification improves on 32/36 pairs (p≈2×10⁻⁶) while segmentation does
+not (3/12, p≈0.15). Note `emb_dim` only *sizes* that Linear — pooling has no effect on the
+segmentation features themselves, so forcing `cls` for segmentation runs is plumbing, not a
+representation choice.
+
+Three arms, pair path 6×200 (so CTRL §8 is the baseline), eval pooling `clsmean` throughout because
+that is a protocol constant: SPLIT `0.5·(L_cls + L_mean)`, CLSONLY, MEANONLY.
+
+**Weights default 0.5/0.5, not 1.0/1.0** — measured, 1.0/1.0 is exactly `2.000000000000×` the
+single-head loss, which at fixed LR is a different optimisation and would confound the structural
+change with an LR change. At 0.5/0.5 the split reproduces the single-head loss to `0.0e+00`. A
+zero-weighted head is **removed**, not zero-multiplied, because a dead head still updates its
+BatchNorm running statistics and the "only" arms would not actually be single-head.
+
+**Early observation (step 20, all three arms): cls top1 0.443 / loss 2.8361 versus mean top1 0.735 /
+loss 1.2168.** The two halves are far from equally invariant, which is the asymmetry the concat loss
+was free to exploit. Head inputs measured `rel_distance` 1.3548–1.3715, cosine 0.171 on real batches.
+SPLIT's `loss_cls` is not bit-identical to CLSONLY's (19/20 steps differ, max 4e-4), confirming the
+mean head's gradient does reach the shared LoRA backbone.
+
+**A launch blocker was caught in `embed_probe.load_adapter`:** it loaded `projector.pt` unguarded, so
+a 1024-d split head against the 2048-d clsmean eval raises a size mismatch — which would have killed
+the RI-curve follower on every checkpoint of all three arms, for a tensor the probe never reads. It
+now skips with the message its own full-FT branch already used.
+
+Results pending. Peak 66.84 GiB / 410 img/s, so the split costs ~1.8 GiB and no measurable throughput.
+
+---
+
+## 10. Residual PLISM misregistration — measured
+
+Three docstrings and `REPRODUCING.md` state positives carry "~5-50 px" residual misregistration.
+That figure is **uncited and was never measured here**. Measured by phase correlation over 1,235
+confident tile pairs, with controls:
+
+```
+CONTROLS   identity (slide vs itself)     0.0 px   peak 1.0000   <- method works
+           wrong tile, same condition    64.3 px   peak 0.0223   <- noise floor
+           wrong tile, cross-stain       70.0 px   peak 0.0231
+
+CROSS-SCANNER, same stain (peak 0.07-0.15, 3-7x the noise floor -> real)
+  n=1235   median 12.8 px   p75 21.6   p90 34.6   p95 44.4   max 124.4
+  tokens p16: median 0.80 | p90 2.16 | p95 2.77
+  tokens p14: median 0.91 | p90 2.47 | p95 3.17
+  shifted >1 token 37.9%   >2 tokens 12.2%   >4 tokens 1.5%
+```
+
+So "5–50 px" is about right at p95 and roughly 2.5× optimistic at the median.
+
+**Cross-stain is NOT measurable this way and no number is reported.** Its correlation peak (0.0243,
+0.0230) sits *at* the wrong-tile noise floor — grayscale phase correlation cannot match across
+stains, so what it returns is the failure mode, not the alignment. A first pass produced "median
+51 px" for cross-stain; that is noise and is discarded. A real figure needs mutual-information
+registration or stain deconvolution. The cross-scanner number is integer-pixel translation only, so
+it is a **lower bound** — rotation, scale, and local warp are invisible to it.
+
+**Consequence for any dense/per-token loss.** Per-token positives are misaligned for 37.9% of
+cross-scanner pairs. At 2×2 token blocks (32 px) that falls to 12.2%; at **4×4 blocks (64 px) it is
+1.5%**. Token-level correspondence is not defensible; ~64 px region-level is.
