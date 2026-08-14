@@ -292,6 +292,23 @@ def main() -> int:
     ap.add_argument("--keep-features", dest="purge_features", action="store_false")
     args = ap.parse_args()
 
+    # Every path below is handed to a subprocess that sh()/run_pathorob spawn with
+    # cwd=REPO, so a RELATIVE one is resolved by the CHILD against REPO -- not against the
+    # cwd the caller typed it in. When REPO is a pinned read-only snapshot (which has no
+    # runs/ subtree) that silently retargets the argument and the child dies far from the
+    # cause: jobs 381012/381013 got
+    #   FileNotFoundError: 'runs/gridcmp2-ctrlseed-380889/conditions_used.json'
+    # from embed_probe.py, after training had already finished, leaving a full set of
+    # checkpoints and an empty ri_curve.json. Absolutise against the INVOCATION cwd, which
+    # is what the caller meant; an already-absolute path is unchanged, so this is a no-op
+    # for every existing caller and the eval itself is untouched.
+    args.run_dir = args.run_dir.resolve()
+    args.packed_dir = str(Path(args.packed_dir).resolve())
+    if args.conditions_file is not None:
+        args.conditions_file = args.conditions_file.resolve()
+    if args.stop_file is not None:
+        args.stop_file = args.stop_file.resolve()
+
     os.environ.setdefault("HF_HOME", "/data/huggingface")
     if args.model_prefix is None:
         args.model_prefix = "waiv_" + args.run_dir.name.replace("-", "_")

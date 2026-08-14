@@ -39,42 +39,55 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-# Same pinned source the arm itself imports, so the eval path cannot drift from the
-# training path while the working tree is still being edited by another session.
-PIN="/admin/home/ryan.kim/waiv-snapshots/gridcmp2-pinned"
-export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
+# Source root for the EVAL code. Defaults to the main repo, not the pinned snapshot:
+# only eval is being re-run here, and the eval path in the main repo was verified
+# byte-identical to $PIN for scripts/eval_checkpoints.py (modulo the run-dir absolutising
+# fix), scripts/embed_probe.py, scripts/extract_pathorob_features.py and
+# src/waivphaet/eval/pathorob_adapter.py; src/waivphaet/models/pooling.py differs only by
+# a docstring paragraph. Set WAIV_SRC_ROOT=/admin/home/ryan.kim/waiv-snapshots/gridcmp2-pinned
+# to go back to the pinned copy.
+SRC="${WAIV_SRC_ROOT:-$REPO}"
+export PYTHONPATH="$SRC/src${PYTHONPATH:+:$PYTHONPATH}"
 
 # NOTE: no apostrophes in this message -- bash applies quoting rules to the text inside
 # ${var:?...}, so an unpaired ' opens a string and the script dies with a confusing
 # "unexpected EOF" reported at some unrelated later line.
 RUN_DIR="${WAIV_RUN_DIR:?set WAIV_RUN_DIR to the run directory of the arm}"
 [ -d "$RUN_DIR" ] || { echo "no such run dir: $RUN_DIR" >&2; exit 2; }
+# MUST be absolute. eval_checkpoints.sh() spawns its subprocesses with cwd=REPO, and REPO
+# is derived from the script's own __file__ -- so under the PINNED copy that cwd is the
+# snapshot, which has no runs/ directory. A relative --run-dir then sends embed_probe
+# looking for <snapshot>/runs/... and it dies at the first checkpoint, not at launch.
+RUN_DIR=$(cd "$RUN_DIR" && pwd)
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 PY="$REPO/.venv/bin/python"
 
 # Fail loudly here rather than 250 steps from now.
-"$PY" - "$PIN" <<'EOF'
+"$PY" - "$SRC" <<'EOF'
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(sys.argv[1]) / "src"))
 from waivphaet.eval.pathorob_adapter import PathoRobPaths
 PathoRobPaths(root=Path(sys.argv[1]) / "third_party" / "PathoROB").check()
-print("[follower] PathoROB resolves from the pinned snapshot: OK", flush=True)
+print("[follower] PathoROB resolves from the eval source root: OK", flush=True)
 EOF
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | rescue follower for $RUN_DIR ==="
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
-# --model-prefix must match what the in-job follower would have used, so feature dirs
-# and results are named the same way as the other arms (derived from the run dir name).
-PREFIX=$(basename "$RUN_DIR")
-PREFIX=${PREFIX//-/_}
-
-exec "$PY" "$PIN/scripts/eval_checkpoints.py" \
+# No --model-prefix: the in-job follower of the other arms (gridcmp2.sbatch line 135) does
+# not pass one either, so the default -- "waiv_" + run dir name with - turned into _ -- is
+# what named THEIR feature and results dirs. Passing a hand-built prefix here would name
+# this arm differently from the arms it is meant to be compared against.
+#
+# --python MUST be explicit whenever $SRC is not the main repo: eval_checkpoints.py derives
+# REPO from its own __file__, so running a snapshot copy makes the --python default resolve
+# to <snapshot>/.venv/bin/python. Harmless when $SRC is the repo, load-bearing otherwise.
+exec "$PY" "$SRC/scripts/eval_checkpoints.py" \
   --run-dir "$RUN_DIR" \
   --packed-dir "$PACKED_DIR" \
   --conditions-file "$RUN_DIR/conditions_used.json" \
-  --model-prefix "$PREFIX" \
+  --python "$PY" \
   --lora-rank 32 --lora-alpha 64 \
   --num-workers 8 \
   --follow --stop-file "$RUN_DIR/TRAIN_DONE" --poll-s 60 \
