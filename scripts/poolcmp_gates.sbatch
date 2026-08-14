@@ -254,13 +254,19 @@ from pathlib import Path
 d = Path(sys.argv[1])
 ck = d / "g6_gem" / "step_0000020"
 assert (ck / "pool_head.pt").exists()
+from waivphaet.models.encoder import build_encoder
 for rel in ("scripts/embed_probe.py", "scripts/extract_pathorob_features.py"):
     spec = importlib.util.spec_from_file_location("_m", rel)
     m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
     if rel.endswith("embed_probe.py"):
-        model = m.load_adapter(ck, "owkin/phikon-v2", "clsmean")
+        # load_adapter(model, ckpt) mutates in place -- it is the RI follower's entry point
+        # rank must match the checkpoint (the gate arms run --lora-rank 32), exactly as the
+        # real follower resolves it from its own CLI
+        model = build_encoder(backbone="owkin/phikon-v2", pooling="clsmean",
+                              lora_rank=32, lora_alpha=64)
+        m.load_adapter(model, ck)
     else:
-        model = m.build_model(ck, "clsmean")
+        model = m.build_model(None, "clsmean", adapter=ck, lora_rank=32, lora_alpha=64)
     model = model.eval()
     with torch.inference_mode():
         emb = model.embed(torch.randint(0, 255, (2, 224, 224, 3), dtype=torch.uint8))
