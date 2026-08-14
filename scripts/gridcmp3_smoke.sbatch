@@ -59,6 +59,7 @@ for ARM in $ARMS; do
     a) COND=12; TILES=300 ;;
     b) COND=24; TILES=150 ;;
     c) COND=6;  TILES=600 ;;
+    d) COND=2;  TILES=1800 ;;
     *) echo "unknown arm $ARM" >&2; exit 2 ;;
   esac
   OUT_DIR="$REPO/runs/gridcmp3-smoke-${ARM}-${SLURM_JOB_ID:-local}"

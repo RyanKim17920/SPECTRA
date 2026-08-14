@@ -114,7 +114,13 @@ case "$ARM" in
   a) COND=12; TILES=300 ;;
   b) COND=24; TILES=150 ;;
   c) COND=6;  TILES=600 ;;
-  *) echo "unknown WAIV_ARM=$ARM (want a | b | c)" >&2; exit 2 ;;
+  # ARM D / MAXNEG: the maximum-negatives end of the same B=3600 budget. C=2 is the
+  # floor the trainer allows (--grid-conditions must be >= 2), so T=1800 is the largest
+  # tile count reachable at this budget: 1799 negatives/row. Sizing probe measured
+  # C=2/T=1800 at chunk 300 = 74.15 GiB peak on an 80 GiB H100 (OOM edge is T~1975);
+  # chunk 600 OOMs at this T, so the default chunk 300 is load-bearing here.
+  d) COND=2;  TILES=1800 ;;
+  *) echo "unknown WAIV_ARM=$ARM (want a | b | c | d)" >&2; exit 2 ;;
 esac
 SEED=0
 SAMPLER_ARGS=(--grid --grid-conditions "$COND" --grid-tiles "$TILES" --grid-forward-chunk "$CHUNK")
