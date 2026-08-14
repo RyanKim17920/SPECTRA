@@ -955,9 +955,79 @@ within a comparison.
 The grid ships behind `--grid --grid-conditions C --grid-tiles T`, bit-identical to the existing
 path when off (20/20 per-step losses, verified against a pristine snapshot).
 
+### 8.6 CORRECTION to 8.2/8.3 — the negatives slope was confounded by the sampler path (job 380862)
+
+§8.2 fitted "about 0.008 RI per doubling of negatives" through CTRL (199 neg, **pair** path)
+→ GRID24 (99, **grid**) → GRID49 (48, **grid**). **That fit crosses two different samplers and is
+not a negatives slope.** The separating arm §8.3 asked for has now run: `gridcmp2-grid12-380862`,
+grid `C=12 T=200` — 199 negatives per row, identical to CTRL — everything else matched.
+
+| arm | sampler | neg/row | step 1500 | last-three mean |
+|---|---|---|---|---|
+| CTRL | pair 6×200 | 199 | 0.8130 | **0.8127** |
+| GRID12 | grid C=12 T=200 | 199 | 0.8021 | **0.8034** |
+| GRID24 | grid C=24 T=100 | 99 | 0.8049 | **0.8043** |
+| GRID49 | grid C=49 T=49 | 48 | 0.7973 | **0.7973** |
+
+**At matched negatives the sampler path itself is worth −0.0093 RI** (last-three means; −0.0109 on
+step-1500 finals). That is most of the −0.0154 CTRL→GRID49 gap §8.2 attributed to negatives, and
+the tie §8.3 predicted ("Tie ⇒ negatives is the only variable") **did not happen** — so negatives
+is *not* the only variable, and the mechanistically plausible reading was the wrong one.
+
+**Within the grid family alone the trend rises then flattens**: 48 → 0.7973, 99 → 0.8043,
+199 → 0.8034. The 48→99 step is +0.0070 (0.0097 RI/nat); the 99→199 step is −0.0009, i.e. flat and
+inside the ±0.0004–0.005 checkpoint band. Negatives appear to **saturate near ~100 within this
+sampler** rather than climbing monotonically in `log N`. The `log N` reading of §8.2 is withdrawn.
+
+Two caveats hold this to "appears":
+
+- **The C/T coupling of §8.3 is still in force.** At fixed budget `B = C·T`, every grid arm's "more
+  negatives" is simultaneously "fewer conditions". GRID12's 199 negatives come with 12 conditions;
+  the 1199-negative arm below comes with **2**. This family cannot separate the two either — it only
+  removes the *sampler* confound, not the C/T one.
+- **`gridcmp2-grid2-380890`** (grid `C=2 T=1200`, 1199 neg/row) has finished training and is being
+  evaluated; it extends the family by another 2.6 nats and is what would settle saturation.
+- Between-run seed variance is **still unpriced**. `gridcmp2-ctrlseed-380889` (CTRL, seed 1) has
+  finished training and its RI curve is still being computed. Until it lands, −0.0093 is an n=1
+  difference against an unmeasured noise floor.
+
+### 8.7 Negatives memory ceiling — where the grid actually stops (sizing probes)
+
+How far the grid family *can* be pushed, measured on one H100 80GB (79.19 GiB usable), phikon-v2
+rank 32, bf16, gradient checkpointing, `expandable_segments:True`, `C=2`:
+
+| C×T | neg/row | img/step | fwd chunk | peak GiB | img/s | s/step |
+|---|---|---|---|---|---|---|
+| 2×1600 | 1599 | 3200 | 600 | 67.38 | 406.7 | 7.87 |
+| 2×1800 | 1799 | 3600 | 300 | **74.15** | **396.5** | **9.08** |
+| 2×1800 | 1799 | 3600 | 150 | 71.88 | 373.7 | 9.63 |
+| 2×1900 | 1899 | 3800 | 150 | 74.76 | 376.2 | 10.10 |
+| 2×1975 | 1974 | 3950 | 150 | 77.60 | 373.4 | 10.58 |
+| 2×1800 | 1799 | 3600 | 600 | — | **OOM** | — |
+
+**The edge is T≈1975 at C=2** — 1974 negatives per row, 3950 images/step, 77.60 GiB peak, ~1.6 GiB
+of headroom left. The **operating** point is 2×1800 at chunk 300: 74.15 GiB and 396.5 img/s, within
+2.5% of the best throughput measured anywhere in the sweep. Chasing the edge costs throughput —
+2×1900 at chunk 150 gives 100 more negatives for 376.2 img/s (−5%), and every step past 1800 needs
+chunk 150, which is itself the slower setting. Note the chunk size is not free to vary within a
+comparison (§8.5): it changes the peak by ~2 GiB and the arithmetic by ~1e-7.
+
+### 8.8 Determinism of the training path (job 380871)
+
+`ctrl-replay-380871` re-ran CTRL's first 20 steps from scratch on the current source. Against
+`gridcmp-ctrl-380777`'s step-20 record, **every logged quantity is identical to all 16 significant
+digits**: loss `2.329573392868042`, top1 `0.5358333587646484`, `grad_norm` `3.610504388809204`,
+peak allocated `65.01362562179565` GiB, negatives/anchor 199.0, and the batch composition counters
+(6 anchor conditions, 50 positive conditions). Only wall-clock and `peak_reserved_gib`
+(66.0703 vs 66.0508) differ, both allocator-level and outside the compute path.
+
+This is verified **at step 20 on the logged metrics only** — it is not a full-run bitwise
+comparison, and it does not cover the eval path. It is enough to say that a re-launched arm lands
+on the same trajectory, so any between-arm gap in §8/§9/§11 is not launch nondeterminism.
+
 ---
 
-## 9. CLS/mean loss separation — IN FLIGHT (jobs 380856/380857/380858)
+## 9. CLS/mean loss separation — the mean head is not a robustness head (jobs 380856/380857/380858)
 
 Training pools `clsmean` and applies **one** InfoNCE to the concatenation. Two consequences worth
 testing. First, nothing forces both halves to become invariant — the objective may lean on whichever
@@ -997,7 +1067,99 @@ a 1024-d split head against the 2048-d clsmean eval raises a size mismatch — w
 the RI-curve follower on every checkpoint of all three arms, for a tensor the probe never reads. It
 now skips with the message its own full-FT branch already used.
 
-Results pending. Peak 66.84 GiB / 410 img/s, so the split costs ~1.8 GiB and no measurable throughput.
+Peak 66.84 GiB / 410 img/s, so the split costs ~1.8 GiB and no measurable throughput.
+
+### 9.1 Results — the split wins, and the mean head alone is catastrophic
+
+All three arms ran to 1500 steps, seed 0, LoRA r32/α64, 199 negatives. RI is `avg_robustness_index`
+from `ri_curve.json`; base phikon-v2 is 0.469 and the published waiv target is 0.806.
+
+| arm | cls/mean | RI @1500 | peak RI | @step | camelyon | tolkach_esca | tcga |
+|---|---|---|---|---|---|---|---|
+| SPLIT `headcmp-split-380856` | 0.5/0.5 | **0.8196** | **0.8252** | 500 | 0.7554 | 0.9294 | 0.7740 |
+| CLSONLY `headcmp-clsonly-380857` | 1.0/0.0 | 0.8105 | 0.8173 | 750 | 0.7300 | 0.9268 | 0.7748 |
+| MEANONLY `headcmp-meanonly-380858` | 0.0/1.0 | 0.6316 | 0.6316 | 1500 | 0.2633 | 0.8998 | 0.7317 |
+| CTRL §8 `gridcmp-ctrl-380777` | single concat | 0.8130 | 0.8131 | 750 | 0.7244 | 0.9304 | 0.7841 |
+| phikon-v2 base | — | 0.469 | — | — | 0.019 | 0.768 | 0.619 |
+
+**SPLIT beats CLSONLY by +0.0091 at 1500 (+0.0079 at peak) and CTRL by +0.0066 (+0.0121 at peak).**
+Both split-head margins are larger than the −0.0093 sampler effect of §8.6, so the ordering
+SPLIT > CTRL > CLSONLY ≫ MEANONLY is not a marginal one — with the standing caveat that seed
+variance is still unpriced (§8.6) and every arm here is n=1. MEANONLY is the only arm still rising
+at 1500; the other three peak by step 500–750 and decay (below).
+
+**Camelyon carries almost the whole MEANONLY collapse.** SPLIT→MEANONLY is −0.1880 average RI, and
+camelyon alone (0.7554 → 0.2633) accounts for 0.1640 of it — **87%**. Camelyon is also the dataset
+with the most headroom (base 0.019), so it is where a head that fails to learn invariance shows up.
+
+### 9.2 The finding: contrastive loss is anti-correlated with RI
+
+This is the load-bearing result of §9 and it is worth stating on its own.
+
+| arm | train loss | train top1 | heldout loss | heldout top1 | probe bal-acc | **RI** |
+|---|---|---|---|---|---|---|
+| MEANONLY | **0.1792** | **0.9500** | 0.1533 | 0.9601 | **0.9426** | **0.6316** |
+| CLSONLY | 0.1839 | 0.9467 | **0.1533** | **0.9607** | 0.9389 | 0.8105 |
+| SPLIT | 0.1882 | 0.9483 | 0.1605 | 0.9576 | 0.9382 | **0.8196** |
+
+**The ordering on InfoNCE is the exact reverse of the ordering on RI.** The arm with the best
+training loss and top-1 has the worst robustness by 0.19 RI; the arm with the *worst* contrastive
+metrics has the best. The heldout contrastive metrics do not rescue it either — MEANONLY is tied
+with CLSONLY on heldout loss/top1 while being 0.18 RI worse.
+
+Nor is this a capability loss. MEANONLY has the **highest** downstream probe balanced accuracy of
+the three (0.9426 vs 0.9382). The classifier still works; what collapsed is specifically the
+invariance term. RI is a ratio of OOD to ID performance, and MEANONLY moved the denominator, not
+the numerator.
+
+**Consequence for the protocol: training loss, top-1, and balanced accuracy must never be used for
+model selection or early stopping on this objective.** They are not weak signals for RI, they are
+inverted ones. The only admissible selection signal is the RI curve itself.
+
+Independent corroboration from the PLISM condition probes (`probe_step_0001500.json`, heldout
+group, embedding space — `separation` = matched-pair similarity minus random-pair similarity, so
+*higher means the representation still encodes the scanner/stain*):
+
+| arm | cross-scanner | cross-stain | Δ vs before |
+|---|---|---|---|
+| before (base) | 0.3760 | 0.3166 | — |
+| SPLIT | 0.3903 | 0.3571 | +0.0143 / +0.0405 |
+| CLSONLY | 0.3852 | 0.3527 | +0.0092 / +0.0361 |
+| MEANONLY | **0.4866** | **0.4298** | **+0.1106 / +0.1132** |
+
+Read this as an ordering, not as a sign test. **Every** arm's separation rises above baseline,
+including the two that improve RI, so "separation went up" is not by itself a failure signature —
+whatever the fine-tune does to the embedding geometry raises matched-pair similarity generally.
+What distinguishes MEANONLY is the *magnitude*: it moves cross-scanner separation ~8× further than
+SPLIT does. The probe is consistent with the RI collapse; it does not independently establish it.
+
+### 9.3 Why the mean head cannot deliver invariance
+
+The gradient argument from the section head is the explanation, and the numbers above are what it
+predicted. For `m = (1/N)·Σ t_i`, `∂m/∂t_i = (1/N)·I` for every `i` — **identical at every patch
+token, with no dependence on the token's content.** The mean head can therefore only ask the
+backbone for a *uniform translation* of the token cloud. That is exactly the null space of THUNDER's
+`proj_dec = Linear(d_encoder, d_model)` with bias, which is why the historical
+classification 32/36 (p≈2×10⁻⁶) vs segmentation 3/12 (p≈0.15) split has the shape it does.
+
+A uniform translation is a cheap way to make two views of the same tile agree — which is why
+MEANONLY wins on InfoNCE — and a translation that a downstream linear probe absorbs into its bias
+is not invariance. Hence best loss, worst RI. The mean head is a *loss* head; it is not a
+robustness head, and it should not be run alone.
+
+### 9.4 Action item: the 1500-step budget overshoots the RI optimum
+
+SPLIT peaks at 0.8252 at step **500** and ends at 0.8196 — it gives back 0.0056 RI over the
+remaining 1000 steps, and the decay is monotone (0.8252 → 0.8248 → 0.8217 → 0.8202 → 0.8196).
+CLSONLY does the same (0.8173 @750 → 0.8105). The §11 pooling arms do it more strongly still
+(GeM −0.0066, LSE −0.0068). CTRL, notably, does **not** — it is flat at 0.8124–0.8131 from step 500
+on, so the decay is specific to the split-head arms rather than a property of the pair path.
+
+The forfeited RI (0.005–0.007) is comparable to the entire effect being measured in §9.1 and larger
+than the whole §11 spread. **Every split-head arm in §9 and §11 is reported at a step that is past
+its own optimum.** Two consequences: the step-1500 numbers systematically understate these arms,
+and the 1500-step budget should be revisited — but changing it mid-family would break comparability
+with §8, so it is recorded here as an action item rather than applied.
 
 ---
 
@@ -1031,3 +1193,101 @@ it is a **lower bound** — rotation, scale, and local warp are invisible to it.
 **Consequence for any dense/per-token loss.** Per-token positives are misaligned for 37.9% of
 cross-scanner pairs. At 2×2 token blocks (32 px) that falls to 12.2%; at **4×4 blocks (64 px) it is
 1.5%**. Token-level correspondence is not defensible; ~64 px region-level is.
+
+---
+
+## 11. Token-dependent pooling — a NULL RESULT (jobs 381014/381015/381016)
+
+§9.3 says the mean head cannot be a robustness head because `∂m/∂t_i = (1/N)·I` is identical at
+every token. The obvious repair is to make the pooling *token-dependent*, so the gradient can
+select. Three poolers were tried against the §9 SPLIT arm, which is the exact same configuration
+with `pool_head=mean`:
+
+- **GeM** — `(mean(t^p))^(1/p)`, learnable `p` initialised at 3.0.
+- **LSE** — `τ·log mean(exp(t/τ))`, learnable `τ` initialised at 1.0.
+- **ATTN** — single-query dot-product attention over the patch tokens, learnable.
+
+`--pool-head` replaces **only** the input to `projectors["mean"]`; the CLS branch always receives
+the raw CLS token, and the pooler sees patch tokens only (`tokens[:, num_prefix_tokens:, :]`,
+`encoder.py:814`). The loss stays `L = 0.5·InfoNCE(proj_cls(cls)) + 0.5·InfoNCE(proj_mean(pool(patches)))`.
+Critically, the exported embedding is **untouched** — `_pool_parts` still produces the literal
+cls/mean pair that `pool_from_parts` reassembles, so the learned pooling reaches evaluation only
+through the LoRA weights it trained, never directly.
+
+### 11.1 Results — the four arms are indistinguishable
+
+| arm | pool | RI @1500 | peak RI | @step | camelyon | tolkach_esca | tcga |
+|---|---|---|---|---|---|---|---|
+| `poolcmp-gem-381014` | GeM | 0.8210 | 0.8276 | 500 | 0.7584 | 0.9301 | 0.7745 |
+| `poolcmp-lse-381016` | LSE | 0.8203 | 0.8271 | 500 | 0.7567 | 0.9295 | 0.7747 |
+| `headcmp-split-380856` | mean (§9) | 0.8196 | 0.8252 | 500 | 0.7554 | 0.9294 | 0.7740 |
+| `poolcmp-attn-381015` | ATTN | 0.8175 | 0.8223 | 500 | 0.7509 | 0.9278 | 0.7736 |
+
+**The total spread across all four arms is 0.0035 RI at step 1500 (0.0053 at peak).** For scale,
+that is smaller than what each of these arms throws away between step 500 and step 1500 (§9.4), and
+about a third of the §8.6 sampler effect. GeM is nominally on top and ATTN nominally last, and the
+ordering is stable across camelyon, tolkach_esca and every checkpoint — but stability is not
+significance when the whole range is 0.0035.
+
+**This ranking is not decidable and must not be quoted as one.** The control that would establish
+the noise floor — `gridcmp2-ctrlseed-380889`, CTRL re-run at seed 1 — has finished training but
+has **not** produced its RI curve (eval job 381441 in flight; `gridcmp2-grid2-380890` / 381442
+alongside it). Until that lands there is no measured seed variance for this pipeline, so a 0.0035
+spread across four n=1 runs is indistinguishable from four draws of the same distribution. The
+honest reading today is **no effect**: token-dependent pooling did not move RI.
+
+### 11.2 The poolers *were* token-dependent — the failure is not a plumbing bug
+
+The natural suspicion for a flat result is that the poolers silently degenerated. They did not.
+Per-token gradient spread on real phikon-v2 batches (`runs/poolgates-380891/g3_spread.json`, and
+independently `runs/g3_spread_real.json`) measures how much `∂(pooled)/∂t_i` varies across tokens:
+
+| pooler | spread (mean) | max abs grad | zero fraction |
+|---|---|---|---|
+| mean | **1.83e-07** | 0.005102 | 0.000 |
+| ATTN | 0.258 | 0.0223 | 0.000 |
+| GeM (p=3) | 0.394 | 0.0558 | 0.000 |
+| LSE (τ=1) | 0.435 | 0.1921 | 0.000 |
+| GeM + clamp | 2.154 | 0.1722 | **0.501** |
+
+Mean pooling's 1.83e-07 is pure float32 rounding against a `max_abs_grad` of exactly `1/196 =
+0.005102` — **literally zero token selectivity**, which is the §9.3 claim measured rather than
+argued. The three learned poolers have selectivity six orders of magnitude above that. So the
+mechanism §9.3 identified as missing was genuinely supplied, and supplying it changed nothing.
+
+**Why clamp-GeM is not the default**, despite having by far the highest spread: real phikon-v2
+patch tokens are **50.11% negative**, so clamping to positives zeroes half the gradient
+(`zero_fraction` 0.501). Its large spread is an artifact of discarding half the tokens, not of
+selecting among them. Unclamped GeM at odd `p` is used instead.
+
+### 11.3 What did *not* get exercised: the learned sharpening
+
+Over 1500 steps the learned pooling parameters barely moved:
+
+| parameter | init | step 20 | step 1500 |
+|---|---|---|---|
+| `pool_gem_p` | 3.0 | 2.9999 | 2.9884 |
+| `pool_lse_tau` | 1.0 | 0.9999 | 0.9892 |
+| `pool_attn_entropy` | — | 0.9964 | 0.9755 |
+| `pool_attn_max` | — | 0.00828 | 0.01739 |
+
+GeM's `p` moved 0.39%, LSE's `τ` 1.08%. ATTN moved most — normalised entropy 0.9964 → 0.9755 and
+peak attention weight 0.00828 → 0.01739, a **2.1×** sharpening — and ATTN is the arm that scored
+*lowest*, which is the opposite of what "the pooler needs to sharpen" would predict.
+
+**This is not "the poolers collapsed to mean pooling."** That reading is wrong twice over: GeM at
+p = 2.9884 is nowhere near mean pooling (mean is p = 1), and §11.2 measures the poolers as
+genuinely token-dependent throughout. The correct statement is narrower: **the fixed pooling shape
+was exercised, the learned sharpening essentially was not.** The experiment tested "does a
+token-selective pooling shape help" (answer: not measurably) and did *not* test "can the model
+learn a useful pooling sharpness" — 1500 steps at this LR moved those scalars by ~1%, so that
+question is untouched. Whether they are under-parameterised, under-learning-rated, or genuinely at
+their optimum is not established here.
+
+### 11.4 Standing caveats
+
+- Every arm is **n=1, seed 0**. The seed-variance control (§8.6, job 381441) is the blocking
+  measurement for all of §11 and for the smaller margins in §9.1.
+- All arms are reported at step 1500, which §9.4 shows is past their optimum by 0.005–0.007 RI.
+- The pooling never reaches evaluation directly (it is not in the exported embedding), so §11
+  bounds the effect of pooling *as a training signal*, not of pooling as a readout.
