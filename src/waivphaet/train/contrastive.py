@@ -51,6 +51,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
+from waivphaet.data.grid import assert_grid_batch
 from waivphaet.data.pairs import assert_same_condition_negatives
 
 NEG_INF = float("-inf")
@@ -101,6 +102,86 @@ def masked_info_nce(
         acc = (logits.argmax(dim=1) == target).float().mean().item()
         n_neg = float(same_group.sum(dim=1).float().mean().item() - 1.0)
     return loss, {"loss": float(loss.detach()), "top1": acc, "negatives_per_anchor": n_neg}
+
+
+def grid_info_nce(
+    z: torch.Tensor,
+    n_cond: int,
+    n_tiles: int,
+    temperature: float = 0.07,
+) -> tuple[torch.Tensor, dict[str, float]]:
+    """InfoNCE over a shared-tile GRID batch (:mod:`waivphaet.data.grid`).
+
+    Every image is BOTH an anchor in its own condition group AND a query against every
+    other condition group, so ``C*T`` forward passes yield ``C*(C-1)*T`` query rows --
+    where :func:`masked_info_nce` spends ``2*G*S`` forwards on ``G*S`` rows and throws the
+    positives' embeddings away after one use each.
+
+    Args:
+        z: ``(C*T, D)`` projections, laid out ROW-MAJOR as ``(C, T, D)``: index ``a*T + t``
+            is condition ``a``, tile position ``t``. ``collate_grid_batch`` guarantees this
+            and ``assert_grid_batch`` re-checks it via ``tile_pos``.
+        n_cond: ``C``, the number of distinct condition groups.
+        n_tiles: ``T``, the shared tile count. Negatives per row is ``T-1``.
+        temperature: softmax temperature.
+
+    **Orientation is load-bearing, exactly as in** :func:`masked_info_nce`. For the ordered
+    pair ``(a, b)`` the query is ``z[a, t]`` and the CANDIDATES are the whole of ``z[b, :]``
+    -- one single condition. Acquisition is constant down the candidate row and therefore
+    carries zero discriminative information; the only way to find the match is tissue
+    identity. Transposing this would make the candidate row span conditions and hand the
+    objective back the acquisition shortcut PLAN.md 2 forbids. ``a == b`` is excluded: its
+    "positive" is the image itself, at similarity 1 by construction.
+
+    Both orderings ``(a,b)`` and ``(b,a)`` ARE included -- unlike ``masked_info_nce``'s
+    ``symmetric`` flag, which is unsafe precisely because its reverse direction has
+    cross-condition candidates. Here the reverse direction's candidate row is condition
+    ``a``: still homogeneous, still safe.
+
+    The full ``(C, C, T, T)`` logit tensor is materialised in one einsum -- 5.76M floats
+    (~23 MB fp32) at both C=24,T=100 and C=49,T=49, i.e. negligible next to the activations.
+
+    Returns:
+        (loss, metrics). ``loss`` is the mean over the ``C*(C-1)`` ordered pairs.
+    """
+    if n_cond < 2:
+        raise ValueError(
+            f"grid_info_nce needs n_cond >= 2, got {n_cond}: a row's candidates come from a "
+            "DIFFERENT condition group, so C=1 produces zero query rows"
+        )
+    if n_tiles < 2:
+        raise ValueError(f"grid_info_nce needs n_tiles >= 2, got {n_tiles}: a row has no negatives")
+    if z.shape[0] != n_cond * n_tiles:
+        raise ValueError(
+            f"z has {z.shape[0]} rows but the grid is {n_cond} x {n_tiles} = "
+            f"{n_cond * n_tiles}; the (C*T,) flatten does not match the declared geometry"
+        )
+
+    zn = F.normalize(z.float(), dim=-1).view(n_cond, n_tiles, -1)
+    # logits[a, b, t, s] = <z[a,t], z[b,s]> / tau -- query (a,t), candidate (b,s)
+    logits = torch.einsum("atd,bsd->abts", zn, zn) / temperature
+
+    # keep the ORDERED off-diagonal pairs only; a == b scores the image against itself
+    off = ~torch.eye(n_cond, dtype=torch.bool, device=zn.device)
+    a_idx, b_idx = torch.where(off)
+    pair_logits = logits[a_idx, b_idx]  # (C*(C-1), T, T)
+    n_pairs = int(a_idx.numel())
+
+    flat = pair_logits.reshape(-1, n_tiles)  # (C*(C-1)*T, T)
+    target = torch.arange(n_tiles, device=zn.device).repeat(n_pairs)
+    # every pair contributes exactly T rows, so the flat mean IS the mean over pairs
+    loss = F.cross_entropy(flat, target)
+
+    with torch.no_grad():
+        acc = (flat.argmax(dim=1) == target).float().mean().item()
+    return loss, {
+        "loss": float(loss.detach()),
+        "top1": acc,
+        "negatives_per_anchor": float(n_tiles - 1),
+        "n_rows": float(n_pairs * n_tiles),
+        "n_cond": float(n_cond),
+        "n_tiles": float(n_tiles),
+    }
 
 
 # --------------------------------------------------------------------------------------
@@ -315,6 +396,33 @@ class TrainConfig:
     # batching -- prefer FEWER, LARGER groups: negatives per anchor is group_size - 1
     n_groups: int = 4
     group_size: int = 32
+    #: GRID sampler (:mod:`waivphaet.data.grid`). False = the pair sampler above, which is
+    #: the path every published number was produced on and is left bit-identical.
+    #: True swaps in C x T shared-tile batches: C*T images/step (no separate positive
+    #: tensor), T-1 negatives per row, C*(C-1)*T query rows. Mutually exclusive with
+    #: n_groups/group_size, which are ignored (and left at their defaults) when grid=True.
+    grid: bool = False
+    grid_conditions: int = 0  # C -- distinct conditions per batch; 0 when grid is off
+    grid_tiles: int = 0  # T -- shared tiles per condition; 0 when grid is off
+    #: Micro-chunk for the grid forward pass. 0 = one forward over all C*T images.
+    #:
+    #: This is a MEMORY knob, not a maths knob: the chunks stay in ONE autograd graph and
+    #: the loss still sees every one of the C*T embeddings at once, so the objective is
+    #: unchanged (a ViT is per-image; there is no cross-batch normalisation to break).
+    #: It exists because gradient checkpointing's cost is not the stored inputs -- those
+    #: scale with C*T either way -- but the TRANSIENT buffer when a block is recomputed in
+    #: backward, which scales with the size of one forward. The pair path gets a 2x
+    #: smaller transient for free by running anchors and positives as two separate
+    #: forwards of B/2; the grid path has a single tensor and must be told. Measured:
+    #: 2400 images in one forward OOMs an 80 GiB H100 (7.21 GiB recompute allocation on
+    #: top of 70.4 GiB already live), where 2 x 1200 fits in 65 GiB.
+    #:
+    #: Caveat, measured rather than assumed: equivalent is not BIT-identical. A different
+    #: chunk size is a different GEMM shape, so cuBLAS picks a different kernel and the
+    #: reductions associate differently -- agreement is ~1e-7, not exact. At a FIXED chunk
+    #: size a run still replays exactly, which is why this is recorded in config.json and
+    #: must not be varied within a comparison.
+    grid_forward_chunk: int = 0
     num_workers: int = 8
     seed: int = 0
     # precision
@@ -347,6 +455,33 @@ class TrainConfig:
     encoder: dict = field(default_factory=dict)
 
 
+def _chunked_forward(model, images: torch.Tensor, chunk: int):
+    """``model(images)`` split into micro-chunks, still as ONE autograd graph.
+
+    Returns the same ``(pooled, projected)`` pair a single call would, so downstream
+    indexing (the ``(C, T, D)`` view in :func:`grid_info_nce`) is unaffected.
+    ``chunk <= 0`` or a chunk at least as large as the batch is a plain single forward.
+
+    See ``TrainConfig.grid_forward_chunk`` for why this is needed: with gradient
+    checkpointing the peak is the per-block RECOMPUTE buffer, which scales with one
+    forward's size, not with the number of images kept in the graph.
+
+    **Only the BACKBONE is chunked, and the projector then runs ONCE over the whole
+    concatenated batch.** That split is not an optimisation, it is a correctness
+    requirement: ``ProjectionHead`` contains ``nn.BatchNorm1d``, which couples the batch
+    together. Chunking through it would compute BatchNorm statistics per chunk instead of
+    over all C*T images -- a genuine change to the objective, silently different from the
+    unchunked run -- and a trailing chunk of size 1 (2401 images at chunk 600) makes
+    BatchNorm raise outright, which is how this was caught. The backbone is per-image
+    (a ViT's LayerNorms are per-token), so splitting it is exact, and it is where
+    essentially all of the activation memory lives anyway.
+    """
+    if chunk <= 0 or chunk >= images.shape[0]:
+        return model(images)
+    emb = torch.cat([model.embed(part) for part in images.split(chunk)], dim=0)
+    return emb, model.projector(emb)
+
+
 def _amp_dtype(name: str) -> torch.dtype | None:
     return {"bfloat16": torch.bfloat16, "float16": torch.float16, "none": None}[name]
 
@@ -372,6 +507,20 @@ def evaluate_heldout(model, loader, cfg: TrainConfig, device, n_batches: int) ->
     for i, batch in enumerate(loader):
         if i >= n_batches:
             break
+        if cfg.grid:
+            # Grid batches carry one image tensor and their own geometry; the held-out
+            # loader may run a SMALLER C than training (there are fewer held-out
+            # conditions), so read C and T off the batch rather than off cfg.
+            images = batch["image"].to(device, non_blocking=True)
+            # same memory guard as the train step; harmless under no_grad
+            _, gz = _chunked_forward(model, images, cfg.grid_forward_chunk)
+            _, m = grid_info_nce(
+                gz, int(batch["n_cond"]), int(batch["n_tiles"]), cfg.temperature
+            )
+            tot["loss"] += m["loss"]
+            tot["top1"] += m["top1"]
+            n += 1
+            continue
         anchor = batch["anchor"].to(device, non_blocking=True)
         positive = batch["positive"].to(device, non_blocking=True)
         _, az = model(anchor)
@@ -476,31 +625,58 @@ def train(
                 break
             # PLAN.md 2's load-bearing detail, asserted rather than assumed. Runs every
             # step: it is a few microseconds on CPU-side index tensors, and a violation
-            # here would still produce a perfectly plausible falling loss curve.
-            batch_stats = assert_same_condition_negatives(
-                batch, allowed_conditions=allowed_conditions
-            )
+            # here would still produce a perfectly plausible falling loss curve. The grid
+            # path adds one more silent-failure mode -- tile lists that differ between
+            # condition groups -- so it gets its own assertion, called just as often.
+            if cfg.grid:
+                batch_stats = assert_grid_batch(
+                    batch, allowed_conditions=allowed_conditions
+                )
+            else:
+                batch_stats = assert_same_condition_negatives(
+                    batch, allowed_conditions=allowed_conditions
+                )
             lr = cosine_lr(step, cfg)
             for g in optimizer.param_groups:
                 g["lr"] = lr
 
-            anchor = batch["anchor"].to(device, non_blocking=True)
-            positive = batch["positive"].to(device, non_blocking=True)
-            gid = batch["group_id"].to(device, non_blocking=True)
+            if cfg.grid:
+                # ONE tensor, ONE forward: every image is both an anchor and a query.
+                images = batch["image"].to(device, non_blocking=True)
+                gid = batch["group_id"].to(device, non_blocking=True)
+                n_cond, n_tiles = int(batch["n_cond"]), int(batch["n_tiles"])
+                with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
+                    # ONE graph, one backward -- the chunks are a memory device only, and
+                    # the loss below still sees all C*T embeddings simultaneously (which
+                    # is the entire point of the grid).
+                    anchor_emb, gz = _chunked_forward(
+                        model, images, cfg.grid_forward_chunk
+                    )
+                    teacher_emb = (
+                        retention_teacher_embed(model, images) if use_retention else None
+                    )
+                loss, metrics = grid_info_nce(gz, n_cond, n_tiles, cfg.temperature)
+                n_images = int(images.shape[0])
+            else:
+                anchor = batch["anchor"].to(device, non_blocking=True)
+                positive = batch["positive"].to(device, non_blocking=True)
+                gid = batch["group_id"].to(device, non_blocking=True)
 
-            with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
-                # one forward per view; both views must see the same weights, so this is
-                # a single graph, not two independent steps
-                anchor_emb, az = model(anchor)
-                _, pz = model(positive)
-                # Frozen-teacher forward for the retention term. Guarded so that at the
-                # default weight of 0.0 NOTHING here runs -- no extra forward, no extra
-                # tensor, no RNG touched -- and the step stays bit-identical.
-                teacher_emb = (
-                    retention_teacher_embed(model, anchor)
-                    if use_retention else None
-                )
-            loss, metrics = masked_info_nce(az, pz, gid, cfg.temperature, cfg.symmetric)
+                with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
+                    # one forward per view; both views must see the same weights, so this
+                    # is a single graph, not two independent steps
+                    anchor_emb, az = model(anchor)
+                    _, pz = model(positive)
+                    # Frozen-teacher forward for the retention term. Guarded so that at the
+                    # default weight of 0.0 NOTHING here runs -- no extra forward, no extra
+                    # tensor, no RNG touched -- and the step stays bit-identical.
+                    teacher_emb = (
+                        retention_teacher_embed(model, anchor)
+                        if use_retention else None
+                    )
+                loss, metrics = masked_info_nce(az, pz, gid, cfg.temperature, cfg.symmetric)
+                # two forward views per anchor, so a "step" moves 2 * batch tiles
+                n_images = int(anchor.shape[0]) * 2
             if teacher_emb is not None:
                 # Same embeddings the model exports at eval time (pooled backbone), and
                 # the same group mask InfoNCE uses -- see the relational_kl block comment.
@@ -533,10 +709,8 @@ def train(
 
             step += 1
             pbar.update(1)
-            # two forward views per anchor, so a "step" moves 2 * batch tiles
-            n_tiles = int(anchor.shape[0]) * 2
-            tiles_seen += n_tiles
-            win_tiles += n_tiles
+            tiles_seen += n_images
+            win_tiles += n_images
             if step % cfg.log_every == 0:
                 now = time.time()
                 rec = {

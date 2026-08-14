@@ -26,6 +26,7 @@ from pathlib import Path
 import torch
 
 from waivphaet.data.conditions import all_conditions, available_conditions, make_split
+from waivphaet.data.grid import build_grid_loader
 from waivphaet.data.pairs import build_pair_loader
 from waivphaet.data.repack import present_filenames
 from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
@@ -61,9 +62,37 @@ def parse_args():
     ap.add_argument("--lora-alpha", type=int, default=32)
     ap.add_argument("--max-steps", type=int, default=5000)
     ap.add_argument("--warmup-steps", type=int, default=200)
-    # batching: negatives per anchor == group_size - 1, so prefer few large groups
-    ap.add_argument("--n-groups", type=int, default=4)
-    ap.add_argument("--group-size", type=int, default=64)
+    # batching: negatives per anchor == group_size - 1, so prefer few large groups.
+    # Defaults are None ONLY so that "was it passed?" is answerable for the --grid mutual
+    # exclusion below; they resolve to the historical 4 / 64 immediately after parsing.
+    ap.add_argument("--n-groups", type=int, default=None,
+                    help="pair-sampler groups per batch (default 4). Not usable with --grid.")
+    ap.add_argument("--group-size", type=int, default=None,
+                    help="pair-sampler anchors per group (default 64). Not usable with --grid.")
+    # --- GRID sampler (waivphaet.data.grid) ---------------------------------------------
+    # The pair sampler spends half its forward compute on positives that appear in exactly
+    # one row each. The grid shares ONE tile list across C distinct condition groups, so
+    # every image is both an anchor in its own group and a query against every other group:
+    #   images/step = C*T   negatives/row = T-1   query rows = C*(C-1)*T
+    ap.add_argument("--grid", action="store_true",
+                    help="use the shared-tile GRID sampler instead of the pair sampler. "
+                         "C*T images/step (no separate positive tensor), T-1 negatives per "
+                         "row, C*(C-1)*T query rows. Mutually exclusive with --n-groups / "
+                         "--group-size.")
+    ap.add_argument("--grid-conditions", type=int, default=24,
+                    help="C: distinct conditions per grid batch, drawn WITHOUT replacement. "
+                         "Must not exceed the number of available TRAIN conditions.")
+    ap.add_argument("--grid-tiles", type=int, default=100,
+                    help="T: tiles per condition, shared identically by every condition "
+                         "group. Negatives per row is T-1.")
+    ap.add_argument("--grid-forward-chunk", type=int, default=0,
+                    help="split the grid forward into micro-chunks of this many images. "
+                         "MEMORY ONLY -- one autograd graph, and the loss still sees all "
+                         "C*T embeddings at once, so the objective is identical. Needed "
+                         "because gradient checkpointing's peak is the per-block RECOMPUTE "
+                         "buffer, which scales with one forward's size: 2400 images in a "
+                         "single forward OOMs an 80 GiB H100 (measured), where the pair "
+                         "path's 2 x 1200 fits in 65 GiB. 0 = one forward.")
     ap.add_argument("--grad-accum", type=int, default=1)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--amp", default="bfloat16", choices=["bfloat16", "float16", "none"])
@@ -122,6 +151,36 @@ def main() -> int:
     torch.manual_seed(args.seed)
 
     use_lora = not args.full_ft
+
+    # --- sampler selection: --grid and --n-groups/--group-size are mutually exclusive ----
+    # Silently ignoring an unused batching flag is how two runs end up labelled the same
+    # and batched differently, so this is an error rather than a warning.
+    if args.grid:
+        conflicting = [
+            f"--{name.replace('_', '-')}"
+            for name in ("n_groups", "group_size")
+            if getattr(args, name) is not None
+        ]
+        if conflicting:
+            raise SystemExit(
+                f"--grid is mutually exclusive with {' / '.join(conflicting)}: the grid "
+                "sampler is sized by --grid-conditions C and --grid-tiles T "
+                "(C*T images/step, T-1 negatives per row), and the pair sampler's "
+                "n_groups/group_size have no meaning there. Drop one or the other."
+            )
+        if args.grid_conditions < 2:
+            raise SystemExit(
+                f"--grid-conditions must be >= 2, got {args.grid_conditions}: a query row's "
+                "candidates come from a DIFFERENT condition group, so C=1 yields zero rows."
+            )
+        if args.grid_tiles < 2:
+            raise SystemExit(
+                f"--grid-tiles must be >= 2, got {args.grid_tiles}: a row would have no "
+                "negatives (negatives per row is T-1)."
+            )
+    # Resolve the historical defaults now that the "was it passed?" question is answered.
+    n_groups = 4 if args.n_groups is None else args.n_groups
+    group_size = 64 if args.group_size is None else args.group_size
 
     # --- Retention term requires a frozen teacher, which only LoRA gives us for free ---
     # Under --full-ft the "frozen base" and the student are the same weights, so the KL
@@ -192,20 +251,63 @@ def main() -> int:
     print(f"[train] held-out exclusion verified: no {args.heldout_scanners} scanner and no "
           f"{args.heldout_stains} stain among the {len(train_conds)} training conditions")
 
-    train_loader = build_pair_loader(
-        args.packed_dir, conditions=train_conds, n_groups=args.n_groups,
-        group_size=args.group_size, batches_per_epoch=args.max_steps,
-        num_workers=args.workers, seed=args.seed,
-    )
-    heldout_loader = (
-        build_pair_loader(
-            args.packed_dir, conditions=heldout_conds, n_groups=args.n_groups,
-            group_size=args.group_size, batches_per_epoch=1000,
-            num_workers=max(args.workers // 4, 1), seed=args.seed + 1,
+    if args.grid:
+        # Conditions are drawn WITHOUT replacement, so C is hard-capped by the split.
+        if args.grid_conditions > len(train_conds):
+            raise SystemExit(
+                f"--grid-conditions {args.grid_conditions} exceeds the "
+                f"{len(train_conds)} available training conditions "
+                f"({len(split.train)} in the split, {len(train_conds)} repacked & usable). "
+                "Conditions are drawn without replacement -- a repeated condition group "
+                "would make its cross-group 'positive' the same image twice. Lower "
+                "--grid-conditions or hold out fewer scanners/stains."
+            )
+        print(
+            f"[train] GRID sampler: C={args.grid_conditions} x T={args.grid_tiles} -> "
+            f"{args.grid_conditions * args.grid_tiles} images/step, "
+            f"{args.grid_tiles - 1} negatives/row, "
+            f"{args.grid_conditions * (args.grid_conditions - 1) * args.grid_tiles} query rows"
         )
-        if len(heldout_conds) >= 2
-        else None
-    )
+        train_loader = build_grid_loader(
+            args.packed_dir, conditions=train_conds, n_cond=args.grid_conditions,
+            n_tiles=args.grid_tiles, batches_per_epoch=args.max_steps,
+            num_workers=args.workers, seed=args.seed,
+        )
+        # There are fewer held-out conditions than training ones, so the held-out grid
+        # may have to be narrower. Its loss is a monitoring signal, not a comparison
+        # against the training loss, so a smaller C is fine -- but say so in the log
+        # rather than letting the two numbers look like they share a geometry.
+        heldout_cond_n = min(args.grid_conditions, len(heldout_conds))
+        if len(heldout_conds) >= 2 and heldout_cond_n != args.grid_conditions:
+            print(
+                f"[train] held-out grid narrowed to C={heldout_cond_n} "
+                f"(only {len(heldout_conds)} held-out conditions repacked); its loss is "
+                "NOT on the same scale as the training loss"
+            )
+        heldout_loader = (
+            build_grid_loader(
+                args.packed_dir, conditions=heldout_conds, n_cond=heldout_cond_n,
+                n_tiles=args.grid_tiles, batches_per_epoch=1000,
+                num_workers=max(args.workers // 4, 1), seed=args.seed + 1,
+            )
+            if len(heldout_conds) >= 2
+            else None
+        )
+    else:
+        train_loader = build_pair_loader(
+            args.packed_dir, conditions=train_conds, n_groups=n_groups,
+            group_size=group_size, batches_per_epoch=args.max_steps,
+            num_workers=args.workers, seed=args.seed,
+        )
+        heldout_loader = (
+            build_pair_loader(
+                args.packed_dir, conditions=heldout_conds, n_groups=n_groups,
+                group_size=group_size, batches_per_epoch=1000,
+                num_workers=max(args.workers // 4, 1), seed=args.seed + 1,
+            )
+            if len(heldout_conds) >= 2
+            else None
+        )
     if heldout_loader is None:
         print("[train] WARNING: <2 held-out conditions repacked -- no held-out-condition eval. "
               "PLAN.md 3 risk 3 says this is the only in-training check against tile memorisation.")
@@ -254,7 +356,13 @@ def main() -> int:
     cfg = TrainConfig(
         packed_dir=str(args.packed_dir), out_dir=str(args.out_dir),
         lr=args.lr, temperature=args.temperature, max_steps=args.max_steps,
-        warmup_steps=args.warmup_steps, n_groups=args.n_groups, group_size=args.group_size,
+        warmup_steps=args.warmup_steps, n_groups=n_groups, group_size=group_size,
+        # Record WHICH sampler produced this run. config.json is the only place a later
+        # reader can tell a grid run from a pair run apart from the run name.
+        grid=args.grid,
+        grid_conditions=args.grid_conditions if args.grid else 0,
+        grid_tiles=args.grid_tiles if args.grid else 0,
+        grid_forward_chunk=args.grid_forward_chunk if args.grid else 0,
         grad_accum=args.grad_accum, num_workers=args.workers, amp_dtype=args.amp,
         ckpt_every=args.ckpt_every, eval_every=args.eval_every, seed=args.seed,
         weight_decay=args.weight_decay, log_every=args.log_every, symmetric=args.symmetric,

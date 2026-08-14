@@ -1198,3 +1198,392 @@ def test_retention_on_logs_both_terms_separately():
     assert rec["loss_infonce"] == rec["loss"]  # "loss" keeps its pre-retention meaning
     assert rec["loss_retention_kl"] >= 0.0
     assert rec["loss_total"] == pytest.approx(rec["loss_infonce"] + rec["loss_retention_kl"])
+
+
+# --------------------------------------------------------------------------------------
+# GRID sampler (waivphaet.data.grid): one shared tile list across C condition groups, so
+# every image is both an anchor and a query. It inherits the pair sampler's load-bearing
+# invariant (candidates are condition-homogeneous) and ADDS one: every condition group
+# must use the SAME tiles in the SAME ORDER, because the loss identifies the positive by
+# POSITION. Break that and every "positive" is a mislabelled pair -- while the loss curve
+# still falls perfectly plausibly. Hence the must-FAIL tests below, not just a happy path.
+
+
+class _PixelFreeGridDataset:
+    """GridTileDataset with the pixel gather stubbed out.
+
+    Uses the REAL ``GridTileDataset.__getitem__`` (so the id tensors, the ``group_id`` /
+    ``tile_pos`` bookkeeping and the row-major flatten are the shipped ones, not a
+    re-implementation that could drift), but returns 2x2 "images" instead of 224x224x3 --
+    the invariants under test are about indices, and a real gather would be ~360 MB.
+    """
+
+    def __init__(self, n_conditions: int):
+        from waivphaet.data.grid import GridTileDataset
+
+        self._real = object.__new__(GridTileDataset)
+        self._real.conditions = list(range(n_conditions))
+        self._real.transform = None
+        self._real._slides = {}
+        self._real._gather = lambda cond, tiles: np.zeros(
+            (*cond.shape, 2, 2, 3), dtype=np.uint8
+        )
+
+    def __getitem__(self, plan):
+        return type(self._real).__getitem__(self._real, plan)
+
+
+def _grid_collated(n_cond=4, n_tiles=5, n_available=12, seed=0):
+    """One real sampler plan, materialised and collated. Returns (plan, collated batch)."""
+    from waivphaet.data.grid import GridBatchSampler, collate_grid_batch
+
+    sampler = GridBatchSampler(
+        list(range(n_available)), n_cond=n_cond, n_tiles=n_tiles,
+        batches_per_epoch=1, tile_indices=np.arange(200), seed=seed,
+    )
+    plan = next(iter(sampler))
+    item = _PixelFreeGridDataset(n_available)[plan]
+    return plan, collate_grid_batch(item)
+
+
+def test_grid_happy_path_reports_the_geometry_it_actually_built():
+    from waivphaet.data.grid import assert_grid_batch
+
+    _, batch = _grid_collated(n_cond=4, n_tiles=5)
+    stats = assert_grid_batch(batch, allowed_conditions=set(range(12)))
+    assert stats["n_cond"] == 4.0
+    assert stats["n_tiles"] == 5.0
+    assert stats["negatives_per_anchor"] == 4.0          # T - 1
+    assert stats["n_rows"] == 4 * 3 * 5                  # C * (C-1) * T
+    assert stats["distinct_conditions"] == 4.0
+    assert batch["image"].shape[0] == 4 * 5              # C*T images, no positive tensor
+
+
+def test_grid_batch_MUST_FAIL_when_tile_sets_differ_between_condition_groups():
+    """THE new load-bearing invariant.
+
+    If group a and group b are drawn over different tiles, position t is not the same
+    tissue in both, so every cross-group "positive" grid_info_nce scores is a mislabelled
+    pair -- and the loss would still fall. Nothing else in the pipeline notices.
+    """
+    from waivphaet.data.grid import assert_grid_batch
+
+    _, batch = _grid_collated(n_cond=4, n_tiles=5)
+    tiles = batch["tile_idx"].clone()
+    # give group 2 a tile that no other group has
+    tiles[2 * 5 + 3] = 999
+    batch["tile_idx"] = tiles
+
+    with pytest.raises(AssertionError, match="shared tile list"):
+        assert_grid_batch(batch, allowed_conditions=set(range(12)))
+
+
+def test_grid_batch_MUST_FAIL_when_the_shared_tiles_are_merely_reordered():
+    """Same SET, different ORDER, is just as broken -- the match is positional.
+
+    A set-equality check would pass this batch. It must not: swapping two tiles inside one
+    group silently re-labels two positives per pair involving that group.
+    """
+    from waivphaet.data.grid import assert_grid_batch
+
+    _, batch = _grid_collated(n_cond=4, n_tiles=5)
+    tiles = batch["tile_idx"].clone()
+    g1 = slice(1 * 5, 2 * 5)
+    block = tiles[g1].clone()
+    block[0], block[1] = block[1].clone(), block[0].clone()
+    tiles[g1] = block
+    batch["tile_idx"] = tiles
+    # the SET is identical -- prove it, so the test is really about order
+    assert set(batch["tile_idx"][g1].tolist()) == set(batch["tile_idx"][0:5].tolist())
+
+    with pytest.raises(AssertionError, match="shared order"):
+        assert_grid_batch(batch, allowed_conditions=set(range(12)))
+
+
+def test_grid_batch_MUST_FAIL_on_a_duplicated_condition():
+    """Two groups on the same acquisition: their cross-group 'positive' is one image twice,
+    so that row is solvable at similarity 1 without learning anything."""
+    from waivphaet.data.grid import assert_grid_batch
+
+    _, batch = _grid_collated(n_cond=4, n_tiles=5)
+    cond = batch["cond_idx"].clone()
+    cond[3 * 5:4 * 5] = cond[0]  # group 3 becomes a copy of group 0's condition
+    batch["cond_idx"] = cond
+
+    with pytest.raises(AssertionError, match="duplicate condition"):
+        assert_grid_batch(batch, allowed_conditions=set(range(12)))
+
+
+def test_grid_batch_MUST_FAIL_on_a_duplicated_tile_in_the_shared_list():
+    from waivphaet.data.grid import assert_grid_batch
+
+    _, batch = _grid_collated(n_cond=3, n_tiles=5)
+    tiles = batch["tile_idx"].clone().view(3, 5)
+    tiles[:, 4] = tiles[:, 0]  # same duplication in EVERY group -> invariant 2 still holds
+    batch["tile_idx"] = tiles.reshape(-1)
+
+    with pytest.raises(AssertionError, match="repeats a tile index"):
+        assert_grid_batch(batch, allowed_conditions=set(range(12)))
+
+
+def test_grid_batch_MUST_FAIL_on_a_heldout_condition_leak():
+    from waivphaet.data.grid import assert_grid_batch
+
+    _, batch = _grid_collated(n_cond=3, n_tiles=5, n_available=12)
+    allowed = set(range(12)) - {int(batch["cond_idx"][0])}
+    with pytest.raises(AssertionError, match="outside the loader's condition list"):
+        assert_grid_batch(batch, allowed_conditions=allowed)
+
+
+def test_grid_batch_MUST_FAIL_when_a_candidate_block_is_not_condition_homogeneous():
+    """The original PLAN.md 2 constraint, carried over: a mixed candidate row lets
+    'different acquisition' stand in for 'different tile'."""
+    from waivphaet.data.grid import assert_grid_batch
+
+    _, batch = _grid_collated(n_cond=3, n_tiles=5)
+    cond = batch["cond_idx"].clone()
+    cond[2] = cond[-1]  # one cell of group 0 defects to another condition
+    batch["cond_idx"] = cond
+
+    with pytest.raises(AssertionError, match="mixes conditions"):
+        assert_grid_batch(batch, allowed_conditions=set(range(12)))
+
+
+def test_grid_sampler_refuses_more_conditions_than_exist():
+    """Conditions are drawn WITHOUT replacement; asking for more must be an error, not a
+    silent fallback to sampling with replacement (which is the duplicate-condition bug)."""
+    from waivphaet.data.grid import GridBatchSampler
+
+    with pytest.raises(ValueError, match="exceeds the"):
+        GridBatchSampler(list(range(10)), n_cond=11, n_tiles=4)
+
+
+@pytest.mark.parametrize(
+    "n_cond,n_tiles,expect_neg,expect_rows",
+    [(24, 100, 99, 55_200), (49, 49, 48, 115_248)],
+)
+def test_grid_negative_and_row_counts_at_the_launch_geometries(
+    n_cond, n_tiles, expect_neg, expect_rows
+):
+    """G4: the two arms' arithmetic, measured on real batches rather than asserted on paper."""
+    from waivphaet.data.grid import assert_grid_batch
+    from waivphaet.train.contrastive import grid_info_nce
+
+    _, batch = _grid_collated(n_cond=n_cond, n_tiles=n_tiles, n_available=50)
+    stats = assert_grid_batch(batch, allowed_conditions=set(range(50)))
+    assert stats["negatives_per_anchor"] == float(expect_neg)
+    assert stats["n_rows"] == float(expect_rows)
+    assert batch["image"].shape[0] == n_cond * n_tiles
+
+    # ...and the loss agrees, independently, from the tensor it actually reduces
+    z = torch.randn(n_cond * n_tiles, 32)
+    _, m = grid_info_nce(z, n_cond, n_tiles, temperature=1.0)
+    assert m["negatives_per_anchor"] == float(expect_neg)
+    assert m["n_rows"] == float(expect_rows)
+
+
+@pytest.mark.parametrize("n_cond,n_tiles", [(24, 100), (49, 49)])
+def test_grid_loss_on_random_embeddings_sits_at_the_random_guess_value(n_cond, n_tiles):
+    """G5: random embeddings must score log(T), i.e. chance over T candidates per row.
+
+    Two readings, because they fail differently:
+
+    * At tau=1 with a high embedding dimension the logits are ~0 and the cross-entropy
+      must land on log(T) to a couple of decimals. A loss meaningfully BELOW log(T) on
+      random inputs would mean the rows are not really T-way -- e.g. an a==b pair leaking
+      in, whose positive is the image itself at similarity 1.
+    * top-1 must be ~1/T at ANY temperature. Temperature rescales the logits and so moves
+      the cross-entropy, but it cannot move chance accuracy, which makes this the
+      scale-free version of the same statement -- and it is checked at the tau=0.07 the
+      arms actually train at.
+    """
+    import math
+
+    from waivphaet.train.contrastive import grid_info_nce
+
+    g = torch.Generator().manual_seed(0)
+    z = torch.randn(n_cond * n_tiles, 2048, generator=g)
+
+    _, m1 = grid_info_nce(z, n_cond, n_tiles, temperature=1.0)
+    assert m1["loss"] == pytest.approx(math.log(n_tiles), abs=0.02), (
+        f"C={n_cond} T={n_tiles}: random-embedding loss {m1['loss']:.4f} vs "
+        f"log(T)={math.log(n_tiles):.4f}"
+    )
+
+    _, m2 = grid_info_nce(z, n_cond, n_tiles, temperature=0.07)
+    assert m2["top1"] == pytest.approx(1.0 / n_tiles, abs=3.0 / n_tiles**0.5 / n_tiles**0.5)
+    # cross-entropy is bounded below by the uniform value in expectation, never above chance
+    assert m2["loss"] >= math.log(n_tiles) - 0.02
+
+
+def test_grid_loss_excludes_the_self_pair_and_matches_a_reference_implementation():
+    """Orientation and exclusion, checked against a literal double loop.
+
+    For pair (a,b) the query is z[a,t] and the candidates are the whole of z[b,:] -- one
+    condition, so acquisition carries no information down the row. Transposing it would
+    put cross-condition candidates back in the row. A hand-written loop is the cheapest
+    way to pin the orientation rather than trust the einsum's index letters.
+    """
+    import torch.nn.functional as F
+
+    from waivphaet.train.contrastive import grid_info_nce
+
+    c, t, d = 4, 6, 16
+    g = torch.Generator().manual_seed(3)
+    z = torch.randn(c * t, d, generator=g)
+    loss, _ = grid_info_nce(z, c, t, temperature=0.07)
+
+    zn = F.normalize(z.float(), dim=-1).view(c, t, d)
+    terms = []
+    for a in range(c):
+        for b in range(c):
+            if a == b:
+                continue  # its "positive" is the image itself, at similarity 1
+            logits = (zn[a] @ zn[b].t()) / 0.07  # query z[a,t], candidates z[b,:]
+            terms.append(F.cross_entropy(logits, torch.arange(t)))
+    assert float(loss) == pytest.approx(float(torch.stack(terms).mean()), rel=1e-6)
+
+
+def test_grid_loss_rejects_a_geometry_that_does_not_match_the_tensor():
+    from waivphaet.train.contrastive import grid_info_nce
+
+    z = torch.randn(4 * 5, 8)
+    with pytest.raises(ValueError, match="does not match the declared geometry"):
+        grid_info_nce(z, 4, 6, temperature=0.07)
+    with pytest.raises(ValueError, match="n_cond >= 2"):
+        grid_info_nce(torch.randn(5, 8), 1, 5, temperature=0.07)
+
+
+def test_grid_and_pair_batching_flags_are_mutually_exclusive_in_the_cli():
+    """--grid with --n-groups must be a hard error: two runs batched differently under one
+    label is exactly how a comparison gets silently confounded."""
+    repo = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, str(repo / "scripts" / "train_lora.py"),
+         "--out-dir", "/tmp/_nope", "--grid", "--n-groups", "6"],
+        capture_output=True, text=True, cwd=repo,
+    )
+    assert r.returncode != 0
+    assert "mutually exclusive" in (r.stderr + r.stdout)
+
+
+def test_train_config_records_which_sampler_produced_the_run():
+    """config.json is the only durable record of the batching; default must stay OFF."""
+    from waivphaet.train.contrastive import TrainConfig
+
+    assert TrainConfig().grid is False
+    assert TrainConfig().grid_conditions == 0 and TrainConfig().grid_tiles == 0
+    cfg = TrainConfig(grid=True, grid_conditions=49, grid_tiles=49)
+    from dataclasses import asdict
+    d = asdict(cfg)
+    assert d["grid"] is True and d["grid_conditions"] == 49 and d["grid_tiles"] == 49
+
+
+def test_grid_forward_chunking_is_a_memory_device_not_a_maths_change():
+    """--grid-forward-chunk must not move the numbers, forward OR backward.
+
+    It exists purely to bound gradient checkpointing's per-block recompute buffer (2400
+    images in one forward OOMs an 80 GiB H100). If it perturbed the objective it would
+    silently make the grid arms incomparable to CTRL, so both the concatenated output and
+    the resulting gradients are checked against a single unchunked forward.
+    """
+    from waivphaet.train.contrastive import _chunked_forward
+
+    torch.manual_seed(0)
+    model = _TinyEncoder()
+    # The REAL ProjectionHead contains nn.BatchNorm1d, which couples the batch together.
+    # _TinyEncoder's plain Linear projector does not, so without this the test cannot see
+    # the bug that chunking through the projector would introduce -- and that bug is not
+    # hypothetical: it shipped, and only surfaced because 2401 images at chunk 600 leaves
+    # a trailing chunk of 1 and BatchNorm refuses a batch of one in train mode.
+    model.projector = torch.nn.Sequential(
+        torch.nn.Linear(8, 6), torch.nn.BatchNorm1d(6), torch.nn.Dropout(0.5)
+    )
+    images = torch.randn(20, 10, generator=torch.Generator().manual_seed(5))
+
+    model.eval()  # the projector carries Dropout(0.5); chunking must not re-draw it
+    with torch.no_grad():
+        whole_e, whole_z = _chunked_forward(model, images, 0)
+        for chunk in (1, 3, 7, 20, 999):
+            e, z = _chunked_forward(model, images, chunk)
+            # NOT torch.equal: a different chunk size is a different GEMM shape, so the
+            # library picks a different kernel and the reductions associate differently.
+            # The maths is the same (a ViT is per-image, nothing normalises across the
+            # batch); the last mantissa bits are not. Chunk size is therefore a FIXED
+            # per-run setting recorded in config.json, not something to vary mid-run.
+            assert torch.allclose(e, whole_e, atol=1e-6), f"pooled embedding moved at chunk={chunk}"
+            assert torch.allclose(z, whole_z, atol=1e-6), f"projection moved at chunk={chunk}"
+        # ...and at a FIXED chunk size it is exactly reproducible, which is what a run
+        # replaying from a seed actually depends on.
+        again_e, again_z = _chunked_forward(model, images, 6)
+        once_e, once_z = _chunked_forward(model, images, 6)
+        assert torch.equal(again_e, once_e) and torch.equal(again_z, once_z)
+
+    def grads(chunk):
+        model.zero_grad(set_to_none=True)
+        _, z = _chunked_forward(model, images, chunk)
+        z.square().sum().backward()
+        return {k: p.grad.detach().clone() for k, p in model.named_parameters()
+                if p.grad is not None}
+
+    ref, chunked = grads(0), grads(6)
+    assert ref.keys() == chunked.keys() and ref
+    for k in ref:
+        assert torch.allclose(ref[k], chunked[k], atol=1e-6), f"gradient moved for {k}"
+
+    # --- TRAIN mode is where BatchNorm actually couples the batch -----------------------
+    # In eval() BatchNorm uses running statistics and is per-image, so the checks above
+    # cannot see a projector-chunking bug at all. Train mode can.
+    model.train()
+    for m in model.modules():
+        if isinstance(m, torch.nn.Dropout):
+            m.p = 0.0  # keep the comparison deterministic; BN is the thing under test
+    with torch.no_grad():
+        whole_e, whole_z = _chunked_forward(model, images, 0)
+        for chunk in (3, 6, 20):
+            e, z = _chunked_forward(model, images, chunk)
+            assert torch.allclose(e, whole_e, atol=1e-6), f"train-mode embedding moved at {chunk}"
+            assert torch.allclose(z, whole_z, atol=1e-6), (
+                f"train-mode PROJECTION moved at chunk={chunk}: BatchNorm statistics are "
+                "being computed per chunk instead of over the whole batch"
+            )
+
+        # A trailing chunk of exactly ONE image is the real launch geometry (2401 images
+        # at chunk 600). BatchNorm raises on a batch of 1 in train mode, so if the
+        # projector were inside the chunk loop this would throw rather than merely drift.
+        odd = torch.randn(21, 10, generator=torch.Generator().manual_seed(9))
+        e21, z21 = _chunked_forward(model, odd, 20)
+        assert e21.shape[0] == 21 and z21.shape[0] == 21
+
+
+def test_grid_heldout_eval_runs_at_its_own_narrower_geometry():
+    """The held-out grid has FEWER conditions than the training grid (41 vs 50 here), so
+    evaluate_heldout must read C and T off the batch, not off cfg.
+
+    The gate smoke runs with eval disabled, so nothing else would catch this until step
+    250 of a 1500-step run -- i.e. 25 minutes into a job, after the GPUs are committed.
+    """
+    from waivphaet.train.contrastive import TrainConfig, evaluate_heldout
+    from waivphaet.data.grid import GridBatchSampler, GridTileDataset, collate_grid_batch
+
+    d_in = 10
+    ds = object.__new__(GridTileDataset)
+    ds.conditions, ds.transform, ds._slides = list(range(6)), None, {}
+    ds._gather = lambda cond, tiles: np.zeros((*cond.shape, d_in), dtype=np.float32)
+
+    # training geometry is 5x4; the held-out loader below is a NARROWER 3x4
+    sampler = GridBatchSampler(list(range(6)), n_cond=3, n_tiles=4, batches_per_epoch=2,
+                               tile_indices=np.arange(40), seed=0)
+    batches = []
+    for plan in sampler:
+        b = collate_grid_batch(ds[plan])
+        b["image"] = b["image"].float()
+        batches.append(b)
+
+    model = _TinyEncoder()
+    cfg = TrainConfig(grid=True, grid_conditions=5, grid_tiles=4, amp_dtype="none",
+                      grid_forward_chunk=2)
+    out = evaluate_heldout(model, batches, cfg, torch.device("cpu"), n_batches=2)
+    assert set(out) == {"heldout_loss", "heldout_top1"}
+    assert out["heldout_loss"] > 0 and 0.0 <= out["heldout_top1"] <= 1.0
+    assert model.training, "evaluate_heldout must restore train mode"
