@@ -6,6 +6,101 @@ not comparable across studies without the caveats attached.
 
 ---
 
+## 0. Standing conclusions — what is believed today
+
+**This file contains two different studies. Their numbers are not interchangeable.**
+
+| | §1–§7 — the RECONSTRUCTION | §8–§12 — the MECHANISM study |
+|---|---|---|
+| question | can Waiv's published results be reproduced? | what in the batch/loss geometry moves robustness? |
+| backbones | phikon-v2, Midnight-12k, Virchow2 (3) | phikon-v2 only (1) |
+| arm family | LoRA rank / checkpoint / full-FT / retention-KL sweeps against Waiv's published rows | `gridcmp` / `gridcmp2` / `headcmp` / `poolcmp` against each other |
+| HEST protocol | **9-task**, full benchmark; `cls` on phikon-v2, `clsmean` on Midnight and Virchow2 | **5-task subset** (SKCM/COAD/READ/PAAD/LUNG) selected on prior effect size; `clsmean` only |
+| HEST base | 0.3747 (phikon-v2 `cls`), 0.4121 (Midnight), 0.4032 (Virchow2) | **0.4109** (phikon-v2 `clsmean`, 5-task) |
+| comparator | Waiv's published numbers | the CTRL arm |
+
+A HEST number from §12 **cannot** be compared to a HEST number from §1–§7, and neither can be
+compared to Waiv's 0.3943. See §0.1.
+
+### What the reconstruction establishes (§1–§7)
+
+- **Robustness reproduces on 3 of 3 backbones** (§1). Gap-closed against Waiv falls monotonically
+  as the base gets stronger — ~101% / ~90% / ~76% — tracking headroom, not architecture (§6).
+- **THUNDER matches or beats Waiv on 11 of 12 comparable model × task pairs** (§2, §3), and the
+  gain is carried by classification, not segmentation (32/36 vs 3/12 pairs).
+- **Retention (HEST) is the weak axis on 3 of 3 backbones** (§1). It is not a checkpoint artefact
+  (§2 sweep), not LoRA rank (§5), and not an artefact of LoRA vs full fine-tuning (§4).
+- **The retention term is refuted and strictly dominated** (§7). The premise was wrong:
+  fine-tuning does not damage retention — the λ=0 control *improves* HEST by +0.0078.
+
+### What the mechanism study establishes (§8–§12)
+
+- **At matched negatives the grid sampler path itself costs −0.0093 RI** (§8.6). The "0.008 RI per
+  doubling of negatives" `log N` slope of §8.2 is **withdrawn** — it crossed two samplers.
+- **The grid family's negatives response is non-monotone**: flat 99→199, then rising again by 1199
+  negatives (§8.6). Not saturation.
+- **Split cls/mean heads > single concat > cls-only ≫ mean-only** (§9.1), and the mean head cannot
+  deliver invariance for a stated gradient reason (§9.3), measured at 1.83e-07 token selectivity
+  (§11.2).
+- **Contrastive loss, top-1 and balanced accuracy are *inverted* signals for RI** and must never be
+  used for selection (§9.2). §12.5 adds `ID_`/`OOD_`/`prediction_performance` to that list.
+- **Token-dependent pooling is UNRESOLVED — not null, not positive** (§11, §11.1, §12.5 pt 2).
+- **RI and the kNN performance metrics are two real axes that trade off** (§12.5); the "hollow
+  gain" reading is refuted by two readouts sharing no machinery with PathoROB.
+- **`confounder_insensitivity` predicts external performance better than avg RI** (+0.873 vs
+  +0.713 Pearson, n=7 — §12.2). Prefer CI as the single-scalar proxy.
+- **avg RI is largely a readout on camelyon** (86% of between-arm variance) and camelyon is
+  saturated on every probe but RI (§12.6). **Prefer the per-dataset RI table for selection.**
+- **RI curves are not checkpoint selectors** (§12.2, §12.6). The "early peak / training
+  over-specialises" story is **dead**, not merely unsupported.
+- **The avg-RI seed floor is 0.0070** (n=2, §12.3). Most margins in §8–§11 sit at 0.9×–1.3× it.
+  n=2 bounds noise; it does not certify significance.
+- **Four methodology failures of the same shape** — every one shrank a denominator (§12.0).
+
+**Standing summary for §8–§12: directions established, magnitudes unsettled.** No single ×floor
+ratio in this document is load-bearing, and none should be quoted as one.
+
+### 0.1 Conventions — how to read a number
+
+**Four different summary conventions are in circulation in this file.** They give different
+numbers for the same arm, so a figure is meaningless without knowing which one produced it.
+
+| convention | definition | used by |
+|---|---|---|
+| plateau mean, steps ≥ 1500 | mean of every scored checkpoint from step 1500 on, reported with its within-arm sd | §5, §7 |
+| plateau mean, steps ≥ 750 | same, but from step 750 — chosen to exclude rank-64's transient step-500 collapse | §6 |
+| last-three-checkpoint mean | mean of steps **1000 / 1250 / 1500** | §8.2, §8.6, §12.2 |
+| step-1500 final + peak-over-checkpoints | the final value, printed alongside each arm's max over all its checkpoints | §9.1, §11.1 |
+
+**Worked example of the divergence.** SPLIT's `prediction_performance` is **0.8958** as a
+last-three mean and **0.8949** at step 1500 (§12.2). Rankings happen to be identical either way
+there; that is a fact about those arms, not a general guarantee.
+
+**A fifth thing, not a summary convention:** the §12.3 seed floors are
+`max |ctrl − ctrlseed|` over steps 750 / 1000 / 1250 / 1500 — a max over the per-step curve, not a
+mean of it. The mean would give 0.0069 for avg RI; the max (0.0070) is the conservative choice.
+
+**The two HEST protocols, side by side:**
+
+| | tasks | pooling | base | where |
+|---|---|---|---|---|
+| reconstruction | **9** (full HEST) | `cls` (phikon-v2) | **0.3747** | §1, §2, §5, §7 |
+| mechanism study | **5** (subset, selected on prior effect size) | `clsmean` | **0.4109** | §12.2 |
+
+Waiv's published phikon-v2 row (0.3747 base → 0.3943 Phaet) belongs to the **first** row only.
+`scripts/run_hest.py:138-142` stamps every `clsmean` summary with that warning. The 5-task subset
+was selected on `|Δ| vs base` in a **prior, different arm family**, so its absolute deltas are
+**upper bounds** (§12.2).
+
+**Peak-over-checkpoints is a diagnostic, never a result.** §5 demolishes peak-picking directly —
+"taking an arm's max over 8 checkpoints selects that arm's luckiest one, and the two arms with the
+most checkpoint-to-checkpoint scatter get the largest upward selection bias" — and its own method
+note says to "treat a peak-only table as a diagnostic, not a result." **§9.1 and §11.1
+nevertheless print `peak RI` in bold.** Read those bolded peaks as diagnostics; the comparable
+figures are the step-1500 finals and the last-three means in §12.2.
+
+---
+
 ## 1. Headline — average level
 
 Each backbone's **base** was reproduced against a published reference before any
@@ -891,15 +986,32 @@ PathoROB average RI:
 | query rows | 1,200 | 55,200 | 115,248 |
 
 Last-three-checkpoint means: CTRL **0.8127**, GRID24 **0.8043** (Δ −0.0084), GRID49 **0.7973**
-(Δ −0.0154). CTRL's plateau is 0.8128 ± 0.0004 across steps 500–1500, which is the
-empirical within-run checkpoint noise — tighter than the ±0.005 band §2 quotes, and it makes the
-GRID24 gap ~20× the noise.
+(Δ −0.0154).
+
+> **CORRECTION (§12.0, §12.3) — the "~20× the noise" denominator was a within-run one.**
+> The original read: *"CTRL's plateau is 0.8128 ± 0.0004 across steps 500–1500, which is the
+> empirical within-run checkpoint noise — tighter than the ±0.005 band §2 quotes, and it makes the
+> GRID24 gap ~20× the noise."*
+>
+> The ±0.0004 is **within-run checkpoint drift of a single training trajectory**. The GRID24 gap is
+> a **between-run** difference. Scaling a between-run gap by a within-run denominator is the
+> methodology failure §12.0 catalogs, and here it is the cleanest instance of it in the file.
+> Against the measured between-seed floor — **0.0070** avg RI, `max |ctrl − ctrlseed|` over steps
+> 750–1500 (§12.3) — the GRID24 gap of 0.0084 is **≈1.2× the floor**, not 20×. The original figure
+> was inflated ~17×. The 0.8128 ± 0.0004 plateau statistic itself stands; only its use as a
+> denominator is retracted. **A gap of 1.2× a two-run floor is a lead, not a result.**
 
 **Ordering tracks negatives per row at every checkpoint and runs inversely to query rows.** The
 grid restructuring buys 46–96× the query rows and loses RI. Spacing is close to linear in
 `log(negatives)`: 0.0121 RI/nat between CTRL and GRID24, 0.0098 between GRID24 and GRID49 — about
-0.008 RI per doubling of negatives, the same `log N` dependence the InfoNCE bound predicts, showing
-up in a downstream robustness metric.
+0.008 RI per doubling of negatives, ~~the same `log N` dependence the InfoNCE bound predicts,
+showing up in a downstream robustness metric~~.
+
+> **WITHDRAWN (§8.6).** The struck sentence above is part of the same withdrawal §8.6 applies to
+> the slope, and was left unmarked in an earlier pass. The `log N` fit crosses **two different
+> samplers** (CTRL is the pair path; GRID24/GRID49 are the grid path), so it is not a negatives
+> slope and it is not evidence for the InfoNCE bound. At matched negatives the sampler path alone
+> is worth −0.0093 RI (§8.6). Within the grid family the response is non-monotone, not `log N`.
 
 Per-dataset at step 1500, this is a **camelyon-only effect**. TCGA (0.7841 / 0.7820 / 0.7798) and
 Tolkach (0.9304 / 0.9304 / 0.9296) are tied across all three arms; camelyon carries essentially all
@@ -917,14 +1029,44 @@ conditions and 26,400 rows instead of 6 and 1,200. Tie ⇒ negatives is the only
 Also unmeasured: **between-run seed variance**. Every gap here is n=1, and ±0.0004 is *within*-run
 checkpoint drift, not run-to-run. A CTRL seed repeat is the cheapest way to price the ±0.008 claims.
 
-### 8.4 Incidental — the current sampler at a larger batch beats the published number
+### 8.4 Incidental — ~~the current sampler at a larger batch beats the published number~~ WITHDRAWN by the seed repeat (§12.2, §12.3)
 
-CTRL is the *existing* sampler, just at 2400 images/step instead of 768 (1200 anchors vs 384, at
-essentially unchanged negatives per row, 199 vs 191). It plateaus at **0.8130**, above Waiv's
-published 0.806 and above this repo's prior best 0.8080 (run 369043 at step 1000) — and it clears
-all three datasets individually, not merely on average. The cheapest available win is not the grid;
-it is a larger batch on the sampler that already exists. Confounded by total images and step count
-against 369043, and n=1, so it needs a seed repeat before it is more than a lead.
+> **CORRECTION — the seed repeat this section asked for has landed and it withdraws the
+> recommendation. Do not act on this section.**
+>
+> The original read, in full: *"CTRL is the existing sampler, just at 2400 images/step instead of
+> 768 (1200 anchors vs 384, at essentially unchanged negatives per row, 199 vs 191). It plateaus at
+> **0.8130**, above Waiv's published 0.806 and above this repo's prior best 0.8080 (run 369043 at
+> step 1000) — and it clears all three datasets individually, not merely on average. The cheapest
+> available win is not the grid; it is a larger batch on the sampler that already exists.
+> Confounded by total images and step count against 369043, and n=1, so it needs a seed repeat
+> before it is more than a lead."*
+>
+> `gridcmp2-ctrlseed-380889` is that seed repeat — **the same config as CTRL, differing only in the
+> random seed**. On last-three-checkpoint means (§12.2):
+>
+> | arm | seed | last-three mean avg RI | step 1500 |
+> |---|---|---|---|
+> | `gridcmp-ctrl-380777` | 0 | **0.8127** | 0.8130 |
+> | `gridcmp2-ctrlseed-380889` | 1 | **0.8058** | 0.8059 |
+>
+> **The two seeds of the same config straddle the 0.8080 this section claimed to beat.** Seed 0 is
+> above it, seed 1 is below it. The claimed margin over 0.8080 was 0.0050, which is inside the
+> avg-RI seed floor those same two runs define — **0.0070** (§12.3). So the margin is not
+> measurable at n=2, and "clears all three datasets individually" was established on seed 0 alone.
+>
+> **The "cheapest available win" recommendation is withdrawn.** A larger batch on the existing
+> sampler is not shown to beat either the published 0.806 or this repo's prior 0.8080; it is shown
+> to land in a seed band that contains both. What survives is the weaker, still-useful statement
+> that CTRL at 2400 images/step is **competitive with** the prior best, and that it remains the
+> right reference arm for §8–§12 — which is how §8.6 and §12.2 use it. Any batch-size
+> recommendation needs a third and fourth seed first.
+>
+> The two confounds the original flagged (total images and step count against 369043) are untouched
+> by the seed repeat and still stand.
+
+The paragraph below concerns CTRL's *internal* checkpoint structure and is unaffected by the
+withdrawal above.
 
 One detail the average hides: CTRL's plateau is a *balance*, not a stasis. Camelyon rises
 monotonically the whole way (0.7162 → 0.7244) while TCGA and Tolkach drift down (0.7864 → 0.7841,
@@ -976,10 +1118,18 @@ is *not* the only variable, and the mechanistically plausible reading was the wr
 
 **Within the grid family alone the trend rises then flattens**: 48 → 0.7973, 99 → 0.8043,
 199 → 0.8034. The 48→99 step is +0.0070 (0.0097 RI/nat); the 99→199 step is −0.0009, i.e. flat and
-inside the ±0.0004–0.005 checkpoint band. Negatives appear to **saturate near ~100 within this
-sampler** rather than climbing monotonically in `log N`. The `log N` reading of §8.2 is withdrawn.
+inside the ±0.0004–0.005 checkpoint band. **Settled position: the 99→199 flat step is a *local dip*,
+not a saturation point — the grid family's negatives response is non-monotone between 99 and 199 and
+resumes rising by 1199 negatives** (second bullet below, +0.0163 over 1.8 further nats). The `log N`
+reading of §8.2 is withdrawn, but so is the "saturates near ~100" reading that first replaced it:
+neither a monotone `log N` climb nor a plateau describes this family.
 
-Two caveats hold this to "appears":
+*(An earlier draft of this paragraph ended: "Negatives appear to **saturate near ~100 within this
+sampler** rather than climbing monotonically in `log N`." That sentence was written before
+`gridcmp2-grid2-380890` landed and is superseded by the bolded statement above; it is preserved here
+so the change is visible.)*
+
+Three caveats hold this to "appears":
 
 - **The C/T coupling of §8.3 is still in force.** At fixed budget `B = C·T`, every grid arm's "more
   negatives" is simultaneously "fewer conditions". GRID12's 199 negatives come with 12 conditions;
@@ -1155,7 +1305,27 @@ MEANONLY wins on InfoNCE — and a translation that a downstream linear probe ab
 is not invariance. Hence best loss, worst RI. The mean head is a *loss* head; it is not a
 robustness head, and it should not be run alone.
 
-### 9.4 Action item: the 1500-step budget overshoots the RI optimum
+### 9.4 ~~Action item:~~ DEMOTED — the 1500-step budget "overshoot" is inside the seed floor
+
+> **CORRECTION — this is no longer an action item. Superseded by §12.5 point 5 and §12.6.**
+>
+> The original framing, preserved: *"**Every split-head arm in §9 and §11 is reported at a step that
+> is past its own optimum.** Two consequences: the step-1500 numbers systematically understate these
+> arms, and the 1500-step budget should be revisited — but changing it mid-family would break
+> comparability with §8, so it is recorded here as an action item rather than applied."*
+>
+> The decay this section measures is **0.005–0.007 RI by its own statement**, which is entirely
+> inside the measured avg-RI seed floor of **0.0070** (§12.3). It is therefore not established that
+> any of these arms has an "own optimum" distinguishable from its own seed noise. Independently,
+> **§12.5 point 5 and §12.6 conclude that RI curves cannot be used as checkpoint selectors at all**,
+> and the structurally identical "ctrl peaks early then degrades" story is **retracted** — it was a
+> max-over-C artifact, and at fixed C the direction flips with C.
+>
+> What survives: the *shapes* in the table below are real and worth recording — the split-head arms
+> drift down after their early peak while CTRL does not, and two arms reproduce the same direction.
+> That is a diagnostic observation, not a budget recommendation. **Do not revisit the 1500-step
+> budget on this basis, and do not treat any per-arm "optimum step" below as selectable.** Reporting
+> at a fixed step 1500 across the whole family remains the correct choice.
 
 SPLIT peaks at 0.8252 at step **500** and ends at 0.8196 — it gives back 0.0056 RI over the
 remaining 1000 steps, and the decay is monotone (0.8252 → 0.8248 → 0.8217 → 0.8202 → 0.8196).
@@ -1242,8 +1412,9 @@ through the LoRA weights it trained, never directly.
 | `poolcmp-attn-381015` | ATTN | 0.8175 | 0.8223 | 500 | 0.7509 | 0.9278 | 0.7736 |
 
 **The total spread across all four arms is 0.0035 RI at step 1500 (0.0053 at peak).** For scale,
-that is smaller than what each of these arms throws away between step 500 and step 1500 (§9.4), and
-about a third of the §8.6 sampler effect. GeM is nominally on top and ATTN nominally last, and the
+that is smaller than what each of these arms throws away between step 500 and step 1500 (§9.4 —
+**but that comparison is now only a scale reference: §9.4 has been demoted, its 0.005–0.007 decay
+being itself inside the 0.0070 seed floor**), and about a third of the §8.6 sampler effect. GeM is nominally on top and ATTN nominally last, and the
 ordering is stable across camelyon, tolkach_esca and every checkpoint — but stability is not
 significance when the whole range is 0.0035.
 
@@ -1323,7 +1494,9 @@ their optimum is not established here.
 
 - Every arm is **n=1, seed 0**. The seed-variance control has landed (§12.3): avg-RI floor
   0.0070, which exceeds the whole §11 spread. n=2 bounds noise; it does not certify significance.
-- All arms are reported at step 1500, which §9.4 shows is past their optimum by 0.005–0.007 RI.
+- All arms are reported at step 1500, which §9.4 ~~shows~~ *suggested* is past their optimum by
+  0.005–0.007 RI — **§9.4 is now demoted from an action item, because 0.005–0.007 is inside the
+  0.0070 seed floor; treat "past their optimum" as unestablished.**
   §12.2 records HEST moving the *other* way over the same span for both SPLIT and GeM (−0.0063,
   −0.0023 at step 500). Neither clears 2 SE, so it is not a finding, but nothing supports using RI
   curves as checkpoint selectors. The slide-LOCO version of that story is **retracted** — §12.6.
@@ -1406,7 +1579,7 @@ This does **not** touch the kNN or silhouette columns (no C is selected; k=1 is 
 not a maximum), the RI/PathoROB metrics of §1–§11 (no linear probe), or HEST (§12.2, ridge with a
 fixed protocol).
 
-**Three methodology failures now, and all three made effects look realer than they were.** Record
+**Four methodology failures now, and all four made effects look realer than they were.** Record
 them together, because they are easy to repeat:
 
 1. **`max` over a hyperparameter grid, selected on the reported metric** (this section). Inflated
@@ -1416,6 +1589,13 @@ them together, because they are easy to repeat:
 3. **A seed floor estimated from two runs is a BOUND, not an estimate, and can be off by an order
    of magnitude** (§12.3). This one moved from 0.0016 → 0.0104 → **0.0214** as better
    measurements arrived, and it is still only a bound. Two points cannot estimate a spread.
+4. **A WITHIN-run denominator used to scale a BETWEEN-run gap** (§8.2). CTRL's checkpoint-to-
+   checkpoint plateau spread of ±0.0004 — the drift of one training trajectory — was used to call
+   the GRID24 gap "~20× the noise". Against the actual between-seed floor of 0.0070 (§12.3) that
+   gap of 0.0084 is **1.2×**. A **~17× inflation**, and the cleanest example of the genre in this
+   document: the two quantities are not even the same kind of variance, so no amount of extra
+   checkpoints would have fixed it. **Within-run drift is never the denominator for a between-run
+   difference.**
 
 The common shape: **every one of them shrank a denominator**, and a shrunken denominator turns
 noise into a finding. When a result depends on a ×floor ratio, interrogate the floor first.

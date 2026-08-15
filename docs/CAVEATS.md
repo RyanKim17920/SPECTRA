@@ -8,7 +8,8 @@ this reproduction.
 
 ## 1. Caveats
 
-- **n=1 seed** throughout, no error bars — but this is **protocol parity with Waiv, not a
+- **n=1 seed** throughout **except the CTRL seed pair** (`gridcmp-ctrl-380777` /
+  `gridcmp2-ctrlseed-380889`, [`RESULTS.md`](RESULTS.md) §12.3), no error bars — but this is **protocol parity with Waiv, not a
   shortfall against them**. Per their §3.3 (arXiv:2607.22861), THUNDER is "evaluated on frozen
   features following the default protocol" with no seed repetition, HEST follows "the default
   protocol and implementation", and PathoROB states no repetition at all. Patho-Bench is the
@@ -17,7 +18,9 @@ this reproduction.
   n=1 matches their protocol on all three benchmarks we run. The real asymmetry is **model
   count, not seed count**: their significance claims (e.g. p=7.5e-3, one-sided Wilcoxon
   signed-rank on THUNDER rank sums) aggregate across 10 model pairs, which we cannot replicate
-  at 2 backbones no matter how many seeds we ran. We make no significance claim.
+  at 3 backbones no matter how many seeds we ran. We make no significance claim. That one seed
+  pair is not an exception to this: n=2 bounds noise, it does not certify significance, and the
+  whole §12 floor apparatus rests on it — see the two-run-floor bullet below.
 - **fp32 vs their mixed precision.** Each Δ is internally precision-consistent, so Δ-vs-Δ
   is valid; **absolute levels are not comparable** across the two studies.
 - **Checkpoint selection is not neutral.** THUNDER and HEST use step 1000 (phikon-v2) and
@@ -28,10 +31,11 @@ this reproduction.
   different steps and in *opposite* orderings on the two backbones, so any single-checkpoint
   headline understates one axis — but even the best checkpoint stays far short of Waiv, so
   the gap is not a selection artefact.
-- **Coverage.** All three benchmarks now cover both backbones. THUNDER: 16 of Waiv's 16
+- **Coverage.** All three benchmarks now cover all **three** backbones (phikon-v2, Midnight-12k,
+  Virchow2 — Virchow2 added in [`RESULTS.md`](RESULTS.md) §3/§6). THUNDER: 16 of Waiv's 16
   datasets (12/12 classification, 4/4 segmentation), so the [`RESULTS.md`](RESULTS.md) §2 segmentation average is
-  like-for-like against theirs. HEST: phikon-v2 (`cls`) and Midnight (`clsmean`), base and
-  fine-tuned. PathoROB: both. The only benchmark dropped is Patho-Bench (~8 TB of WSIs, no
+  like-for-like against theirs. HEST: phikon-v2 (`cls`), Midnight (`clsmean`) and Virchow2
+  (`clsmean`), base and fine-tuned. PathoROB: all three. The only benchmark dropped is Patho-Bench (~8 TB of WSIs, no
   traceable target number).
 - **The Tier-1 probe tripwire is not an early-stopping signal.** `scripts/probe_follow.py`
   detects collapse; it does not predict PathoROB RI, in either direction. On the full-FT run
@@ -42,15 +46,16 @@ this reproduction.
   top-1 mislead under collapse**: full FT drove heldout cross-scanner matched cosine
   0.741 → 0.963, but the random-pair baseline climbed just as fast, 0.365 → 0.597. Report
   rank-based top-1 and separation, never matched cosine alone.
-- **Regressions.** `tcga_uniform` regresses on both backbones and on every probe
-  (phikon-v2 −8.2 kNN / −5.7 lin / −7.3 few-shot; Midnight −2.6 / −2.9). Consistency
+- **Regressions.** `tcga_uniform` regresses on **all three** backbones and on every probe
+  (phikon-v2 −8.2 kNN / −5.7 lin / −7.3 few-shot; Midnight −2.6 / −2.9; Virchow2 −2.5 / −1.0 —
+  it is the only dataset that regresses on all three, [`RESULTS.md`](RESULTS.md) §3). Consistency
   across independent probes rules out a local-neighbourhood artefact — information is
   genuinely lost. `bach` regresses on Midnight only (−2.1 / −5.6 / −8.6) while it *improves*
   on phikon-v2. Both are unexplained and should be understood before any publication claim.
-- **PathoROB curves are plateaus, not climbs.** Both backbones reach their peak by the
+- **PathoROB curves are plateaus, not climbs.** All **three** backbones reach their peak by the
   first or second checkpoint and then flatten (phikon-v2 0.803–0.808 across steps
-  500–3000; Midnight 0.898–0.908 across 250–1500). Training longer buys nothing on the
-  headline metric.
+  500–3000; Midnight 0.898–0.908 across 250–1500; Virchow2 0.898–0.904 across 250–1500 at rank 32).
+  Training longer buys nothing on the headline metric.
 - **camelyon's base RI of 0.019** is pathologically low, so its headline jump is the least
   surprising of the three PathoROB datasets.
 - **camelyon is saturated on any probe other than RI, and it dominates avg RI.** Untuned
@@ -74,10 +79,14 @@ this reproduction.
   apart from the random seed). **Directions are established in this doc; magnitudes are not**,
   pending a 3–4 seed study that would give an SD instead of a two-point bound. Treat every
   "×floor" as a scale reference, never a p-value.
-  This is the **third** methodology failure of the same shape, and all three shrank a denominator
-  and made effects look realer than they were: (1) `max` over a hyperparameter grid, (2) a
-  difference of averages where per-task errors cancel, (3) a two-run floor. **When a result
-  depends on a ×floor ratio, interrogate the floor first.**
+  This is the **third** methodology failure of the same shape. There are now **four**, and all four
+  shrank a denominator and made effects look realer than they were: (1) `max` over a hyperparameter
+  grid, (2) a difference of averages where per-task errors cancel, (3) a two-run floor, (4) a
+  **within-run** checkpoint spread used as the denominator for a **between-run** gap
+  ([`RESULTS.md`](RESULTS.md) §8.2: CTRL's ±0.0004 plateau drift made the GRID24 gap read "~20× the
+  noise"; against the real between-seed floor of 0.0070 it is **1.2×** — a ~17× inflation).
+  **When a result depends on a ×floor ratio, interrogate the floor first — and check it is the same
+  kind of variance as the thing it is scaling.**
 - **Do not apply the avg-RI floor (0.0070) to the other PathoROB metrics** — `ID_performance` (0.0017), `OOD_performance` (0.0022), `prediction_performance`
   (0.0020) and `balanced_accuracy` (0.0014) are 3.5–5× tighter, because camelyon's own RI floor
   (0.0143) dominates the average. Judging those metrics against 0.0070 understates real
