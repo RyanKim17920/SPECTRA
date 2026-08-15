@@ -107,6 +107,119 @@ def masked_info_nce(
     return loss, {"loss": float(loss.detach()), "top1": acc, "negatives_per_anchor": n_neg}
 
 
+def _grid_pair_block_loss(
+    zn: torch.Tensor,
+    a_blk: torch.Tensor,
+    b_blk: torch.Tensor,
+    temperature: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Summed cross-entropy (and hit count) for ONE block of ordered condition pairs.
+
+    Materialises only ``(P_blk, T, T)`` logits. Returns a SUM rather than a mean so the
+    caller can divide once at the end -- a mean of per-block means would be wrong the
+    moment the last block is short.
+    """
+    n_tiles = zn.shape[1]
+    zq = zn[a_blk]                                   # (P_blk, T, D) queries
+    zk = zn[b_blk]                                   # (P_blk, T, D) candidates
+    logits = torch.matmul(zq, zk.transpose(1, 2)) / temperature   # (P_blk, T, T)
+    flat = logits.reshape(-1, n_tiles)
+    target = torch.arange(n_tiles, device=zn.device).repeat(a_blk.numel())
+    loss_sum = F.cross_entropy(flat, target, reduction="sum")
+    with torch.no_grad():
+        correct = (flat.argmax(dim=1) == target).sum()
+    return loss_sum, correct
+
+
+def grid_info_nce_blocked(
+    z: torch.Tensor,
+    n_cond: int,
+    n_tiles: int,
+    temperature: float = 0.07,
+    pair_block: int = 8,
+) -> tuple[torch.Tensor, dict[str, float]]:
+    """Memory-lean :func:`grid_info_nce`. EXACT -- a numerics refactor, not an approximation.
+
+    Why. The dense path materialises the full ``(C, C, T, T)`` logit tensor, then an
+    advanced-index COPY of its off-diagonal, then ``cross_entropy`` saves another for
+    backward: roughly 3x live at ``4*C^2*T^2`` bytes. That is negligible today (~187 MB at
+    T=1975) but it is QUADRATIC in T, so it binds around T~6000-8000 -- which is where the
+    offload work is heading.
+
+    How. Iterate the ``C*(C-1)`` ordered pairs in blocks, gathering each block's queries and
+    candidates directly instead of slicing a dense tensor, so the off-diagonal copy never
+    exists either. Each block is wrapped in ``torch.utils.checkpoint``: pass 1 computes the
+    block's contribution and DISCARDS its intermediates, pass 2 recomputes one block at a
+    time during backward. Peak logit memory becomes ``4*P_blk*T^2`` regardless of C.
+
+    Blocking alone would NOT have been enough -- autograd would have retained every block's
+    saved tensors and the total would be the dense figure again. The recompute is what makes
+    it bounded, and it is the second pass the name promises.
+
+    Exactness. Every block runs the same matmul and the same ``cross_entropy`` on the same
+    inputs as the dense path; only the ORDER of the final float summation differs, so the
+    two agree to float tolerance rather than bit-exactly. The recompute is safe because the
+    block function is pure: it consumes no RNG and depends on nothing but ``zn``.
+
+    Args:
+        pair_block: ordered pairs per block. Peak logit bytes are ``4*pair_block*T^2``;
+            memory falls and kernel-launch overhead rises as it shrinks.
+    """
+    if pair_block < 1:
+        raise ValueError(f"pair_block must be >= 1, got {pair_block}")
+    _check_grid_shape(z, n_cond, n_tiles)
+
+    zn = F.normalize(z.float(), dim=-1).view(n_cond, n_tiles, -1)
+    off = ~torch.eye(n_cond, dtype=torch.bool, device=zn.device)
+    a_idx, b_idx = torch.where(off)
+    n_pairs = int(a_idx.numel())
+
+    loss_sum = zn.new_zeros(())
+    correct = zn.new_zeros((), dtype=torch.long)
+    for start in range(0, n_pairs, pair_block):
+        a_blk = a_idx[start:start + pair_block]
+        b_blk = b_idx[start:start + pair_block]
+        if zn.requires_grad:
+            blk_loss, blk_correct = torch.utils.checkpoint.checkpoint(
+                _grid_pair_block_loss, zn, a_blk, b_blk, temperature, use_reentrant=False,
+            )
+        else:
+            # No graph to bound under eval/no_grad -- checkpoint would only buy a
+            # pointless second forward.
+            blk_loss, blk_correct = _grid_pair_block_loss(zn, a_blk, b_blk, temperature)
+        loss_sum = loss_sum + blk_loss
+        correct = correct + blk_correct
+
+    n_rows = n_pairs * n_tiles
+    loss = loss_sum / n_rows
+    # Same keys and same meanings as the dense path -- a caller must not be able to tell
+    # which one produced its metrics.
+    return loss, {
+        "loss": float(loss.detach()),
+        "top1": float(correct) / n_rows,
+        "negatives_per_anchor": float(n_tiles - 1),
+        "n_rows": float(n_rows),
+        "n_cond": float(n_cond),
+        "n_tiles": float(n_tiles),
+    }
+
+
+def _check_grid_shape(z: torch.Tensor, n_cond: int, n_tiles: int) -> None:
+    """Shared preconditions for the dense and blocked grid losses."""
+    if n_cond < 2:
+        raise ValueError(
+            f"grid_info_nce needs n_cond >= 2, got {n_cond}: a row's candidates come from a "
+            "DIFFERENT condition group, so C=1 produces zero query rows"
+        )
+    if n_tiles < 2:
+        raise ValueError(f"grid_info_nce needs n_tiles >= 2, got {n_tiles}: a row has no negatives")
+    if z.shape[0] != n_cond * n_tiles:
+        raise ValueError(
+            f"z has {z.shape[0]} rows but the grid is {n_cond} x {n_tiles} = "
+            f"{n_cond * n_tiles}; the (C*T,) flatten does not match the declared geometry"
+        )
+
+
 def grid_info_nce(
     z: torch.Tensor,
     n_cond: int,
@@ -147,18 +260,7 @@ def grid_info_nce(
     Returns:
         (loss, metrics). ``loss`` is the mean over the ``C*(C-1)`` ordered pairs.
     """
-    if n_cond < 2:
-        raise ValueError(
-            f"grid_info_nce needs n_cond >= 2, got {n_cond}: a row's candidates come from a "
-            "DIFFERENT condition group, so C=1 produces zero query rows"
-        )
-    if n_tiles < 2:
-        raise ValueError(f"grid_info_nce needs n_tiles >= 2, got {n_tiles}: a row has no negatives")
-    if z.shape[0] != n_cond * n_tiles:
-        raise ValueError(
-            f"z has {z.shape[0]} rows but the grid is {n_cond} x {n_tiles} = "
-            f"{n_cond * n_tiles}; the (C*T,) flatten does not match the declared geometry"
-        )
+    _check_grid_shape(z, n_cond, n_tiles)
 
     zn = F.normalize(z.float(), dim=-1).view(n_cond, n_tiles, -1)
     # logits[a, b, t, s] = <z[a,t], z[b,s]> / tau -- query (a,t), candidate (b,s)
@@ -614,6 +716,16 @@ class TrainConfig:
     #: Exempt from the same-config guard for the obvious reason that it names the thing
     #: being resumed FROM and so must differ between attempts.
     resume_from: str | None = None
+    #: Compute the grid InfoNCE with the blocked/recompute path instead of materialising the
+    #: full (C,C,T,T) logit tensor. EXACT -- same objective, same gradient to float32 noise
+    #: (tests/test_blocked_loss.py) -- but it trades a second forward over the logits for
+    #: bounded memory. Default OFF: at today's T=1975 the dense tensor is only ~187 MB, so
+    #: the recompute is not yet worth paying for. Turn it on when T grows past ~6000, where
+    #: the quadratic term starts to bind.
+    grid_blocked_loss: bool = False
+    #: Ordered condition pairs per block when ``grid_blocked_loss`` is on. Peak logit bytes
+    #: are ``4 * grid_pair_block * T^2``, independent of C.
+    grid_pair_block: int = 8
     #: PLAN.md 3 phase 8: "evaluate retention at every checkpoint, not just at the end".
     #: A robustness win that costs retention is a failed reproduction (risk 1). Point this
     #: at a callable (or leave None and let the caller hook `on_checkpoint`).
@@ -1345,7 +1457,13 @@ def train(
                     teacher_emb = (
                         retention_teacher_embed(model, images) if use_retention else None
                     )
-                loss, metrics = grid_info_nce(gz, n_cond, n_tiles, cfg.temperature)
+                if cfg.grid_blocked_loss:
+                    loss, metrics = grid_info_nce_blocked(
+                        gz, n_cond, n_tiles, cfg.temperature,
+                        pair_block=cfg.grid_pair_block,
+                    )
+                else:
+                    loss, metrics = grid_info_nce(gz, n_cond, n_tiles, cfg.temperature)
                 n_images = int(images.shape[0])
             else:
                 anchor = batch["anchor"].to(device, non_blocking=True)

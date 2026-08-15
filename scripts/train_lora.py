@@ -111,6 +111,17 @@ def parse_args():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--weight-decay", type=float, default=0.05)
     ap.add_argument("--log-every", type=int, default=20)
+    ap.add_argument("--grid-blocked-loss", action="store_true",
+                    help="Compute the grid InfoNCE in blocks with recompute instead of "
+                         "materialising the full (C,C,T,T) logit tensor. EXACT: same "
+                         "objective and same gradient to float32 round-off "
+                         "(tests/test_blocked_loss.py), trading a second forward over the "
+                         "logits for peak logit memory of 4*--grid-pair-block*T^2 bytes "
+                         "instead of ~3x 4*C^2*T^2. Default OFF -- at T=1975 the dense "
+                         "tensor is only ~187 MB; this earns its keep past T~6000.")
+    ap.add_argument("--grid-pair-block", type=int, default=8,
+                    help="Ordered condition pairs per block for --grid-blocked-loss. "
+                         "Smaller uses less memory and more kernel launches.")
     ap.add_argument("--resume-from-prior-attempt", action="store_true",
                     help="On a SLURM requeue, continue from the highest complete step_* "
                          "checkpoint of a PREVIOUS attempt of this same job instead of "
@@ -526,6 +537,8 @@ def main() -> int:
 
     cfg = TrainConfig(
         resume_from=resume_from,
+        grid_blocked_loss=args.grid_blocked_loss,
+        grid_pair_block=args.grid_pair_block,
         packed_dir=str(args.packed_dir), out_dir=str(args.out_dir),
         lr=args.lr, temperature=args.temperature, max_steps=args.max_steps,
         warmup_steps=args.warmup_steps, n_groups=n_groups, group_size=group_size,
