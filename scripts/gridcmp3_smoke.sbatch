@@ -55,11 +55,13 @@ nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
 declare -A RESULT
 for ARM in $ARMS; do
+  CHUNK="${WAIV_CHUNK:-300}"
   case "$ARM" in
     a) COND=12; TILES=300 ;;
     b) COND=24; TILES=150 ;;
     c) COND=6;  TILES=600 ;;
     d) COND=2;  TILES=1800 ;;
+    e) COND=2;  TILES=1975; CHUNK="${WAIV_CHUNK:-150}" ;;   # ceiling arm: 1974 neg, B=3950
     *) echo "unknown arm $ARM" >&2; exit 2 ;;
   esac
   OUT_DIR="$REPO/runs/gridcmp3-smoke-${ARM}-${SLURM_JOB_ID:-local}"

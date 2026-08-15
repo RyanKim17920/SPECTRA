@@ -91,7 +91,7 @@ export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -x "$PIN/.venv/bin/python" ]     || { echo "pin missing .venv/bin/python: $PIN" >&2; exit 3; }
 
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
-ARM="${WAIV_ARM:?set WAIV_ARM to a | b | c}"
+ARM="${WAIV_ARM:?set WAIV_ARM to a | b | c | d | e}"
 # SLURM_RESTART_COUNT keeps a requeued attempt out of the previous attempt's run dir
 # (commit 42990ba). Preemption is routine here; without the suffix a requeue writes
 # attempt-2 weights into attempt-1's directory and marries them to attempt-1's RI points.
@@ -120,7 +120,15 @@ case "$ARM" in
   # C=2/T=1800 at chunk 300 = 74.15 GiB peak on an 80 GiB H100 (OOM edge is T~1975);
   # chunk 600 OOMs at this T, so the default chunk 300 is load-bearing here.
   d) COND=2;  TILES=1800 ;;
-  *) echo "unknown WAIV_ARM=$ARM (want a | b | c | d)" >&2; exit 2 ;;
+  # ARM E / CEILING: the largest geometry that FITS on one 80 GiB H100, found by
+  # scripts/sizing_probe_grid.py -- C=2 (the trainer's condition floor) and T=1975,
+  # i.e. 1974 negatives/row at B=3950 images/step. This is NOT the B=3600 budget the
+  # other arms share; arm E deliberately spends the whole card. Probe: T=1975 at
+  # chunk 150 = 77.60 GiB peak of 79.19 usable, ~10.6 s/step. Chunk 150 is
+  # LOAD-BEARING: chunk 300 was never measured at B=3950 and the recorded OOM at
+  # T=1800 is a chunk-600 OOM, so a larger chunk here risks losing the arm.
+  e) COND=2;  TILES=1975; CHUNK="${WAIV_CHUNK:-150}" ;;
+  *) echo "unknown WAIV_ARM=$ARM (want a | b | c | d | e)" >&2; exit 2 ;;
 esac
 SEED=0
 SAMPLER_ARGS=(--grid --grid-conditions "$COND" --grid-tiles "$TILES" --grid-forward-chunk "$CHUNK")
