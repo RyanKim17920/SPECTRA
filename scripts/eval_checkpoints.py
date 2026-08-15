@@ -288,8 +288,13 @@ def main() -> int:
     ap.add_argument("--stop-file", type=Path, default=None)
     ap.add_argument("--poll-s", type=int, default=60)
     ap.add_argument("--max-wait-s", type=int, default=8 * 3600)
-    ap.add_argument("--purge-features", action="store_true", default=True)
-    ap.add_argument("--keep-features", dest="purge_features", action="store_false")
+    ap.add_argument("--purge-features", action="store_true", default=False,
+                    help="Delete extracted features after scoring. Makes independent "
+                         "re-readout impossible without re-extracting on a GPU. "
+                         "Exists because /data runs near-full (94%% as of 2026-08-14).")
+    ap.add_argument("--keep-features", dest="purge_features", action="store_false",
+                    help="Keep extracted features after scoring (now the default). "
+                         "Retained for backward compatibility only.")
     args = ap.parse_args()
 
     # Every path below is handed to a subprocess that sh()/run_pathorob spawn with
