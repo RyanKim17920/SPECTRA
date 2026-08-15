@@ -43,7 +43,7 @@ import json
 import math
 import os
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -580,6 +580,16 @@ class TrainConfig:
     #: size a run still replays exactly, which is why this is recorded in config.json and
     #: must not be varied within a comparison.
     grid_forward_chunk: int = 0
+    # ACTIVATION OFFLOAD. Independent of grid_forward_chunk and composes with it:
+    # the chunk shrinks the per-block RECOMPUTE buffer, this moves the tensors
+    # gradient checkpointing SAVES (the per-block inputs, the bulk of the residual
+    # footprint) out to pinned host RAM until backward asks for them.
+    #
+    # This is EXACT, not an approximation: torch.autograd.graph.save_on_cpu is a
+    # save/restore hook pair, so the same bytes come back and the objective is
+    # unchanged. It buys memory at roughly 40% throughput (PCIe round trips).
+    # Default OFF so no existing arm changes behaviour.
+    activation_offload: bool = False
     num_workers: int = 8
     seed: int = 0
     # precision
@@ -632,7 +642,7 @@ class TrainConfig:
     encoder: dict = field(default_factory=dict)
 
 
-def _chunked_forward(model, images: torch.Tensor, chunk: int):
+def _chunked_forward(model, images: torch.Tensor, chunk: int, offload: bool = False):
     """``model(images)`` split into micro-chunks, still as ONE autograd graph.
 
     Returns the same ``(pooled, projected)`` pair a single call would, so downstream
@@ -652,10 +662,29 @@ def _chunked_forward(model, images: torch.Tensor, chunk: int):
     BatchNorm raise outright, which is how this was caught. The backbone is per-image
     (a ViT's LayerNorms are per-token), so splitting it is exact, and it is where
     essentially all of the activation memory lives anyway.
+
+    ``offload=True`` additionally routes the backbone's SAVED tensors through
+    ``torch.autograd.graph.save_on_cpu(pin_memory=True)``. Under gradient checkpointing
+    those saved tensors are the per-block inputs, which dominate the residual footprint
+    once the recompute buffer has been chunked down. The hook is exact -- identical bytes
+    are restored in backward -- so this changes the memory profile and the step time, and
+    nothing else. ``offload=False`` is byte-for-byte the original code path.
     """
+    # save_on_cpu wraps the BACKBONE ONLY, for the same reason the chunking does: the
+    # projector must stay one un-split, un-hooked call over the whole concatenated batch.
+    # (Offload would not actually corrupt BatchNorm the way chunking does -- it is a pure
+    # save/restore hook and moves no boundaries -- but keeping the projector outside the
+    # context keeps "the projector runs exactly once, plainly" true by inspection, and its
+    # saved tensors are megabytes, so there is nothing to win by offloading them.)
+    ctx = torch.autograd.graph.save_on_cpu(pin_memory=True) if offload else nullcontext()
     if chunk <= 0 or chunk >= images.shape[0]:
-        return model(images)
-    emb = torch.cat([model.embed(part) for part in images.split(chunk)], dim=0)
+        if not offload:
+            return model(images)
+        with ctx:
+            emb = model.embed(images)
+        return emb, model.projector(emb)
+    with ctx:
+        emb = torch.cat([model.embed(part) for part in images.split(chunk)], dim=0)
     return emb, model.projector(emb)
 
 
@@ -966,7 +995,7 @@ def train(
                     # the loss below still sees all C*T embeddings simultaneously (which
                     # is the entire point of the grid).
                     anchor_emb, gz = _chunked_forward(
-                        model, images, cfg.grid_forward_chunk
+                        model, images, cfg.grid_forward_chunk, cfg.activation_offload
                     )
                     teacher_emb = (
                         retention_teacher_embed(model, images) if use_retention else None

@@ -80,7 +80,8 @@ def loss_only(n_cond: int, n_tiles: int, dim: int, temperature: float) -> dict:
 
 def probe(backbone: str, n_cond: int, n_tiles: int, *, chunk: int, lora_rank: int,
           lora_alpha: int, grad_checkpointing: bool, amp: str, steps: int, lr: float,
-          temperature: float, per_step: bool = False, fresh_batch: bool = False) -> dict:
+          temperature: float, per_step: bool = False, fresh_batch: bool = False,
+          offload: bool = False) -> dict:
     """One geometry, ``steps`` real training steps. Returns peak memory and step time.
 
     ``fresh_batch`` allocates the device batch anew every step (host pinned -> H2D), which
@@ -124,7 +125,7 @@ def probe(backbone: str, n_cond: int, n_tiles: int, *, chunk: int, lora_rank: in
         ctx = (torch.autocast("cuda", dtype=amp_dtype) if amp_dtype is not None
                else torch.autocast("cuda", enabled=False))
         with ctx:
-            _, gz = _chunked_forward(model, images, chunk)
+            _, gz = _chunked_forward(model, images, chunk, offload)
         loss, metrics = grid_info_nce(gz, n_cond, n_tiles, temperature)
         loss.backward()
         opt.step()
@@ -175,6 +176,12 @@ def main() -> int:
     ap.add_argument("--lora-rank", type=int, default=32)
     ap.add_argument("--lora-alpha", type=int, default=64)
     ap.add_argument("--grad-checkpointing", action="store_true")
+    ap.add_argument("--activation-offload", action="store_true",
+                    help="park the backbone's SAVED activations in pinned host RAM via "
+                         "torch.autograd.graph.save_on_cpu. Composes with "
+                         "--grad-checkpointing: checkpointing shrinks the recompute "
+                         "buffer, this moves what checkpointing still saves. Exact, and "
+                         "the whole point of the probe is what it does to the ceiling.")
     ap.add_argument("--amp", default="bfloat16", choices=("none", "float16", "bfloat16"))
     ap.add_argument("--steps", type=int, default=4)
     ap.add_argument("--lr", type=float, default=1e-4)
@@ -206,15 +213,18 @@ def main() -> int:
                       lora_alpha=args.lora_alpha,
                       grad_checkpointing=args.grad_checkpointing, amp=args.amp,
                       steps=args.steps, lr=args.lr, temperature=args.temperature,
-                      per_step=args.per_step, fresh_batch=args.fresh_batch)
+                      per_step=args.per_step, fresh_batch=args.fresh_batch,
+                      offload=args.activation_offload)
         except torch.OutOfMemoryError as e:
             # The ceiling is the answer we came for, so record it and keep going.
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
             r = {"n_cond": c, "n_tiles": t, "chunk": chunk,
+                 "activation_offload": args.activation_offload,
                  "negatives_per_anchor": float(t - 1), "images_per_step": c * t,
                  "status": "oom", "err": str(e).split("\n")[0][:200]}
         r.setdefault("status", "ok")
+        r["activation_offload"] = args.activation_offload
         if args.loss_only:
             try:
                 r.update(loss_only(c, t, 512, args.temperature))
@@ -242,7 +252,8 @@ def main() -> int:
     payload = {"backbone": args.backbone, "gpu": dev.name,
                "gpu_gib": round(dev.total_memory / GIB, 2), "amp": args.amp,
                "grad_checkpointing": args.grad_checkpointing, "lora_rank": args.lora_rank,
-               "chunk": args.chunk, "alloc_conf": alloc_conf, "rows": rows}
+               "chunk": args.chunk, "activation_offload": args.activation_offload,
+               "alloc_conf": alloc_conf, "rows": rows}
     print()
     print(json.dumps(payload, indent=2))
     if args.out:

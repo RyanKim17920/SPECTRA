@@ -173,6 +173,13 @@ def parse_args():
                     help="recompute block activations in backward. The negative count is "
                          "group_size-1, so more negatives means a bigger forward batch; "
                          "without this, 80 GiB caps out around 340 images/step.")
+    ap.add_argument("--activation-offload", action="store_true",
+                    help="park the backbone's saved activations in pinned host RAM "
+                         "(torch.autograd.graph.save_on_cpu) until backward wants them. "
+                         "Exact -- a save/restore hook, same bytes back, same objective -- "
+                         "and stacks on --grad-checkpointing: checkpointing shrinks the "
+                         "recompute buffer, this moves what checkpointing still SAVES. "
+                         "Trades roughly 40%% of throughput for the memory.")
     ap.add_argument("--proj-out-dim", type=int, default=512)
     ap.add_argument("--pooling", default="clsmean", choices=["cls", "mean", "clsmean"])
     ap.add_argument("--backbone", default=DEFAULT_BACKBONE,
@@ -489,6 +496,7 @@ def main() -> int:
         grid_conditions=args.grid_conditions if args.grid else 0,
         grid_tiles=args.grid_tiles if args.grid else 0,
         grid_forward_chunk=args.grid_forward_chunk if args.grid else 0,
+        activation_offload=args.activation_offload,
         grad_accum=args.grad_accum, num_workers=args.workers, amp_dtype=args.amp,
         ckpt_every=args.ckpt_every, eval_every=args.eval_every, seed=args.seed,
         weight_decay=args.weight_decay, log_every=args.log_every, symmetric=args.symmetric,
