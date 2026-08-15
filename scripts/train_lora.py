@@ -31,7 +31,12 @@ from waivphaet.data.pairs import build_pair_loader
 from waivphaet.data.repack import present_filenames
 from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
 from waivphaet.models.pooling import POOL_HEAD_NAMES
-from waivphaet.train.contrastive import TrainConfig, build_split_head_names, train
+from waivphaet.train.contrastive import (
+    TrainConfig,
+    build_split_head_names,
+    find_prior_attempt_checkpoint,
+    train,
+)
 
 
 def parse_ckpt_schedule(value: str) -> list[int]:
@@ -106,6 +111,21 @@ def parse_args():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--weight-decay", type=float, default=0.05)
     ap.add_argument("--log-every", type=int, default=20)
+    ap.add_argument("--resume-from-prior-attempt", action="store_true",
+                    help="On a SLURM requeue, continue from the highest complete step_* "
+                         "checkpoint of a PREVIOUS attempt of this same job instead of "
+                         "restarting at step 0. Attempts are the sibling dirs <base> and "
+                         "<base>.r<N> that gridcmp2.sbatch mints from $SLURM_RESTART_COUNT; "
+                         "<base> embeds $SLURM_JOB_ID, which survives a requeue, so the "
+                         "search cannot stray to another arm. This run still WRITES only to "
+                         "its own --out-dir; the prior attempt is opened read-only. Refuses "
+                         "to resume if the prior attempt's config.json differs from this "
+                         "run's config. Default OFF (fresh runs start at step 0). No-op when "
+                         "no prior attempt has a checkpoint.")
+    ap.add_argument("--resume-from", type=Path, default=None,
+                    help="Explicit step_* checkpoint dir to resume from, bypassing the "
+                         "attempt search of --resume-from-prior-attempt. The same-config "
+                         "guard still applies.")
     ap.add_argument("--symmetric", action="store_true",
                     help="ABLATION ONLY: adds the anchor->positive direction, whose candidate "
                          "row spans conditions and reintroduces the acquisition shortcut")
@@ -486,7 +506,26 @@ def main() -> int:
     else:
         ckpt_schedule = None
 
+    # ---- resume ----------------------------------------------------------------------
+    # Default OFF: with neither flag this stays None and the run starts at step 0, exactly
+    # as before. --resume-from wins over the search so an operator can pin a specific step.
+    resume_from = None
+    if args.resume_from is not None:
+        resume_from = str(args.resume_from)
+        print(f"[train] resume: explicit checkpoint {resume_from}", flush=True)
+    elif args.resume_from_prior_attempt:
+        found = find_prior_attempt_checkpoint(args.out_dir)
+        if found is None:
+            # The ordinary attempt-0 path, and also the case where every prior attempt died
+            # before its first checkpoint. Not an error -- just train from scratch.
+            print("[train] resume: no prior attempt with a complete checkpoint; "
+                  "starting from step 0", flush=True)
+        else:
+            resume_from = str(found)
+            print(f"[train] resume: found prior attempt checkpoint {resume_from}", flush=True)
+
     cfg = TrainConfig(
+        resume_from=resume_from,
         packed_dir=str(args.packed_dir), out_dir=str(args.out_dir),
         lr=args.lr, temperature=args.temperature, max_steps=args.max_steps,
         warmup_steps=args.warmup_steps, n_groups=n_groups, group_size=group_size,

@@ -42,11 +42,14 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
+import re
 import time
 from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -603,6 +606,14 @@ class TrainConfig:
     #: Overrides ckpt_every when set. Useful for full FT where representation can
     #: degrade within tens of steps.
     ckpt_schedule: list[int] | None = None
+    #: Resume: absolute path to a ``step_*`` checkpoint dir belonging to a PREVIOUS attempt
+    #: of this same job, or None (the default -- every fresh run starts at step 0).
+    #: Set by ``train_lora.py --resume-from-prior-attempt``, which discovers it; a preempted
+    #: arm otherwise restarts at step 0 and re-derives a curve it already has (10, 8 and 7
+    #: requeues on arms a/b/c on 2026-08-14, ~25 attempts, none reaching step 1500).
+    #: Exempt from the same-config guard for the obvious reason that it names the thing
+    #: being resumed FROM and so must differ between attempts.
+    resume_from: str | None = None
     #: PLAN.md 3 phase 8: "evaluate retention at every checkpoint, not just at the end".
     #: A robustness win that costs retention is a failed reproduction (risk 1). Point this
     #: at a callable (or leave None and let the caller hook `on_checkpoint`).
@@ -844,7 +855,16 @@ def load_projectors(model, out: Path) -> None:
         pool.load_state_dict(torch.load(path, map_location="cpu"))
 
 
-def save_checkpoint(model, optimizer, step: int, cfg: TrainConfig, metrics: dict) -> Path:
+def save_checkpoint(
+    model,
+    optimizer,
+    step: int,
+    cfg: TrainConfig,
+    metrics: dict,
+    *,
+    scaler=None,
+    rng_state: dict | None = None,
+) -> Path:
     """Save a training checkpoint.
 
     LoRA mode: saves PEFT adapter dir (a few MB) + projector.pt + optim.pt + metrics.json.
@@ -867,10 +887,210 @@ def save_checkpoint(model, optimizer, step: int, cfg: TrainConfig, metrics: dict
         save_file(backbone_sd, str(out / "backbone.safetensors"))
 
     save_projectors(model, out)
-    torch.save({"optimizer": optimizer.state_dict(), "step": step}, out / "optim.pt")
+    payload = {"optimizer": optimizer.state_dict(), "step": step}
+    if scaler is not None:
+        # GradScaler carries a live scale factor and a growth counter. Under bfloat16 (the
+        # default) the scaler is DISABLED and this is inert, but under float16 restoring a
+        # run without it restarts at the initial scale of 65536 and burns a handful of
+        # skipped steps re-converging -- which would make a "resumed" curve quietly differ
+        # from a continuous one. Cheap to save, so always save it.
+        payload["scaler"] = scaler.state_dict()
+    if rng_state is not None:
+        payload["rng"] = rng_state
+    torch.save(payload, out / "optim.pt")
     # metrics.json is the completeness sentinel -- written LAST.
     (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
     return out
+
+
+def capture_rng_state() -> dict:
+    """Snapshot every RNG the training step could consume.
+
+    Today the grid/pair training step consumes NO torch RNG: there is no stochastic
+    augmentation (the positives are real registered pairs, not synthetic views -- see
+    :mod:`waivphaet.data.pairs`), and ``lora_dropout`` defaults to 0.0, at which peft
+    substitutes ``nn.Identity`` rather than a dropout layer. The batch PLAN sequence is
+    numpy, seeded per epoch inside the sampler, and is restored by rewinding the sampler
+    rather than from here.
+
+    It is captured anyway because that "consumes no RNG" property is an invariant nobody
+    is currently asserting, and the day someone adds dropout or a random augmentation the
+    resumed curve would silently diverge from a continuous one. Restoring costs nothing
+    and removes the trap. ``assert_resume_rng_is_inert`` is the matching check.
+    """
+    state = {
+        "torch_cpu": torch.get_rng_state(),
+        "numpy": np.random.get_state(),
+        "python": random.getstate(),
+    }
+    if torch.cuda.is_available():
+        state["torch_cuda"] = torch.cuda.get_rng_state_all()
+    return state
+
+
+def restore_rng_state(state: dict) -> None:
+    """Inverse of :func:`capture_rng_state`. Missing keys are skipped, not an error."""
+    if "torch_cpu" in state:
+        torch.set_rng_state(state["torch_cpu"].cpu().to(torch.uint8))
+    if "numpy" in state:
+        np.random.set_state(state["numpy"])
+    if "python" in state:
+        random.setstate(state["python"])
+    if "torch_cuda" in state and torch.cuda.is_available():
+        saved = state["torch_cuda"]
+        if len(saved) == torch.cuda.device_count():
+            torch.cuda.set_rng_state_all([s.cpu().to(torch.uint8) for s in saved])
+
+
+#: Config fields that are ALLOWED to differ between a prior attempt and the resuming one.
+#: Everything else differing means the two attempts are not the same experiment, and
+#: continuing would produce a single curve stitched from two different objectives.
+RESUME_CONFIG_EXEMPT = frozenset({"out_dir", "resume_from", "max_steps"})
+
+
+def assert_resume_config_matches(prior_cfg: dict, cfg: "TrainConfig") -> None:
+    """Refuse to resume across a config change.
+
+    This is the guard that makes resume safe to leave on. A preempted arm restarts with
+    whatever sbatch/argv the queue hands it; if that differs at all from the attempt whose
+    weights we are about to adopt, the resulting ``ri_curve.json`` would be one continuous
+    line drawn from two DIFFERENT experiments -- exactly the class of silent-correctness
+    failure this project keeps hitting. Fail loudly instead.
+
+    ``max_steps`` is exempt but checked separately below: shortening the horizon is a real
+    change (it reshapes the cosine LR schedule for every remaining step), so it is only
+    tolerated when identical -- the exemption exists so the error message can be specific.
+    """
+    current = asdict(cfg)
+    diffs = {
+        k: (prior_cfg.get(k, "<missing>"), current[k])
+        for k in current
+        if k not in RESUME_CONFIG_EXEMPT and prior_cfg.get(k, "<missing>") != current[k]
+    }
+    if prior_cfg.get("max_steps") != current["max_steps"]:
+        diffs["max_steps"] = (prior_cfg.get("max_steps", "<missing>"), current["max_steps"])
+    if diffs:
+        lines = "\n".join(f"    {k}: prior={p!r} current={c!r}" for k, (p, c) in sorted(diffs.items()))
+        raise ValueError(
+            "refusing to resume: the prior attempt's config.json differs from this run's "
+            f"config in {len(diffs)} field(s):\n{lines}\n"
+            "Resuming across a config change stitches one curve out of two different "
+            "experiments. Re-run from step 0, or fix the launcher so the attempts agree."
+        )
+
+
+def load_checkpoint_weights(model, ckpt: Path) -> None:
+    """Restore the TRAINED weights of *ckpt* into an already-built *model*.
+
+    The inverse of the weight half of :func:`save_checkpoint`. The model must already have
+    been built with the same encoder config (LoRA rank, split heads, pool head) -- this
+    loads tensors into existing modules, it does not reshape anything, and a mismatch
+    raises out of ``load_state_dict`` rather than loading silently.
+
+    LoRA mode restores the adapter tensors IN PLACE via peft's
+    ``set_peft_model_state_dict`` rather than re-wrapping the backbone, so the module tree
+    the optimizer's saved state refers to is left untouched. Re-wrapping would produce
+    fresh parameter objects and the restored AdamW moments would land on the wrong tensors.
+    """
+    if getattr(model.cfg, "use_lora", False):
+        adapter_dir = ckpt / "adapter"
+        if not adapter_dir.is_dir():
+            raise FileNotFoundError(
+                f"{ckpt} has no adapter/ directory, but this model was built with LoRA"
+            )
+        from peft import set_peft_model_state_dict
+        from safetensors.torch import load_file
+        sd = load_file(str(adapter_dir / "adapter_model.safetensors"))
+        result = set_peft_model_state_dict(model.backbone, sd)
+        missing = list(getattr(result, "unexpected_keys", []) or [])
+        if missing:
+            raise RuntimeError(
+                f"resuming from {ckpt}: peft rejected {len(missing)} adapter key(s) "
+                f"({missing[:5]}). The built LoRA config does not match the checkpoint's."
+            )
+    else:
+        from safetensors.torch import load_file
+        path = ckpt / "backbone.safetensors"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{ckpt} has no backbone.safetensors, but this model was built for full FT"
+            )
+        model.backbone.load_state_dict(load_file(str(path)))
+    load_projectors(model, ckpt)
+
+
+def find_resumable_checkpoint(out_dir: Path) -> Path | None:
+    """Highest COMPLETE ``step_*`` checkpoint under *out_dir*, or None.
+
+    "Complete" means ``metrics.json`` exists: :func:`save_checkpoint` writes it last
+    precisely so a checkpoint half-flushed by a preemption SIGKILL is not mistaken for a
+    finished one. ``eval_checkpoints.discover`` uses the same sentinel.
+    """
+    if not out_dir.is_dir():
+        return None
+    done = [
+        d for d in out_dir.glob("step_*")
+        if d.is_dir() and (d / "metrics.json").exists() and (d / "optim.pt").exists()
+    ]
+    if not done:
+        return None
+    return max(done, key=lambda d: int(d.name.split("_")[1]))
+
+
+#: Matches the ``.r<N>`` attempt suffix that gridcmp2.sbatch appends from
+#: ``$SLURM_RESTART_COUNT`` (commit 42990ba): ``RUN_NAME=gridcmp2-<arm>-<jobid>[.r<N>]``.
+_ATTEMPT_SUFFIX = re.compile(r"\.r(\d+)$")
+
+
+def attempt_number(d: Path) -> int:
+    """Attempt index of a run dir: ``<base>`` is 0, ``<base>.r<N>`` is N."""
+    m = _ATTEMPT_SUFFIX.search(Path(d).name)
+    return int(m.group(1)) if m else 0
+
+
+def prior_attempt_dirs(out_dir: Path) -> list[Path]:
+    """Sibling run dirs that are EARLIER attempts of the same job, oldest attempt first.
+
+    Attempts are ``<base>`` (attempt 0) and ``<base>.r<N>`` (requeue N), where ``<base>``
+    already contains ``$SLURM_JOB_ID``. SLURM keeps the job id across a requeue, so this
+    glob is scoped to THIS job and cannot stray to a different arm or an unrelated run.
+    *out_dir* itself is always excluded -- resume READS prior attempts and WRITES its own.
+    """
+    out_dir = Path(out_dir)
+    base = _ATTEMPT_SUFFIX.sub("", out_dir.name)
+    here = out_dir.resolve()
+    found = [
+        d for d in out_dir.parent.glob(f"{base}*")
+        if d.is_dir()
+        and d.resolve() != here
+        and (d.name == base or _ATTEMPT_SUFFIX.fullmatch(d.name[len(base):]) is not None)
+        and attempt_number(d) < attempt_number(out_dir)
+    ]
+    return sorted(found, key=attempt_number)
+
+
+def find_prior_attempt_checkpoint(out_dir: Path) -> Path | None:
+    """Best checkpoint from a PREVIOUS attempt of the same job, or None.
+
+    Attempt directories are siblings named ``<base>`` (attempt 0) and ``<base>.r<N>``
+    (requeue N), where ``<base>`` already contains ``$SLURM_JOB_ID`` -- and SLURM keeps the
+    job id across a requeue, so this glob is scoped to THIS job and cannot pick up a
+    different arm or an unrelated run.
+
+    Returns the highest complete ``step_*`` across all prior attempts, preferring the later
+    attempt on a tie (its weights are the ones that trained most recently). Returns None
+    when there is no prior attempt or none of them reached a checkpoint -- that is the
+    ordinary attempt-0 case and the caller should start from step 0, not fail.
+    """
+    best: tuple[int, int, Path] | None = None
+    for d in prior_attempt_dirs(out_dir):
+        ck = find_resumable_checkpoint(d)
+        if ck is None:
+            continue
+        key = (int(ck.name.split("_")[1]), attempt_number(d))
+        if best is None or key > best[:2]:
+            best = (key[0], key[1], ck)
+    return best[2] if best else None
 
 
 def _should_checkpoint(step: int, cfg: TrainConfig) -> bool:
@@ -878,6 +1098,116 @@ def _should_checkpoint(step: int, cfg: TrainConfig) -> bool:
     if cfg.ckpt_schedule is not None:
         return step in cfg.ckpt_schedule
     return step % cfg.ckpt_every == 0
+
+
+def _resume_into(
+    ckpt: Path,
+    *,
+    cfg: TrainConfig,
+    model,
+    optimizer,
+    scaler,
+    train_loader,
+    history: list[dict],
+) -> int:
+    """Restore a prior attempt's checkpoint into this attempt and return the step to resume at.
+
+    READS *ckpt* (a ``step_*`` dir belonging to a PREVIOUS attempt) and writes nothing to
+    it. The caller's ``cfg.out_dir`` is this attempt's own fresh ``.r<N>`` directory, and
+    every checkpoint from here lands there. That separation is the correctness property
+    commit 42990ba bought -- resume must make requeue CHEAP without making it UNSAFE.
+
+    What has to be restored for the resumed curve to equal the continuous one, and where
+    each piece comes from:
+
+    * model weights  -- ``load_checkpoint_weights`` (adapter/ or backbone.safetensors,
+      plus projector(s) and pool head).
+    * optimizer state -- ``optim.pt``; AdamW's exp_avg/exp_avg_sq and per-param step.
+      Dropping these is the classic silent resume bug: the first few hundred steps after
+      a restart take effectively unconditioned updates.
+    * LR schedule    -- NO state to restore. ``cosine_lr(step, cfg)`` is a pure function of
+      the step and the config, so restoring the step restores the LR exactly.
+    * step counter   -- ``optim.pt["step"]``.
+    * data order     -- the batch plan sequence is a pure function of (seed, epoch,
+      position), so the sampler is rewound to position ``step % batches_per_epoch``
+      instead of the loader being spun forward (which would re-read every skipped image).
+    * RNG            -- restored when present; see ``capture_rng_state`` for why it is
+      currently inert but still worth carrying.
+    * history        -- carried forward so ``history.json`` is one continuous record.
+    """
+    if not ckpt.is_dir():
+        raise FileNotFoundError(f"--resume-from checkpoint does not exist: {ckpt}")
+    if not (ckpt / "metrics.json").exists():
+        raise ValueError(
+            f"{ckpt} has no metrics.json, so it was half-written when its job died. "
+            "Resuming from a torn checkpoint is exactly the failure this sentinel exists "
+            "to prevent -- pick an earlier step."
+        )
+
+    prior_attempt = ckpt.parent
+    if prior_attempt.resolve() == Path(cfg.out_dir).resolve():
+        raise ValueError(
+            f"refusing to resume from {ckpt}: it lives in this attempt's OWN out_dir "
+            f"({cfg.out_dir}). Resume must READ a prior attempt and WRITE a fresh one."
+        )
+    prior_cfg_path = prior_attempt / "config.json"
+    if not prior_cfg_path.exists():
+        raise FileNotFoundError(
+            f"{prior_attempt} has no config.json, so the guard that this is the same "
+            "experiment cannot run. Refusing to resume."
+        )
+    assert_resume_config_matches(json.loads(prior_cfg_path.read_text()), cfg)
+
+    load_checkpoint_weights(model, ckpt)
+
+    blob = torch.load(ckpt / "optim.pt", map_location="cpu", weights_only=False)
+    optimizer.load_state_dict(blob["optimizer"])
+    step = int(blob["step"])
+    if step >= cfg.max_steps:
+        raise ValueError(
+            f"{ckpt} is already at step {step} of max_steps {cfg.max_steps}: "
+            "there is nothing left to resume."
+        )
+    if cfg.grad_accum > 1 and step % cfg.grad_accum != 0:
+        # A checkpoint taken mid-accumulation has un-applied gradients that were never
+        # saved. Resuming there drops a fraction of one update -- small, but it is a
+        # silent difference from a continuous run, so refuse rather than absorb it.
+        raise ValueError(
+            f"{ckpt} is at step {step}, which is not a multiple of grad_accum "
+            f"{cfg.grad_accum}: that checkpoint has un-applied gradients that were never "
+            "saved. Resume from a step aligned to grad_accum."
+        )
+    if scaler is not None and "scaler" in blob:
+        scaler.load_state_dict(blob["scaler"])
+    if "rng" in blob:
+        restore_rng_state(blob["rng"])
+
+    # Rewind the batch-plan sequence rather than replaying images through the loader.
+    sampler = getattr(train_loader, "batch_sampler", None) or getattr(train_loader, "sampler", None)
+    if not hasattr(sampler, "set_start_index"):
+        raise TypeError(
+            f"cannot resume: the train loader's sampler ({type(sampler).__name__}) has no "
+            "set_start_index, so the data stream cannot be rewound and the resumed run "
+            "would silently re-see the same batches it already trained on."
+        )
+    sampler.set_start_index(step % sampler.batches_per_epoch)
+
+    prior_history = prior_attempt / "history.json"
+    if prior_history.exists():
+        history.extend(
+            row for row in json.loads(prior_history.read_text())
+            if int(row.get("step", 0)) <= step
+        )
+
+    print(
+        f"[resume] step {step} <- {ckpt}\n"
+        f"[resume]   optimizer state restored ({len(blob['optimizer'].get('state', {}))} tensors)\n"
+        f"[resume]   sampler rewound to plan {step % sampler.batches_per_epoch}\n"
+        f"[resume]   history carried forward: {len(history)} row(s)\n"
+        f"[resume]   writing to {cfg.out_dir} (prior attempt is read-only)",
+        flush=True,
+    )
+    return step
 
 
 def train(
@@ -953,13 +1283,28 @@ def train(
 
     history: list[dict] = []
     step = 0
+    resumed_from: Path | None = None
+    if cfg.resume_from:
+        resumed_from = Path(cfg.resume_from)
+        step = _resume_into(
+            resumed_from,
+            cfg=cfg,
+            model=model,
+            optimizer=optimizer,
+            scaler=scaler,
+            train_loader=train_loader,
+            history=history,
+        )
+        pbar_initial = step
+    else:
+        pbar_initial = 0
     t0 = time.time()
     tiles_seen = 0
     win_tiles, win_t0 = 0, time.time()
     # pre-clip grad norm from the most recent optimizer step; None until the first one
     # (and stays None entirely when cfg.grad_clip is falsy, since nothing computes it)
     last_grad_norm: float | None = None
-    pbar = tqdm(total=cfg.max_steps, desc="train", unit="step")
+    pbar = tqdm(total=cfg.max_steps, initial=pbar_initial, desc="train", unit="step")
     optimizer.zero_grad(set_to_none=True)
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
@@ -1113,7 +1458,10 @@ def train(
                 )
 
             if _should_checkpoint(step, cfg) or step == cfg.max_steps:
-                ck = save_checkpoint(model, optimizer, step, cfg, {"step": step, **metrics})
+                ck = save_checkpoint(
+                    model, optimizer, step, cfg, {"step": step, **metrics},
+                    scaler=scaler, rng_state=capture_rng_state(),
+                )
                 if on_checkpoint is not None:
                     on_checkpoint(model, step, metrics, ck)
 

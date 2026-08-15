@@ -271,25 +271,60 @@ class GridBatchSampler(Sampler[GridBatch]):
             raise ValueError(f"need >= n_tiles ({n_tiles}) tiles, have {self.tiles.size}")
         self.seed = seed
         self.epoch = 0
+        #: Resume support -- see :meth:`set_start_index`. 0 means "replay from the top",
+        #: which is what every non-resumed run does.
+        self.start_index = 0
 
     def set_epoch(self, epoch: int) -> None:
         self.epoch = epoch
 
+    def set_start_index(self, start_index: int) -> None:
+        """Skip the first *start_index* batch plans of the NEXT epoch only (resume).
+
+        The plan sequence is a pure function of ``(seed, epoch, position)``: ``__iter__``
+        reseeds from ``seed + epoch`` and draws position by position. So a run that is
+        preempted at step ``s`` and restarted can reproduce the exact data stream it would
+        have seen by advancing the RNG through the first ``s`` draws and discarding them --
+        which costs microseconds of numpy, versus actually loading ``s`` batches of images.
+
+        Self-clearing: it applies to the next ``__iter__`` and then resets to 0, so the
+        following epochs replay in full. That is what reproduces a continuous run, whose
+        step ``s`` sits at position ``s % batches_per_epoch`` of pass ``s // batches_per_epoch``.
+
+        This ADVANCES the rng exactly as the yielding path does -- see ``_draw``, which is
+        the single place the draws live precisely so skip and yield cannot drift apart.
+        """
+        if start_index < 0:
+            raise ValueError(f"start_index must be >= 0, got {start_index}")
+        if start_index > self.batches_per_epoch:
+            raise ValueError(
+                f"start_index {start_index} exceeds batches_per_epoch "
+                f"{self.batches_per_epoch}: the caller should have taken it modulo the "
+                "epoch length before handing it over"
+            )
+        self.start_index = start_index
+
     def __len__(self) -> int:
-        return self.batches_per_epoch
+        return max(self.batches_per_epoch - self.start_index, 0)
+
+    def _draw(self, rng: np.random.Generator, n_available: int) -> GridBatch:
+        # WITHOUT replacement on both axes: duplicate conditions break invariant 1,
+        # duplicate tiles break invariant 3.
+        cond_idx = rng.choice(n_available, size=self.n_cond, replace=False)
+        tile_idx = rng.choice(self.tiles, size=self.n_tiles, replace=False)
+        return GridBatch(
+            cond_idx=cond_idx.astype(np.int64),
+            tile_idx=tile_idx.astype(np.int64),
+        )
 
     def __iter__(self) -> Iterator[GridBatch]:
         rng = np.random.default_rng(self.seed + self.epoch)
         n_available = len(self.conditions)
-        for _ in range(self.batches_per_epoch):
-            # WITHOUT replacement on both axes: duplicate conditions break invariant 1,
-            # duplicate tiles break invariant 3.
-            cond_idx = rng.choice(n_available, size=self.n_cond, replace=False)
-            tile_idx = rng.choice(self.tiles, size=self.n_tiles, replace=False)
-            batch = GridBatch(
-                cond_idx=cond_idx.astype(np.int64),
-                tile_idx=tile_idx.astype(np.int64),
-            )
+        skip, self.start_index = self.start_index, 0
+        for _ in range(skip):
+            self._draw(rng, n_available)  # advance the rng, discard the plan
+        for _ in range(self.batches_per_epoch - skip):
+            batch = self._draw(rng, n_available)
             batch.validate(n_available)
             yield batch
 

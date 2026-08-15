@@ -49,6 +49,7 @@ from waivphaet.eval.pathorob_adapter import (  # noqa: E402
     read_results,
     run_robustness_index,
 )
+from waivphaet.train.contrastive import prior_attempt_dirs  # noqa: E402
 
 DATASETS = ("camelyon", "tolkach_esca", "tcga")
 #: Keys of their ``results_summary.json`` worth carrying into the curve. ``robustness_index``
@@ -254,6 +255,51 @@ def write_curve(args, curve: list[dict]) -> None:
         f"{TARGETS['phaet_target']['avg']:>9.3f}", flush=True)
 
 
+def carry_forward_prior_curve(run_dir: Path, curve: list[dict]) -> list[dict]:
+    """Seed this attempt's RI curve with points already scored by EARLIER attempts.
+
+    The training half of resume continues from a prior attempt's weights, so without this
+    the follower would re-score every step below the resume point on a contended GPU --
+    re-deriving numbers that are already on disk -- and the published curve would start at
+    the resume step with a hole in front of it.
+
+    Only points this attempt has not scored itself are taken; a point already in *curve*
+    always wins, since it was measured against this attempt's own checkpoints. Prior
+    attempts are merged NEWEST-first, so if two of them scored the same step the more
+    recent one wins -- it is the closer ancestor of the chain this run continues. (Because
+    training is deterministic and resume is exact, two attempts that both reached a step
+    should agree anyway; the rule exists so the merge is defined, not because it is
+    expected to bite.) Each imported point is stamped with the attempt it came from, so
+    nothing in the merged curve silently claims to have been measured here.
+    """
+    have = {p["step"] for p in curve}
+    imported = 0
+    for prior in reversed(prior_attempt_dirs(run_dir)):
+        path = prior / "ri_curve.json"
+        if not path.exists():
+            continue
+        try:
+            points = json.loads(path.read_text()).get("points", [])
+        except json.JSONDecodeError:
+            print(f"[eval] carry-forward: {path} is unreadable, skipping", flush=True)
+            continue
+        for p in points:
+            step = p.get("step")
+            if step is None or step in have:
+                continue
+            curve.append({**p, "carried_forward_from": prior.name})
+            have.add(step)
+            imported += 1
+    curve.sort(key=lambda p: p["step"])
+    if imported:
+        print(f"[eval] carry-forward: adopted {imported} already-scored step(s) from "
+              f"{len(prior_attempt_dirs(run_dir))} prior attempt(s); not re-scoring them",
+              flush=True)
+    else:
+        print("[eval] carry-forward: no prior attempt had scored points", flush=True)
+    return curve
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -288,6 +334,13 @@ def main() -> int:
     ap.add_argument("--stop-file", type=Path, default=None)
     ap.add_argument("--poll-s", type=int, default=60)
     ap.add_argument("--max-wait-s", type=int, default=8 * 3600)
+    ap.add_argument("--carry-forward-prior-attempt", action="store_true",
+                    help="Seed the RI curve with points already scored by EARLIER attempts "
+                         "of this same job (the sibling <base> / <base>.r<N> dirs), instead "
+                         "of re-scoring those steps on a contended GPU. Pairs with "
+                         "train_lora.py --resume-from-prior-attempt so the curve is "
+                         "continuous across a preemption. Imported points are stamped with "
+                         "carried_forward_from. Default OFF.")
     ap.add_argument("--purge-features", action="store_true", default=False,
                     help="Delete extracted features after scoring. Makes independent "
                          "re-readout impossible without re-extracting on a GPU. "
@@ -324,6 +377,8 @@ def main() -> int:
     curve: list[dict] = []
     if curve_path.exists():
         curve = json.loads(curve_path.read_text()).get("points", [])
+    if args.carry_forward_prior_attempt:
+        curve = carry_forward_prior_curve(args.run_dir, curve)
     done = {p["step"] for p in curve}
 
     t0 = time.time()

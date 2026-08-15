@@ -212,33 +212,58 @@ class PairBatchSampler(Sampler[PairBatch]):
             raise ValueError(f"need >= group_size ({group_size}) tiles, have {self.tiles.size}")
         self.seed = seed
         self.epoch = 0
+        #: Resume support -- see :meth:`set_start_index`. 0 = replay from the top.
+        self.start_index = 0
 
     def set_epoch(self, epoch: int) -> None:
         self.epoch = epoch
 
+    def set_start_index(self, start_index: int) -> None:
+        """Skip the first *start_index* batch plans of the NEXT epoch only (resume).
+
+        Mirror of :meth:`waivphaet.data.grid.GridBatchSampler.set_start_index`; see there
+        for why the plan sequence is exactly reproducible and why skipping on the PLAN
+        side (numpy, microseconds) rather than the loader side (real image reads) is the
+        whole point.
+        """
+        if start_index < 0:
+            raise ValueError(f"start_index must be >= 0, got {start_index}")
+        if start_index > self.batches_per_epoch:
+            raise ValueError(
+                f"start_index {start_index} exceeds batches_per_epoch "
+                f"{self.batches_per_epoch}"
+            )
+        self.start_index = start_index
+
     def __len__(self) -> int:
-        return self.batches_per_epoch
+        return max(self.batches_per_epoch - self.start_index, 0)
+
+    def _draw(self, rng: np.random.Generator, n_cond: int) -> PairBatch:
+        anchor_cond = rng.integers(0, n_cond, size=self.n_groups)
+        # unique tiles within a group -> no in-group "negative" is the anchor's own tile
+        tile_idx = np.stack(
+            [rng.choice(self.tiles, size=self.group_size, replace=False)
+             for _ in range(self.n_groups)]
+        )
+        # positive condition != anchor condition, drawn per anchor.
+        # Trick: draw in [0, n_cond-1) and shift past the anchor -> uniform over the
+        # n_cond-1 valid conditions with no rejection loop.
+        offs = rng.integers(0, n_cond - 1, size=(self.n_groups, self.group_size))
+        positive_cond = offs + (offs >= anchor_cond[:, None])
+        return PairBatch(
+            tile_idx=tile_idx.astype(np.int64),
+            anchor_cond=anchor_cond.astype(np.int64),
+            positive_cond=positive_cond.astype(np.int64),
+        )
 
     def __iter__(self) -> Iterator[PairBatch]:
         rng = np.random.default_rng(self.seed + self.epoch)
         n_cond = len(self.conditions)
-        for _ in range(self.batches_per_epoch):
-            anchor_cond = rng.integers(0, n_cond, size=self.n_groups)
-            # unique tiles within a group -> no in-group "negative" is the anchor's own tile
-            tile_idx = np.stack(
-                [rng.choice(self.tiles, size=self.group_size, replace=False)
-                 for _ in range(self.n_groups)]
-            )
-            # positive condition != anchor condition, drawn per anchor.
-            # Trick: draw in [0, n_cond-1) and shift past the anchor -> uniform over the
-            # n_cond-1 valid conditions with no rejection loop.
-            offs = rng.integers(0, n_cond - 1, size=(self.n_groups, self.group_size))
-            positive_cond = offs + (offs >= anchor_cond[:, None])
-            batch = PairBatch(
-                tile_idx=tile_idx.astype(np.int64),
-                anchor_cond=anchor_cond.astype(np.int64),
-                positive_cond=positive_cond.astype(np.int64),
-            )
+        skip, self.start_index = self.start_index, 0
+        for _ in range(skip):
+            self._draw(rng, n_cond)  # advance the rng, discard the plan
+        for _ in range(self.batches_per_epoch - skip):
+            batch = self._draw(rng, n_cond)
             batch.validate(n_cond)
             yield batch
 
