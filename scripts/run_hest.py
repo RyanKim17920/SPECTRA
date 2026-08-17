@@ -51,6 +51,14 @@ def main() -> int:
     ap.add_argument("--lora-rank", type=int, default=16)
     ap.add_argument("--lora-alpha", type=int, default=32)
     ap.add_argument("--proj-out-dim", type=int, default=512)
+    ap.add_argument("--pool-head", default=None,
+                    choices=("gem", "gem_clamp", "attn", "lse"),
+                    help="apply this run's TRAINED pooling head inside the exported "
+                         "embedding, restoring it from the checkpoint's pool_head.pt. "
+                         "Off by default: without it the eval representation is the "
+                         "protocol constant and the trained pooling reaches the readout "
+                         "only via the LoRA weights it shaped. Must match what the run "
+                         "was trained with. Dimensionality is unchanged.")
     ap.add_argument("--exp-code", default=None)
     ap.add_argument("--tasks", nargs="+", default=list(H.LEADERBOARD_TASKS),
                     help="default = HEST's 9 leaderboard tasks. HCC is deliberately "
@@ -77,9 +85,15 @@ def main() -> int:
     paths.embed_dir.mkdir(parents=True, exist_ok=True)
     paths.results_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.pool_head and not args.adapter:
+        raise SystemExit("--pool-head needs --adapter: pool_head.pt lives in the "
+                         "checkpoint dir alongside adapter/")
+
     encoder = H.load_encoder(args.checkpoint, args.adapter, args.pooling,
                              lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
-                             proj_out_dim=args.proj_out_dim, backbone=args.backbone)
+                             proj_out_dim=args.proj_out_dim, backbone=args.backbone,
+                             pool_head=args.pool_head,
+                             infer_pool_head=bool(args.pool_head))
     wrapped = H.HestEncoderWrapper(encoder)
     # Derived from the backbone's own hidden size, not a literal: 1024/2048 on phikon-v2,
     # 1536/3072 on midnight. Still asserted -- a pooling/embed_dim desync would write
@@ -96,17 +110,56 @@ def main() -> int:
     benchmark = H.import_hest_benchmark()
 
     t0 = time.time()
-    # Embeddings are cached per (task, encoder) under embed_dataroot and only extracted on
-    # fold 0, so a re-run of the regression half is cheap -- but a *different* checkpoint
-    # under the same exp_code would silently reuse them. HEST forces overwrite=True for
-    # 'custom_encoder', which is why every checkpoint must get its own --work-dir or
-    # --exp-code is not enough on its own.
+    # ------------------------------------------------------------------------------
+    # CACHE KEY WARNING. The embedding cache key is exactly `embed_dir / exp_code`.
+    # It does NOT include the backbone, the checkpoint/adapter, the precision, or
+    # --pool-head. Embeddings are cached per (task, encoder) under embed_dataroot and
+    # only extracted on fold 0, so a re-run of the regression half is cheap -- but a
+    # *different* checkpoint, or the SAME checkpoint read with a different --pool-head,
+    # under the same exp_code will silently reuse whatever is already on disk. HEST
+    # forces overwrite=True for 'custom_encoder', which is why every distinct encoder
+    # configuration must get its own --work-dir or --exp-code; --exp-code is not enough
+    # on its own.
+    #
+    # The --pool-head case is the nastiest one because it fails SILENTLY IN THE
+    # DIRECTION OF A NULL RESULT: --pool-head flips infer_pool_head on, which changes
+    # what _pool() returns, but if the exp_code was previously used by a plain
+    # arithmetic-mean run you score the STALE mean features and conclude the pool head
+    # "does nothing". That is a manufactured null, not a measurement.
+    #
+    # The key format is deliberately NOT changed here: several caches already on disk
+    # under /data/ryan.kim/hest_work/embeddings/ (sub5_gem_clsmean, sub5_gem500_clsmean,
+    # sub5_g3*_clsmean, ...) were produced by real --pool-head runs, and re-keying would
+    # orphan those valid caches and force a full re-extraction. Warn loudly instead.
+    cache_dir = paths.embed_dir / exp_code
+    if args.pool_head:
+        reused = cache_dir.exists() and any(cache_dir.rglob("*.h5"))
+        banner = "!" * 78
+        print(f"\n{banner}", file=sys.stderr, flush=True)
+        print(f"[hest] WARNING: --pool-head={args.pool_head} is set, but the embedding "
+              f"cache key is exp_code ONLY:", file=sys.stderr, flush=True)
+        print(f"[hest]   {cache_dir}", file=sys.stderr, flush=True)
+        print("[hest] The pool-head setting is NOT part of that key. If this exp_code was "
+              "ever used by a run", file=sys.stderr, flush=True)
+        print("[hest] with a different --pool-head (including the default arithmetic mean), "
+              "HEST will reuse the", file=sys.stderr, flush=True)
+        print("[hest] STALE embeddings and you will score the wrong features -- typically "
+              "manufacturing a null", file=sys.stderr, flush=True)
+        print("[hest] result for the pool head. Use a pool-head-specific --exp-code (or a "
+              "fresh --work-dir).", file=sys.stderr, flush=True)
+        if reused:
+            print(f"[hest] >>> THIS CACHE DIRECTORY ALREADY EXISTS AND CONTAINS .h5 FILES. "
+                  f"They WILL be reused. <<<", file=sys.stderr, flush=True)
+            print("[hest] >>> Unless you know they came from this exact --pool-head setting, "
+                  "STOP and re-key. <<<", file=sys.stderr, flush=True)
+        print(f"{banner}\n", file=sys.stderr, flush=True)
+    # ------------------------------------------------------------------------------
     _, per_enc = benchmark(
         wrapped,
         H.build_transform(encoder.cfg.backbone),
         getattr(torch, args.precision),
         bench_data_root=str(paths.bench_data),
-        embed_dataroot=str(paths.embed_dir / exp_code),
+        embed_dataroot=str(cache_dir),
         results_dir=str(paths.results_dir),
         exp_code=exp_code,
         datasets=list(args.tasks),
@@ -121,6 +174,7 @@ def main() -> int:
     payload = {
         "exp_code": exp_code, "backbone": encoder.cfg.backbone,
         "pooling": args.pooling, "embed_dim": wrapped.embed_dim,
+        "pool_head": args.pool_head, "infer_pool_head": bool(args.pool_head),
         "precision": args.precision, "seconds": round(dt, 1),
         "results": results, "hest_perf_per_encoder": per_enc,
         "results_dir": str(exp_dirs[-1]) if exp_dirs else None,
