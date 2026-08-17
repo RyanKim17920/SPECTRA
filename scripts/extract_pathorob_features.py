@@ -217,9 +217,35 @@ def assert_checkpoint_applied(model, checkpoint_path: str | Path,
     return {"rel_l2_delta": rel, "mean_cosine_base_vs_lora": mean_cos}
 
 
+def _restore_pool_head(model, ckpt_dir: Path) -> dict:
+    """Load a checkpoint's trained ``pool_head.pt`` into an ``infer_pool_head`` encoder.
+
+    Only called when the caller explicitly asked for inference-time pooling. The head is
+    tiny (GeM is a single scalar ``p``), but it is the ENTIRE intervention: without this
+    the encoder would pool through a freshly-initialised head, i.e. score p=3.0 instead of
+    the trained value and quietly report it as "the trained pooling".
+    """
+    pool = getattr(model, "pool_head", None)
+    if pool is None:
+        raise SystemExit("infer_pool_head requested but the encoder built no pool head")
+    path = Path(ckpt_dir) / "pool_head.pt"
+    if not path.exists():
+        raise SystemExit(
+            f"infer_pool_head requested but {path} does not exist. Only --pool-head "
+            "gem/attn/lse runs write one; the mean arm has no learned pooling."
+        )
+    sd = torch.load(path, map_location="cpu")
+    pool.load_state_dict(sd)
+    restored = {k: v.flatten()[:1].item() if v.numel() else float("nan")
+                for k, v in sd.items() if v.ndim == 0 or v.numel() <= 4}
+    print(f"[build_model] restored pool_head from {path}: {restored}", flush=True)
+    return restored
+
+
 def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = None,
                 lora_rank: int = 16, lora_alpha: int = 32, proj_out_dim: int = 512,
-                backbone: str | None = None):
+                backbone: str | None = None, pool_head: str | None = None,
+                infer_pool_head: bool = False):
     """Single loader shared by PathoROB, HEST and THUNDER (see ``hest_adapter``).
 
     ``backbone`` defaults to ``DEFAULT_BACKBONE`` (owkin/phikon-v2) so every existing
@@ -259,8 +285,12 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
         # Load a PEFT adapter directory (save_checkpoint output).
         cfg = EncoderConfig(backbone=backbone or DEFAULT_BACKBONE,
                             pooling=pooling, use_lora=True, lora_rank=lora_rank,
-                            lora_alpha=lora_alpha, proj_out_dim=proj_out_dim)
+                            lora_alpha=lora_alpha, proj_out_dim=proj_out_dim,
+                            pool_head=pool_head or "mean",
+                            infer_pool_head=infer_pool_head)
         model = WaivEncoder(cfg)
+        if infer_pool_head:
+            _restore_pool_head(model, adapter)
         from peft import set_peft_model_state_dict
         from safetensors.torch import load_file
         state = load_file(str(adapter / "adapter" / "adapter_model.safetensors"))
