@@ -294,12 +294,6 @@ def main() -> int:
     mean_weight = 0.5 if args.mean_weight is None else args.mean_weight
     split_head_names: tuple[str, ...] = ()
     if args.split_heads:
-        if args.grid:
-            raise SystemExit(
-                "--split-heads is not implemented for --grid: the grid loss scores one "
-                "(C*T, D) tensor and the per-head weighting has no validated form there. "
-                "Refusing rather than running an untested objective."
-            )
         if args.pooling != "clsmean":
             raise SystemExit(
                 f"--split-heads with --pooling {args.pooling}: the split is exactly the two "

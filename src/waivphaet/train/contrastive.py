@@ -289,6 +289,65 @@ def grid_info_nce(
     }
 
 
+def grid_info_nce_split(
+    z_dict: dict[str, torch.Tensor],
+    n_cond: int,
+    n_tiles: int,
+    weights: dict[str, float],
+    temperature: float = 0.07,
+    grid_blocked: bool = False,
+    pair_block: int = 8,
+) -> tuple[torch.Tensor, dict[str, float]]:
+    """Split-head grid InfoNCE: ``sum_h w_h * grid_info_nce(head h)``.
+
+    Args:
+        z_dict:       ``{"cls": (C*T, D_cls), "mean": (C*T, D_mean)}`` projected embeddings.
+        n_cond:       C, distinct conditions per batch.
+        n_tiles:      T, shared tiles per condition.
+        weights:      ``{"cls": w_cls, "mean": w_mean}``. Weights should sum to 1.0 to keep
+                      gradient scale comparable to a single-head arm (same convention as
+                      :func:`split_head_info_nce`). NOT renormalized here -- callers own it.
+        temperature:  Softmax temperature (shared across heads).
+        grid_blocked: If True use :func:`grid_info_nce_blocked` (recompute path).
+        pair_block:   Block size when ``grid_blocked`` is True.
+
+    Returns:
+        ``(loss, metrics)`` where ``loss`` is the weighted sum and ``metrics`` carries
+        per-head keys ``loss_cls``, ``top1_cls``, ``loss_mean``, ``top1_mean`` plus a
+        top-level ``loss`` (the weighted total) and ``top1`` (weight-normalised mean).
+    """
+    active = [h for h in ("cls", "mean") if h in z_dict]
+    if not active:
+        raise ValueError("grid_info_nce_split: z_dict has no recognised head keys")
+
+    grid_fn = grid_info_nce_blocked if grid_blocked else grid_info_nce
+
+    total: torch.Tensor | None = None
+    metrics: dict[str, float] = {}
+    w_sum = sum(weights[h] for h in active)
+    top1 = 0.0
+    for h in active:
+        if grid_blocked:
+            loss_h, m_h = grid_info_nce_blocked(
+                z_dict[h], n_cond, n_tiles, temperature, pair_block=pair_block
+            )
+        else:
+            loss_h, m_h = grid_info_nce(z_dict[h], n_cond, n_tiles, temperature)
+        term = weights[h] * loss_h
+        total = term if total is None else total + term
+        metrics[f"loss_{h}"] = m_h["loss"]
+        metrics[f"top1_{h}"] = m_h["top1"]
+        metrics[f"weight_{h}"] = float(weights[h])
+        top1 += weights[h] * m_h["top1"]
+        # Propagate negatives/row count from the last head (same geometry for all heads).
+        for k in ("negatives_per_anchor", "n_rows", "n_cond", "n_tiles"):
+            metrics[k] = m_h[k]
+    metrics["loss"] = float(total.detach())
+    metrics["top1"] = top1 / max(w_sum, 1e-12)
+    metrics["n_heads"] = float(len(active))
+    return total, metrics
+
+
 # --------------------------------------------------------------------------------------
 # Split loss heads: CLS and mean scored SEPARATELY (PLAN.md 2's pooling mismatch)
 # --------------------------------------------------------------------------------------
@@ -811,6 +870,62 @@ def _chunked_forward(model, images: torch.Tensor, chunk: int, offload: bool = Fa
     return emb, model.projector(emb)
 
 
+def _chunked_forward_split(
+    model,
+    images: torch.Tensor,
+    chunk: int = 0,
+    offload: bool = False,
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    """Split-head variant of :func:`_chunked_forward`.
+
+    Chunks the BACKBONE (per-image, exact) and then runs EACH HEAD'S projector ONCE over
+    the full concatenated batch -- outside both the chunk loop and any offload context.
+    This is the same correctness requirement as the single-head path: ``ProjectionHead``
+    contains ``nn.BatchNorm1d``, which couples the batch together, so chunking through
+    it would compute per-chunk BatchNorm statistics rather than over all C*T images.
+
+    Returns ``(parts, zs)`` where:
+      - ``parts``: ``{"cls": (C*T, hidden), "mean": (C*T, hidden)}`` from ``embed_parts``
+      - ``zs``:    ``{"cls": (C*T, D), "mean": (C*T, D)}`` projected, one key per built head
+
+    ``anchor_emb`` for the retention term should be reconstructed via
+    ``model.pool_from_parts(parts)`` -- NOT from any projected vector.
+    """
+    ctx = torch.autograd.graph.save_on_cpu(pin_memory=True) if offload else nullcontext()
+    if chunk <= 0 or chunk >= images.shape[0]:
+        with ctx:
+            raw_parts = model.embed_parts(images)
+    else:
+        # Chunk the backbone; each chunk returns {"cls": (chunk, H), "mean": (chunk, H)}.
+        chunk_parts_list: list[dict[str, torch.Tensor]] = []
+        with ctx:
+            for part in images.split(chunk):
+                chunk_parts_list.append(model.embed_parts(part))
+        raw_parts = {
+            k: torch.cat([cp[k] for cp in chunk_parts_list], dim=0)
+            for k in chunk_parts_list[0]
+        }
+    # Projectors run ONCE over the whole concatenated batch -- outside the chunk loop and
+    # outside any offload context, exactly as the single-head path does.
+    head_in = raw_parts
+    if getattr(model, "pool_head", None) is not None:
+        # Forward the alternative pool head over the FULL batch token sequence --
+        # pool_head operates on patch tokens and has no chunking of its own here, so
+        # this is an unbatched call over C*T items, consistent with the single path.
+        # We read from raw_parts["mean"] as the arithmetic mean; the model will replace
+        # it inside forward_split, but here we only have the pooled parts, not tokens.
+        # Callers using a non-trivial pool_head should call model.forward_split instead
+        # of this function, which does not have access to the raw token sequence when
+        # chunking. Raise an informative error.
+        raise RuntimeError(
+            "_chunked_forward_split does not support non-default pool_head (GeM / LSE / "
+            "attention) because chunking discards the raw token sequence needed by the "
+            "pool head. Use model.forward_split() directly (no chunking)."
+        )
+    zs = {name: model.projectors[name](head_in[name]) for name in model.split_heads}
+    return raw_parts, zs
+
+
 def _amp_dtype(name: str) -> torch.dtype | None:
     return {"bfloat16": torch.bfloat16, "float16": torch.float16, "none": None}[name]
 
@@ -841,11 +956,20 @@ def evaluate_heldout(model, loader, cfg: TrainConfig, device, n_batches: int) ->
             # loader may run a SMALLER C than training (there are fewer held-out
             # conditions), so read C and T off the batch rather than off cfg.
             images = batch["image"].to(device, non_blocking=True)
-            # same memory guard as the train step; harmless under no_grad
-            _, gz = _chunked_forward(model, images, cfg.grid_forward_chunk)
-            _, m = grid_info_nce(
-                gz, int(batch["n_cond"]), int(batch["n_tiles"]), cfg.temperature
-            )
+            n_cond, n_tiles = int(batch["n_cond"]), int(batch["n_tiles"])
+            if cfg.split_heads:
+                _, gz = _chunked_forward_split(model, images, cfg.grid_forward_chunk)
+                _, m = grid_info_nce_split(
+                    gz, n_cond, n_tiles,
+                    {"cls": cfg.cls_weight, "mean": cfg.mean_weight},
+                    cfg.temperature,
+                    grid_blocked=cfg.grid_blocked_loss,
+                    pair_block=cfg.grid_pair_block,
+                )
+            else:
+                # same memory guard as the train step; harmless under no_grad
+                _, gz = _chunked_forward(model, images, cfg.grid_forward_chunk)
+                _, m = grid_info_nce(gz, n_cond, n_tiles, cfg.temperature)
             tot["loss"] += m["loss"]
             tot["top1"] += m["top1"]
             n += 1
@@ -1346,12 +1470,6 @@ def train(
         # Fail before any compute if the config and the model disagree about which heads
         # exist -- a mismatch here is exactly the "plausible curve measuring nothing"
         # failure mode this feature is guarding against.
-        if cfg.grid:
-            raise ValueError(
-                "split_heads is not implemented for the GRID sampler: grid_info_nce scores "
-                "one (C*T, D) tensor and the per-head weighting has no validated form "
-                "there. Refusing rather than running an untested objective."
-            )
         want = build_split_head_names(cfg.cls_weight, cfg.mean_weight)
         got = tuple(getattr(model, "split_heads", ()) or ())
         if got != want:
@@ -1379,6 +1497,39 @@ def train(
             "is a protocol constant. The alternative poolings are TRAINING-TIME loss heads."
         )
     use_retention = cfg.retention_kl_weight > 0.0
+    if use_retention and bool(getattr(model, "infer_pool_head", False)):
+        # REJECTED COMBINATION -- the retention/KL term is not well defined when the
+        # learned pool head is spliced into the mean slot at inference time. Two
+        # independent defects, either of which silently corrupts the objective:
+        #
+        #   1. STUDENT/TEACHER POOLING MISMATCH. The student anchor is
+        #      ``model.pool_from_parts(parts)`` where ``parts`` come from
+        #      ``_pool_parts``, which is ALWAYS the arithmetic ``patches.mean(dim=1)``.
+        #      The teacher goes through ``retention_teacher_embed`` -> ``model.embed()``
+        #      -> ``_pool``, which DOES honour ``infer_pool_head`` and therefore pools
+        #      with the learned head. Student and teacher would be compared across two
+        #      different pooling operators, so the KL would penalise the pooling gap
+        #      rather than representational drift.
+        #
+        #   2. NON-STATIONARY "FROZEN" TEACHER. ``frozen_teacher`` freezes only
+        #      ``model.backbone`` (via ``disable_adapter()``). The pool head is a
+        #      SEPARATE nn.Module and is NOT covered by that context manager, so the
+        #      supposedly frozen teacher would pool with the LIVE, still-training pool
+        #      head. The retention target would move every optimiser step, which is
+        #      exactly what a retention anchor must not do.
+        #
+        # Fixing the asymmetry properly means threading the pool head through both
+        # _pool_parts and the teacher freeze; until that exists, refuse the combination
+        # loudly instead of training against a meaningless anchor.
+        raise ValueError(
+            "infer_pool_head=True is incompatible with retention_kl_weight="
+            f"{cfg.retention_kl_weight!r} (>0). (1) The KL student anchor pools with "
+            "the arithmetic mean (_pool_parts) while the teacher pools with the learned "
+            "pool head (_pool), so the two sides are not comparable. (2) frozen_teacher "
+            "freezes only model.backbone; the pool head is a separate module and stays "
+            "live, so the 'frozen' retention target would drift every step. Set "
+            "retention_kl_weight=0 or build the encoder with infer_pool_head=False."
+        )
     if use_retention:
         # Fail here, before any compute, rather than silently optimising a KL that is
         # structurally 0 (see assert_retention_teacher_available).
@@ -1447,23 +1598,48 @@ def train(
                 images = batch["image"].to(device, non_blocking=True)
                 gid = batch["group_id"].to(device, non_blocking=True)
                 n_cond, n_tiles = int(batch["n_cond"]), int(batch["n_tiles"])
-                with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
-                    # ONE graph, one backward -- the chunks are a memory device only, and
-                    # the loss below still sees all C*T embeddings simultaneously (which
-                    # is the entire point of the grid).
-                    anchor_emb, gz = _chunked_forward(
-                        model, images, cfg.grid_forward_chunk, cfg.activation_offload
-                    )
-                    teacher_emb = (
-                        retention_teacher_embed(model, images) if use_retention else None
-                    )
-                if cfg.grid_blocked_loss:
-                    loss, metrics = grid_info_nce_blocked(
-                        gz, n_cond, n_tiles, cfg.temperature,
+                if cfg.split_heads:
+                    with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
+                        # Backbone chunked (memory), projectors run ONCE over the full C*T
+                        # batch per head -- BatchNorm coupling requirement, same as single
+                        # head. See _chunked_forward_split docstring.
+                        parts, gz = _chunked_forward_split(
+                            model, images, cfg.grid_forward_chunk, cfg.activation_offload
+                        )
+                        # anchor_emb is the eval-time pooled embedding (clsmean), NOT a
+                        # projected vector, so the retention KL measures what is actually
+                        # exported at eval time. Same contract as the pair-path split branch.
+                        anchor_emb = model.pool_from_parts(parts)
+                        teacher_emb = (
+                            retention_teacher_embed(model, images) if use_retention else None
+                        )
+                    split_stats = assert_split_head_inputs(parts)
+                    loss, metrics = grid_info_nce_split(
+                        gz, n_cond, n_tiles,
+                        {"cls": cfg.cls_weight, "mean": cfg.mean_weight},
+                        cfg.temperature,
+                        grid_blocked=cfg.grid_blocked_loss,
                         pair_block=cfg.grid_pair_block,
                     )
+                    metrics.update(split_stats)
                 else:
-                    loss, metrics = grid_info_nce(gz, n_cond, n_tiles, cfg.temperature)
+                    with torch.autocast(device.type, dtype=amp, enabled=amp is not None):
+                        # ONE graph, one backward -- the chunks are a memory device only, and
+                        # the loss below still sees all C*T embeddings simultaneously (which
+                        # is the entire point of the grid).
+                        anchor_emb, gz = _chunked_forward(
+                            model, images, cfg.grid_forward_chunk, cfg.activation_offload
+                        )
+                        teacher_emb = (
+                            retention_teacher_embed(model, images) if use_retention else None
+                        )
+                    if cfg.grid_blocked_loss:
+                        loss, metrics = grid_info_nce_blocked(
+                            gz, n_cond, n_tiles, cfg.temperature,
+                            pair_block=cfg.grid_pair_block,
+                        )
+                    else:
+                        loss, metrics = grid_info_nce(gz, n_cond, n_tiles, cfg.temperature)
                 n_images = int(images.shape[0])
             else:
                 anchor = batch["anchor"].to(device, non_blocking=True)

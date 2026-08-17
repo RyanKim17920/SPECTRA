@@ -433,6 +433,191 @@ def test_candidate_module_list_is_frozen_for_the_published_backbones():
     assert len(names) == 240 and set(per_block.values()) == {6}
 
 
+# --------------------------------------------------------------------------------------
+# split_heads + grid: the six required invariants
+# --------------------------------------------------------------------------------------
+
+
+class _FakeSplitModel(torch.nn.Module):
+    """Minimal stand-in for WaivEncoder built with split_heads=('cls','mean').
+
+    No backbone — embed_parts returns random(-ish) tokens per chunk; the projectors
+    are real ProjectionHead instances so BatchNorm coupling is real.
+    """
+
+    def __init__(self, hidden: int = 32, proj_hidden: int = 512, proj_out: int = 512,
+                 seed: int = 0, same_weights: bool = False):
+        super().__init__()
+        from waivphaet.models.encoder import ProjectionHead
+        torch.manual_seed(seed)
+        self.hidden_size = hidden
+        self.split_heads: tuple[str, ...] = ("cls", "mean")
+        self.pool_head = None
+        # ProjectionHead needs out_dim >= 512
+        self.projectors = torch.nn.ModuleDict({
+            "cls": ProjectionHead(hidden, proj_hidden, proj_out),
+            "mean": ProjectionHead(hidden, proj_hidden, proj_out),
+        })
+        if same_weights:
+            # Copy cls weights into mean so both heads are identical — used by
+            # the degenerate equivalence test.
+            self.projectors["mean"].load_state_dict(self.projectors["cls"].state_dict())
+
+    def embed_parts(self, images: torch.Tensor) -> dict[str, torch.Tensor]:
+        """Fake embed: images already are (B, 2*hidden) float tensors split into cls/mean."""
+        B = images.shape[0]
+        h = self.hidden_size
+        return {"cls": images[:, :h], "mean": images[:, h:]}
+
+    def pool_from_parts(self, parts: dict[str, torch.Tensor]) -> torch.Tensor:
+        """clsmean = cat(cls, mean) -- matches the real encoder for pooling='clsmean'."""
+        return torch.cat([parts["cls"], parts["mean"]], dim=1)
+
+    def embed(self, images: torch.Tensor) -> torch.Tensor:
+        parts = self.embed_parts(images)
+        return self.pool_from_parts(parts)
+
+    # not used by split path but satisfies retention_teacher_embed
+    def forward(self, images: torch.Tensor):
+        emb = self.embed(images)
+        return emb, emb
+
+
+def _make_grid_images(C: int, T: int, hidden: int, seed: int = 1) -> torch.Tensor:
+    """(C*T, 2*hidden) float tensor: the fake 'images' _FakeSplitModel.embed_parts reads."""
+    torch.manual_seed(seed)
+    return torch.randn(C * T, 2 * hidden)
+
+
+def test_split_grid_degenerate_equivalence():
+    """w=0.5/0.5, identical head weights, CLS==mean => split loss matches single-head grid loss.
+
+    Under these conditions:
+      L_split = 0.5 * grid_info_nce(z_cls) + 0.5 * grid_info_nce(z_mean)
+    where z_cls and z_mean are both outputs of the SAME projector applied to the SAME vector
+    (since cls==mean when images have identical cls/mean halves), so both terms equal L_single.
+    Hence L_split == L_single.
+    """
+    from waivphaet.train.contrastive import (
+        _chunked_forward_split, grid_info_nce, grid_info_nce_split,
+    )
+
+    C, T, H = 3, 4, 32
+    model = _FakeSplitModel(hidden=H, same_weights=True)
+    model.eval()
+
+    # Craft images where cls half == mean half so both pools are identical.
+    torch.manual_seed(7)
+    base = torch.randn(C * T, H)
+    images = torch.cat([base, base], dim=1)  # (C*T, 2*H)
+
+    with torch.no_grad():
+        parts, gz = _chunked_forward_split(model, images, chunk=0)
+
+        # Single-head: run the cls projector on base directly.
+        z_single = model.projectors["cls"](base)
+        _, m_single = grid_info_nce(z_single, C, T)
+
+        _, m_split = grid_info_nce_split(
+            gz, C, T,
+            {"cls": 0.5, "mean": 0.5},
+        )
+
+    assert abs(m_split["loss"] - m_single["loss"]) < 1e-5, (
+        f"split loss {m_split['loss']:.6f} != single loss {m_single['loss']:.6f}"
+    )
+
+
+def test_bn_no_chunk_invariant():
+    """_chunked_forward_split with chunk=1 vs chunk=C*T gives identical projected outputs in eval."""
+    from waivphaet.train.contrastive import _chunked_forward_split
+
+    C, T, H = 3, 5, 32
+    model = _FakeSplitModel(hidden=H)
+    model.eval()
+    images = _make_grid_images(C, T, H)
+
+    with torch.no_grad():
+        _, gz_full = _chunked_forward_split(model, images, chunk=0)
+        _, gz_chunk = _chunked_forward_split(model, images, chunk=1)
+
+    for k in gz_full:
+        assert torch.allclose(gz_full[k], gz_chunk[k], atol=1e-5), (
+            f"head '{k}' differs between chunk=0 and chunk=1 in eval mode"
+        )
+
+
+def test_bn_trailing_chunk_guard():
+    """C*T=2401, chunk=600 must not raise (no trailing BatchNorm chunk of size 1)."""
+    from waivphaet.train.contrastive import _chunked_forward_split
+
+    C, T, H = 49, 49, 32  # 49*49=2401; 2401 % 600 = 1  -- the exact bad case
+    model = _FakeSplitModel(hidden=H)
+    model.eval()
+    images = _make_grid_images(C, T, H, seed=3)
+
+    with torch.no_grad():
+        parts, gz = _chunked_forward_split(model, images, chunk=600)
+
+    assert gz["cls"].shape == (C * T, 512)
+    assert gz["mean"].shape == (C * T, 512)
+
+
+def test_per_head_metric_keys_present():
+    """After a grid_info_nce_split call, loss_cls/top1_cls/loss_mean/top1_mean must be present."""
+    from waivphaet.train.contrastive import _chunked_forward_split, grid_info_nce_split
+
+    C, T, H = 3, 4, 32
+    model = _FakeSplitModel(hidden=H)
+    model.eval()
+    images = _make_grid_images(C, T, H)
+
+    with torch.no_grad():
+        _, gz = _chunked_forward_split(model, images)
+        _, m = grid_info_nce_split(gz, C, T, {"cls": 0.5, "mean": 0.5})
+
+    for k in ("loss_cls", "top1_cls", "loss_mean", "top1_mean"):
+        assert k in m, f"missing metric key: {k}"
+
+
+def test_gradient_flows_to_both_projectors():
+    """Both projectors["cls"].weight.grad and ["mean"].weight.grad must be non-None and non-zero."""
+    from waivphaet.train.contrastive import _chunked_forward_split, grid_info_nce_split
+
+    C, T, H = 3, 4, 32
+    model = _FakeSplitModel(hidden=H)
+    model.train()
+    images = _make_grid_images(C, T, H)
+
+    parts, gz = _chunked_forward_split(model, images)
+    loss, _ = grid_info_nce_split(gz, C, T, {"cls": 0.5, "mean": 0.5})
+    loss.backward()
+
+    for name in ("cls", "mean"):
+        w = model.projectors[name].net[0].weight
+        assert w.grad is not None, f"projectors['{name}'].weight.grad is None"
+        assert w.grad.norm() > 0, f"projectors['{name}'].weight.grad is all-zero"
+
+
+def test_anchor_emb_shape_with_split_grid_retention():
+    """anchor_emb = pool_from_parts(parts) must have shape (C*T, 2*hidden) when split+grid."""
+    from waivphaet.train.contrastive import _chunked_forward_split
+
+    C, T, H = 3, 4, 32
+    model = _FakeSplitModel(hidden=H)
+    model.eval()
+    images = _make_grid_images(C, T, H)
+
+    with torch.no_grad():
+        parts, _ = _chunked_forward_split(model, images)
+        anchor_emb = model.pool_from_parts(parts)
+
+    # clsmean = cat(cls, mean) => (C*T, 2*H) -- the eval-time embedding shape
+    assert anchor_emb.shape == (C * T, 2 * H), (
+        f"expected ({C * T}, {2 * H}), got {tuple(anchor_emb.shape)}"
+    )
+
+
 class _PoolOnly:
     """Just enough of WaivEncoder to call the real, unbound ``_pool``."""
 

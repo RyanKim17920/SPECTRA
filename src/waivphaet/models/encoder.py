@@ -376,6 +376,22 @@ class EncoderConfig:
     #: Requires ``split_heads`` to include ``"mean"``: with the single concat projector
     #: the pooled vector IS ``_pool``'s output, which is the eval protocol constant.
     pool_head: str = "mean"
+    #: Apply the learned ``pool_head`` inside :meth:`WaivEncoder._pool`, i.e. in the
+    #: EXPORTED embedding, not only in the training loss. OFF by default: with it off
+    #: the eval representation stays the protocol constant (PathoROB's reference row is
+    #: ``phikonv2_clsmean``) and every existing number remains comparable.
+    #:
+    #: Turning it ON is an ARCHITECTURAL change to what the run exports, and is the whole
+    #: point of the "pooling at inference" arm: to date every pooling variant was scored
+    #: through an identical ``clsmean`` head, so the learned pooling reached the readout
+    #: only indirectly, via the LoRA weights it shaped. Dimensionality is UNCHANGED --
+    #: every pool head maps ``(B, N, hidden) -> (B, hidden)``, so ``clsmean`` stays
+    #: ``2 * hidden`` and downstream probes load exactly as before.
+    #:
+    #: Unlike ``pool_head`` itself this does NOT require ``split_heads``: at eval time the
+    #: encoder is rebuilt with no split heads at all, and the head is restored from the
+    #: checkpoint's ``pool_head.pt``.
+    infer_pool_head: bool = False
     #: ``None`` (the default) = **discover** the target leaf names from the loaded
     #: backbone by intersecting ``LORA_CANDIDATE_MODULES`` with the block Linears it
     #: actually has. Pass an explicit tuple only to deliberately narrow the set.
@@ -661,7 +677,24 @@ class WaivEncoder(nn.Module):
                 f"unknown pool_head {self.pool_head_name!r}; valid are "
                 f"{list(POOL_HEAD_NAMES)}"
             )
-        if self.pool_head_name != "mean" and "mean" not in self.split_heads:
+        self.infer_pool_head = bool(getattr(cfg, "infer_pool_head", False))
+        if self.infer_pool_head and self.pool_head_name == "mean":
+            raise ValueError(
+                "infer_pool_head=True with pool_head='mean' is a no-op: the mean arm's "
+                "pool IS patches.mean(dim=1), which _pool already computes."
+            )
+        if self.cfg.pooling == "cls" and self.infer_pool_head:
+            raise ValueError(
+                "infer_pool_head=True with pooling='cls' is a no-op: the CLS pool never "
+                "touches the patch tokens. Use pooling='clsmean' (or 'mean')."
+            )
+        # The 'mean' split head is what the pooling is TRAINED through. It is not needed to
+        # APPLY a restored pool head at eval, where the encoder carries no split heads.
+        if (
+            self.pool_head_name != "mean"
+            and "mean" not in self.split_heads
+            and not self.infer_pool_head
+        ):
             raise ValueError(
                 f"pool_head={self.pool_head_name!r} requires split_heads to include "
                 f"'mean' (got {list(self.split_heads) or 'the single concat projector'}). "
@@ -705,10 +738,17 @@ class WaivEncoder(nn.Module):
         cls, patches = tokens[:, 0, :], tokens[:, self.num_prefix_tokens :, :]
         if self.cfg.pooling == "cls":
             return cls
+        # OFF by default, so this is the literal `patches.mean(dim=1)` it always was. When
+        # on, the mean SLOT is filled by the learned pool head instead -- same shape, same
+        # dtype, so `embed_dim` and every downstream probe are untouched.
+        if getattr(self, "infer_pool_head", False) and self.pool_head is not None:
+            mean = self.pool_head(patches).to(patches.dtype)
+        else:
+            mean = patches.mean(dim=1)
         if self.cfg.pooling == "mean":
-            return patches.mean(dim=1)
+            return mean
         if self.cfg.pooling == "clsmean":
-            return torch.cat([cls, patches.mean(dim=1)], dim=1)
+            return torch.cat([cls, mean], dim=1)
         raise ValueError(f"unknown pooling {self.cfg.pooling!r}")
 
     def _pool_parts(self, tokens: torch.Tensor) -> dict[str, torch.Tensor]:
