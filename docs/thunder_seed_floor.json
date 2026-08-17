@@ -1,0 +1,219 @@
+{
+  "generated_by": "scripts/thunder_seed_floor.py",
+  "metric": "f1 (metric_score), adaptation=frozen",
+  "source_root": "/data/ryan.kim/thunder/outputs/res",
+  "datasets": [
+    "bach",
+    "mhist",
+    "break_his",
+    "bracs",
+    "ccrcc"
+  ],
+  "pairs": {
+    "cls": [
+      "fast5_ctrl",
+      "fast5_ctrlseed"
+    ],
+    "clsmean": [
+      "fast5_ctrl_clsmean",
+      "fast5_ctrlseed_clsmean"
+    ]
+  },
+  "constructions": {
+    "centred_2se": "2*SD(delta)/sqrt(n) -- LEGACY. SD is about mean(delta), so a consistent seed offset is invisible to it and in fact shrinks the bar. Do not use alone.",
+    "offset_2se": "|mean(delta)| + 2*SD(delta)/sqrt(n) -- RECOMMENDED. Charges the systematic offset AND the dispersion.",
+    "rms_2se": "2*RMS(delta)/sqrt(n), RMS about zero. Non-centred analogue; grows with the offset but attenuates it by 1/sqrt(n).",
+    "paired_p": "two-sided paired t-test that mean(delta)==0. Small p == the two seeds genuinely disagree == centred_2se is unusable."
+  },
+  "recommendation": "Use offset_2se as the reporting bar. An arm's mean delta vs ctrl must exceed it to be called real. Rationale: the quantity we compare against the bar is a MEAN over the same 5 tasks, and a seed-to-seed offset propagates into that mean one-for-one -- it does not average away, so the bar must contain it. centred_2se prices only the part of seed noise that does average away, which is the part we already suppress by averaging; it therefore understates the floor by exactly the term that matters. rms_2se moves in the right direction but divides the offset by sqrt(n), so it still under-charges a rigid shift. Report paired_p alongside: where p is small the centred bar is not merely conservative-in-the-wrong-direction, it is invalid, and any verdict that leaned on it must be re-graded.",
+  "cells": {
+    "cls/knn": {
+      "pooling": "cls",
+      "task": "knn",
+      "n": 5,
+      "runs": {
+        "seed_a": "fast5_ctrl",
+        "seed_b": "fast5_ctrlseed"
+      },
+      "missing_datasets": [],
+      "per_dataset": {
+        "bach": {
+          "seed_a": 0.5731933355808316,
+          "seed_b": 0.6240447957839261,
+          "delta": 0.0508514602030945
+        },
+        "mhist": {
+          "seed_a": 0.7148477631456056,
+          "seed_b": 0.714330480447422,
+          "delta": -0.0005172826981836298
+        },
+        "break_his": {
+          "seed_a": 0.6880377768584436,
+          "seed_b": 0.660174833155483,
+          "delta": -0.027862943702960608
+        },
+        "bracs": {
+          "seed_a": 0.5165847978064433,
+          "seed_b": 0.5115562966300077,
+          "delta": -0.005028501176435607
+        },
+        "ccrcc": {
+          "seed_a": 0.8469879048239738,
+          "seed_b": 0.8495541681895776,
+          "delta": 0.002566263365603838
+        }
+      },
+      "mean_delta": 0.004001799198223699,
+      "sd_delta": 0.02878489953777688,
+      "rms_delta": 0.0260551482425802,
+      "se_delta": 0.012872998418394276,
+      "centred_2se": 0.025745996836788552,
+      "offset_2se": 0.02974779603501225,
+      "rms_2se": 0.0233044330536974,
+      "paired_t": 0.31086768351540484,
+      "paired_p": 0.7714272049341734,
+      "offset_over_centred_bar": 0.15543384175770242
+    },
+    "cls/linear_probing": {
+      "pooling": "cls",
+      "task": "linear_probing",
+      "n": 5,
+      "runs": {
+        "seed_a": "fast5_ctrl",
+        "seed_b": "fast5_ctrlseed"
+      },
+      "missing_datasets": [],
+      "per_dataset": {
+        "bach": {
+          "seed_a": 0.6463619285669371,
+          "seed_b": 0.6615410052910053,
+          "delta": 0.015179076724068263
+        },
+        "mhist": {
+          "seed_a": 0.7698149518222974,
+          "seed_b": 0.7870250488823125,
+          "delta": 0.017210097060015084
+        },
+        "break_his": {
+          "seed_a": 0.6535508590303112,
+          "seed_b": 0.6596767280735228,
+          "delta": 0.0061258690432116625
+        },
+        "bracs": {
+          "seed_a": 0.5718390795693757,
+          "seed_b": 0.564356980671786,
+          "delta": -0.007482098897589773
+        },
+        "ccrcc": {
+          "seed_a": 0.8996393930700965,
+          "seed_b": 0.9014732531828645,
+          "delta": 0.0018338601127679821
+        }
+      },
+      "mean_delta": 0.006573360808494644,
+      "sd_delta": 0.010092293690956957,
+      "rms_delta": 0.011166583446796833,
+      "se_delta": 0.004513410948374402,
+      "centred_2se": 0.009026821896748805,
+      "offset_2se": 0.015600182705243448,
+      "rms_2se": 0.009987695865384649,
+      "paired_t": 1.456406448179104,
+      "paired_p": 0.2189979135010651,
+      "offset_over_centred_bar": 0.728203224089552
+    },
+    "clsmean/knn": {
+      "pooling": "clsmean",
+      "task": "knn",
+      "n": 5,
+      "runs": {
+        "seed_a": "fast5_ctrl_clsmean",
+        "seed_b": "fast5_ctrlseed_clsmean"
+      },
+      "missing_datasets": [],
+      "per_dataset": {
+        "bach": {
+          "seed_a": 0.602424424365309,
+          "seed_b": 0.5968058839894282,
+          "delta": -0.005618540375880721
+        },
+        "mhist": {
+          "seed_a": 0.724789992946328,
+          "seed_b": 0.7038752976834812,
+          "delta": -0.020914695262846728
+        },
+        "break_his": {
+          "seed_a": 0.5914970128512445,
+          "seed_b": 0.6757932562531697,
+          "delta": 0.08429624340192521
+        },
+        "bracs": {
+          "seed_a": 0.531716312441458,
+          "seed_b": 0.5140871055421056,
+          "delta": -0.017629206899352434
+        },
+        "ccrcc": {
+          "seed_a": 0.8584189014093985,
+          "seed_b": 0.857757249966857,
+          "delta": -0.0006616514425414888
+        }
+      },
+      "mean_delta": 0.007894429884260767,
+      "sd_delta": 0.04351570328086692,
+      "rms_delta": 0.039714168363699516,
+      "se_delta": 0.01946081412494581,
+      "centred_2se": 0.03892162824989162,
+      "offset_2se": 0.04681605813415239,
+      "rms_2se": 0.03552143205244148,
+      "paired_t": 0.4056577403995296,
+      "paired_p": 0.7057555225439873,
+      "offset_over_centred_bar": 0.2028288701997648
+    },
+    "clsmean/linear_probing": {
+      "pooling": "clsmean",
+      "task": "linear_probing",
+      "n": 5,
+      "runs": {
+        "seed_a": "fast5_ctrl_clsmean",
+        "seed_b": "fast5_ctrlseed_clsmean"
+      },
+      "missing_datasets": [],
+      "per_dataset": {
+        "bach": {
+          "seed_a": 0.6432107087827427,
+          "seed_b": 0.6653212312550211,
+          "delta": 0.022110522472278404
+        },
+        "mhist": {
+          "seed_a": 0.7844723572843508,
+          "seed_b": 0.7958654425230142,
+          "delta": 0.011393085238663336
+        },
+        "break_his": {
+          "seed_a": 0.6556227656227657,
+          "seed_b": 0.6651514675050664,
+          "delta": 0.009528701882300705
+        },
+        "bracs": {
+          "seed_a": 0.5797506121829699,
+          "seed_b": 0.6009350202552097,
+          "delta": 0.02118440807223987
+        },
+        "ccrcc": {
+          "seed_a": 0.9003227831563776,
+          "seed_b": 0.9022491500854231,
+          "delta": 0.0019263669290454644
+        }
+      },
+      "mean_delta": 0.013228616918905556,
+      "sd_delta": 0.008470275405721291,
+      "rms_delta": 0.015244433670890102,
+      "se_delta": 0.003788022319067483,
+      "centred_2se": 0.007576044638134966,
+      "offset_2se": 0.020804661557040523,
+      "rms_2se": 0.01363503598663877,
+      "paired_t": 3.492222538478103,
+      "paired_p": 0.02507225416052703,
+      "offset_over_centred_bar": 1.7461112692390515
+    }
+  }
+}
