@@ -4,8 +4,13 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=250G
+#SBATCH --mem=350G
 #SBATCH --time=10:00:00
+# NOTE: there is deliberately no WAIV_TIME env passthrough -- sbatch parses #SBATCH
+# directives from the file text at SUBMIT time, before any shell expansion, so an env var
+# cannot reach this line. Override on the command line instead: `sbatch --time=14:00:00`.
+# Arm f at C=12 T=800 runs ~36 s/step; 1500 steps needs ~15 h, NOT the 10 h above, which
+# is what killed job 382243 at step 805.
 #SBATCH --requeue
 #SBATCH --output=logs/slurm-%x-%j.out
 #SBATCH --error=logs/slurm-%x-%j.err
@@ -29,6 +34,9 @@
 #   WAIV_ARM=a  --grid -C 12 -T 300   3600 img/step   299 neg   R=39,600
 #   WAIV_ARM=b  --grid -C 24 -T 150   3600 img/step   149 neg   R=82,800
 #   WAIV_ARM=c  --grid -C 6  -T 600   3600 img/step   599 neg   R=18,000
+#   WAIV_ARM=d  --grid -C 2  -T 1800  3600 img/step  1799 neg   R=3,600
+#   WAIV_ARM=e  --grid -C 2  -T 1975  3950 img/step  1974 neg   R=3,950
+#   WAIV_ARM=f  --grid -C 12 -T 800   9600 img/step   799 neg   R=105,600 (offload)
 #
 # ARM A is GRID12's condition count (12) with 299 negatives instead of 199.
 # ARM B is GRID24's condition count (24) with 149 negatives instead of 99.
@@ -68,30 +76,25 @@ export PYTHONUNBUFFERED=1
 # segments and OOMs; expandable_segments hands that back. Load-bearing at this size.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
+ARM="${WAIV_ARM:?set WAIV_ARM to a | b | c | d | e | f}"
+
 # --- CODE PINNING --------------------------------------------------------------------
 # sbatch freezes the BATCH SCRIPT at submit time. It does NOT freeze the python source:
 # a job that sits PENDING for hours reads scripts/ and src/ at START time, so any edit
 # landing in the working tree in between silently enters the run. These arms are only
 # meaningful as a controlled delta on GRID12/GRID24, so the source is pinned to a
 # read-only snapshot taken at submit time.
-#
-# The snapshot MUST carry third_party and .venv, not just src/scripts. Both prior
-# pinning attempts died on exactly this:
-#   - the first had no third_party/, so eval_checkpoints.py's PathoRobPaths.check()
-#     resolved PathoROB relative to the snapshot root and the FOLLOWER died on its first
-#     line while training carried on -- an arm that finishes with a full checkpoint set
-#     and an empty ri_curve.json (jobs 380889/380890).
-#   - the second had no .venv/, so eval_checkpoints.py's --python default (derived from
-#     its own __file__) pointed at a nonexistent interpreter.
-# Both are symlinks back into the real repo here, and verified before submit.
-PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/gridcmp3-pinned}"
+if [ "$ARM" = "f" ]; then
+  PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/gridcmp3-f-pinned}"
+else
+  PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/gridcmp3-pinned}"
+fi
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ]  || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -d "$PIN/third_party/PathoROB" ] || { echo "pin missing third_party/PathoROB: $PIN" >&2; exit 3; }
 [ -x "$PIN/.venv/bin/python" ]     || { echo "pin missing .venv/bin/python: $PIN" >&2; exit 3; }
 
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
-ARM="${WAIV_ARM:?set WAIV_ARM to a | b | c | d | e}"
 # SLURM_RESTART_COUNT keeps a requeued attempt out of the previous attempt's run dir
 # (commit 42990ba). Preemption is routine here; without the suffix a requeue writes
 # attempt-2 weights into attempt-1's directory and marries them to attempt-1's RI points.
@@ -105,33 +108,49 @@ LORA_ALPHA=64
 PROJ_OUT_DIM=512
 PROBE_TILES=256
 
-# --- the ONLY things that differ between the three arms -------------------------------
-# --grid-forward-chunk is a MEMORY setting, not a science one: it micro-chunks the
-# BACKBONE forward while the loss still sees all C*T embeddings at once. It is set from
-# the sizing probe (scripts/sizing_probe_grid.sbatch), not chosen by hand.
+# How long the eval follower tolerates seeing NO new checkpoint before giving up.
+# eval_checkpoints.py defaults this to 8 h and this script used to leave it unset, which
+# truncated arm F: the follower quit while the trainer was still writing, so job 382243's
+# step_0000750 landed on disk unscored and ri_curve.json stopped at [250, 500]. 20 h sits
+# comfortably past the 10 h wall clock even after a --time override, so the follower now
+# only ever exits via --stop-file (TRAIN_DONE) or a genuinely wedged trainer.
+EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-$((20 * 3600))}"
+
+# --- the ONLY things that differ between the arms ------------------------------------
 CHUNK="${WAIV_CHUNK:-300}"
+OFFLOAD="${WAIV_OFFLOAD:-0}"
 case "$ARM" in
   a) COND=12; TILES=300 ;;
   b) COND=24; TILES=150 ;;
   c) COND=6;  TILES=600 ;;
-  # ARM D / MAXNEG: the maximum-negatives end of the same B=3600 budget. C=2 is the
-  # floor the trainer allows (--grid-conditions must be >= 2), so T=1800 is the largest
-  # tile count reachable at this budget: 1799 negatives/row. Sizing probe measured
-  # C=2/T=1800 at chunk 300 = 74.15 GiB peak on an 80 GiB H100 (OOM edge is T~1975);
-  # chunk 600 OOMs at this T, so the default chunk 300 is load-bearing here.
   d) COND=2;  TILES=1800 ;;
-  # ARM E / CEILING: the largest geometry that FITS on one 80 GiB H100, found by
-  # scripts/sizing_probe_grid.py -- C=2 (the trainer's condition floor) and T=1975,
-  # i.e. 1974 negatives/row at B=3950 images/step. This is NOT the B=3600 budget the
-  # other arms share; arm E deliberately spends the whole card. Probe: T=1975 at
-  # chunk 150 = 77.60 GiB peak of 79.19 usable, ~10.6 s/step. Chunk 150 is
-  # LOAD-BEARING: chunk 300 was never measured at B=3950 and the recorded OOM at
-  # T=1800 is a chunk-600 OOM, so a larger chunk here risks losing the arm.
   e) COND=2;  TILES=1975; CHUNK="${WAIV_CHUNK:-150}" ;;
-  *) echo "unknown WAIV_ARM=$ARM (want a | b | c | d | e)" >&2; exit 2 ;;
+  # ARM F / BOTH-HIGH: activation-offload arm, C=12 x T=800 -> B=9600, 799 negatives/row
+  f) COND=12; TILES=800; CHUNK="${WAIV_CHUNK:-150}"; OFFLOAD=1 ;;
+  *) echo "unknown WAIV_ARM=$ARM (want a | b | c | d | e | f)" >&2; exit 2 ;;
 esac
 SEED=0
 SAMPLER_ARGS=(--grid --grid-conditions "$COND" --grid-tiles "$TILES" --grid-forward-chunk "$CHUNK")
+if [ "$OFFLOAD" = "1" ]; then
+  SAMPLER_ARGS+=(--activation-offload)
+fi
+
+# --- optional explicit resume ---------------------------------------------------------
+# The auto-resume of commit af243c2 (--resume-from-prior-attempt) only finds SIBLING run
+# dirs keyed on the CURRENT $SLURM_JOB_ID, so it cannot reach a run that died under a
+# DIFFERENT job id (e.g. a --time timeout, which is not a requeue). WAIV_RESUME_FROM is
+# the generic escape hatch: point it at any complete step_* dir and train_lora.py's
+# --resume-from takes it, guarded by assert_resume_config_matches (so an arm/config
+# mismatch fails loudly instead of silently mixing trajectories).
+#
+#   WAIV_ARM=f WAIV_RESUME_FROM=/abs/path/runs/<run>/step_0000750 \
+#     sbatch --time=14:00:00 scripts/gridcmp3.sbatch
+RESUME_ARGS=()
+if [ -n "${WAIV_RESUME_FROM:-}" ]; then
+  [ -d "$WAIV_RESUME_FROM" ] || { echo "WAIV_RESUME_FROM is not a directory: $WAIV_RESUME_FROM" >&2; exit 4; }
+  RESUME_ARGS+=(--resume-from "$WAIV_RESUME_FROM")
+  echo "=== resume: $WAIV_RESUME_FROM ==="
+fi
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | restart ${SLURM_RESTART_COUNT:-0} | run $RUN_NAME ==="
 echo "=== arm $ARM | seed $SEED | B=$((COND * TILES)) | neg/row $((TILES - 1)) | rows $((COND * (COND - 1) * TILES)) ==="
@@ -202,6 +221,7 @@ CUDA_VISIBLE_DEVICES=1 "$PY" "$PIN"/scripts/eval_checkpoints.py \
   --proj-out-dim "$PROJ_OUT_DIM" \
   --probe-tiles "$PROBE_TILES" \
   --num-workers 8 \
+  --max-wait-s "$EVAL_MAX_WAIT_S" \
   --follow --stop-file "$OUT_DIR/TRAIN_DONE" --poll-s 60 \
   > "$OUT_DIR/eval_follow.log" 2>&1 &
 FOLLOWER=$!
@@ -222,6 +242,7 @@ CUDA_VISIBLE_DEVICES=0 "$PY" "$PIN"/scripts/train_lora.py \
   --max-steps 1500 \
   --warmup-steps 200 \
   "${SAMPLER_ARGS[@]}" \
+  ${RESUME_ARGS[@]+"${RESUME_ARGS[@]}"} \
   --grad-checkpointing \
   --workers 20 \
   --amp bfloat16 \

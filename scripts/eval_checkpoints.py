@@ -333,7 +333,15 @@ def main() -> int:
                     help="keep polling for new checkpoints until --stop-file appears")
     ap.add_argument("--stop-file", type=Path, default=None)
     ap.add_argument("--poll-s", type=int, default=60)
-    ap.add_argument("--max-wait-s", type=int, default=8 * 3600)
+    # IDLE timeout, not a total-runtime budget: the deadline is reset every time a new
+    # checkpoint is successfully scored (see the loop below). Before that fix this was a
+    # wall-clock cap on the whole follower, which silently truncated any run longer than
+    # 8 h -- job 382243's arm F wrote step_0000750 after its follower had already exited,
+    # and 383342 (~38 s/step, step 1500 at ~8.2 h) would have lost its final point the
+    # same way. "No new checkpoint for this long" is what the flag always meant.
+    ap.add_argument("--max-wait-s", type=int, default=8 * 3600,
+                    help="give up after this many seconds with NO newly scored checkpoint "
+                         "(the clock restarts on every scored step). --follow only.")
     ap.add_argument("--carry-forward-prior-attempt", action="store_true",
                     help="Seed the RI curve with points already scored by EARLIER attempts "
                          "of this same job (the sibling <base> / <base>.r<N> dirs), instead "
@@ -400,6 +408,11 @@ def main() -> int:
             curve.sort(key=lambda p: p["step"])
             done.add(step)
             write_curve(args, curve)
+            # Progress restarts the idle clock. Without this the deadline was measured
+            # from follower startup, so --max-wait-s silently became a cap on TOTAL run
+            # length: a healthy follower that had just scored a checkpoint would still
+            # quit mid-training and strand every later checkpoint unscored.
+            t0 = time.time()
 
         if not args.follow:
             break
