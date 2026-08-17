@@ -80,7 +80,30 @@ Our Δ ≥ Waiv's on **11 of 12** shared model×task pairs.
 
 **This corrects an earlier optimistic framing.** The hypothesis that the two unmeasured tasks would favour us is now half-refuted: calibration does not.
 
-**`adversarial_attack` is a real task and is genuinely unmeasured on our side.** PGD-linf, eps 1.5e-3, 5 steps (`tasks/adversarial_attack.py`). Waiv's fine-tuning is catastrophic here:
+**`adversarial_attack` — MEASURED, and the metric's direction was being read backwards.**
+
+**CORRECTION.** Earlier drafts of this document described Waiv's adversarial column as a catastrophic collapse. That was wrong. The column is **`drop/accuracy`** — the *drop* in accuracy under PGD attack, so **lower is better**. Identified by sweeping all 12 candidate metrics in `adversarial_attack/frozen/outputs.json` against Waiv's published base triple: `drop/accuracy` matches at mean absolute error **1.71** (Virchow2 31.5 vs 31.1, Midnight 35.5 vs 35.7), and decisively, only the drop metrics reproduce the published **rank ordering** — phikon-v2 is highest (41.9) and is also the weakest backbone on clean accuracy (80.6 vs 86–87), so it cannot top a post-attack score but naturally tops a drop. Verified in-file: `drop = clean − adversarial` in absolute points.
+
+**So Waiv's "Virchow2 31.1 → 7.7" is their single strongest result** — a 75% reduction in adversarial accuracy drop — not a collapse.
+
+PGD-linf, eps 1.5e-3, 5 steps (`tasks/adversarial_attack.py`). All 72 jobs COMPLETED.
+
+**Base → FT, `drop/accuracy` ×100, 12-dataset mean (lower = better):**
+
+| backbone | ours base | ours FT | **our Δ** | Waiv base | Waiv FT | **Waiv Δ** |
+|---|---|---|---|---|---|---|
+| Virchow2 | 31.5 | 28.7 | −2.9 (−9%) | 31.1 | **7.7** | **−23.4 (−75%)** |
+| Midnight | 35.5 | 25.6 | −9.9 (−28%) | 35.7 | 23.2 | −12.5 (−35%) |
+| phikon-v2 | 46.4 | **34.0** | **−12.5 (−27%)** | 41.9 | 38.8 | −3.1 (−7%) |
+
+Clean accuracy is not traded away — it *rises* under our FT on all three (Virchow2 86.2→87.4, Midnight 87.2→87.4, phikon-v2 80.6→82.7).
+
+**Verdict: our fine-tuning improves adversarial robustness on all three backbones — but this is not a place we win.**
+- **Virchow2 — we lose badly.** 2.9 points of drop reduction vs their 23.4. Their 7.7 is in a different league from our 28.7.
+- **Midnight — draw at best.** We end at 25.6 vs their 23.2; our relative gain (−28%) is comparable to theirs (−35%) but we remain worse in absolute terms.
+- **phikon-v2 — a genuine but modest win on Δ.** We cut 12.5 points where they cut 3.1, though our worse base (46.4 vs 41.9) means our endpoint (34.0) only edges theirs (38.8).
+
+Superseded (retained to show what was corrected) — the published column, previously misread as a collapse:
 
 | backbone | Waiv base → FT adversarial |
 |---|---|
@@ -143,7 +166,7 @@ Floors: RI 0.0070 (n=2, a **bound** not an estimate); HEST 2SE 0.0075 (centred, 
 - **THUNDER segmentation — LOSE on Midnight** (−0.33 vs their +1.6), tie elsewhere. Honest characterisation: our segmentation is flat-to-negative on **all three** backbones (3 of 12 dataset pairs improve, sign test p ≈ 0.15), so this is **"classification yes, segmentation no, on every backbone tested"** — a recipe property, not a Midnight-specific defect. *(Note: Waiv's own fp32 Table-5 re-run gives Mascaret segmentation −1.2, so their +1.6 may itself be a mixed-precision artifact — we deliberately do not lean on this.)*
 - **HEST — NO RESULT, 3 of 3.** Ours preserve; theirs improve.
 - **THUNDER calibration — LOSE, 1–2.** Our fine-tuning degrades ECE on phikon-v2 (+0.37) and Midnight (+0.17) where Waiv's improves it; we win only on Virchow2 (−0.82). Data already existed on disk (§2.1).
-- **THUNDER adversarial — UNKNOWN, running.** The one remaining place a full 6-task comparison could move our way; Waiv's recipe collapses here (Virchow2 31.1 → 7.7).
+- **THUNDER adversarial — MEASURED. We improve on all three backbones, but LOSE overall.** The metric is `drop/accuracy` (lower better), not a post-attack score, so Waiv's 31.1 → 7.7 on Virchow2 is their *best* result, not a collapse. Our Δ: Virchow2 −2.9 vs their −23.4 (clear loss), Midnight −9.9 vs −12.5 (draw), phikon-v2 −12.5 vs −3.1 (modest win). See §2.1.
 - **Patho-Bench — NOT PLAYED.** Waiv's Mascaret is rank 1 of 20 (58.0). We have no number.
 
 ---
@@ -152,7 +175,7 @@ Floors: RI 0.0070 (n=2, a **bound** not an estimate); HEST 2SE 0.0075 (centred, 
 
 **Free (eval-only, no training budget):**
 
-1. **THUNDER calibration + adversarial on all 6 checkpoints.** Largest hole; 2 of their 6 tasks; where their method collapses. *In flight.*
+1. ~~THUNDER calibration + adversarial~~ **DONE.** Calibration already existed on disk (it is computed inside `linear_probing`) and goes 1–2 against us. Adversarial: all 72 jobs completed; we improve on all three backbones but lose the comparison, decisively on Virchow2. Neither was the hoped-for opening.
 2. **Midnight HEST under `cls`.** Converts the Midnight HEST row from "absolutes incomparable" to a real head-to-head. *In flight (job 384456).*
 3. **Recompute the HEST 0.0075 bar under `offset_2se`.** Zero GPU. Regrades every HEST verdict on both sides.
 4. **Locate/confirm base PathoROB artifacts.** *Done — §1.1, claim survives.*
