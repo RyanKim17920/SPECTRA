@@ -892,7 +892,29 @@ def _chunked_forward_split(
     ``model.pool_from_parts(parts)`` -- NOT from any projected vector.
     """
     ctx = torch.autograd.graph.save_on_cpu(pin_memory=True) if offload else nullcontext()
-    if chunk <= 0 or chunk >= images.shape[0]:
+    must_chunk = 0 < chunk < images.shape[0]
+    if getattr(model, "pool_head", None) is not None:
+        # A learned pool head (GeM / LSE / attention) pools over the raw PATCH-TOKEN
+        # sequence, which ``embed_parts`` has already reduced away -- so the code below
+        # genuinely cannot serve it.  ``model.forward_split`` keeps the tokens and still
+        # runs each projector exactly ONCE over the full C*T batch (see its body), i.e.
+        # it satisfies the same BatchNorm-coupling requirement this function does.  So
+        # when no chunking was asked for, delegate rather than refuse: the guard's own
+        # advice ("use model.forward_split() directly (no chunking)") is exactly this.
+        if must_chunk:
+            raise RuntimeError(
+                "_chunked_forward_split cannot chunk with a non-default pool_head "
+                "(GeM / LSE / attention) because chunking discards the raw token "
+                "sequence the pool head needs. Re-run with --grid-forward-chunk 0 "
+                "(model.forward_split() is then used directly), or use pool_head=mean."
+            )
+        # ``ctx`` covers the projectors here as well as the backbone.  Unlike chunking,
+        # save_on_cpu is an exact save/restore hook -- it moves no batch boundaries and
+        # cannot perturb BatchNorm statistics -- so this is byte-identical maths, only a
+        # different memory/step-time profile.
+        with ctx:
+            return model.forward_split(images)
+    if not must_chunk:
         with ctx:
             raw_parts = model.embed_parts(images)
     else:
@@ -907,21 +929,10 @@ def _chunked_forward_split(
         }
     # Projectors run ONCE over the whole concatenated batch -- outside the chunk loop and
     # outside any offload context, exactly as the single-head path does.
+    # Every non-default ``pool_head`` already returned above (delegated when unchunked,
+    # raised when chunking was genuinely required), so by here the head input is the
+    # arithmetic mean from ``embed_parts`` and needs no token sequence.
     head_in = raw_parts
-    if getattr(model, "pool_head", None) is not None:
-        # Forward the alternative pool head over the FULL batch token sequence --
-        # pool_head operates on patch tokens and has no chunking of its own here, so
-        # this is an unbatched call over C*T items, consistent with the single path.
-        # We read from raw_parts["mean"] as the arithmetic mean; the model will replace
-        # it inside forward_split, but here we only have the pooled parts, not tokens.
-        # Callers using a non-trivial pool_head should call model.forward_split instead
-        # of this function, which does not have access to the raw token sequence when
-        # chunking. Raise an informative error.
-        raise RuntimeError(
-            "_chunked_forward_split does not support non-default pool_head (GeM / LSE / "
-            "attention) because chunking discards the raw token sequence needed by the "
-            "pool head. Use model.forward_split() directly (no chunking)."
-        )
     zs = {name: model.projectors[name](head_in[name]) for name in model.split_heads}
     return raw_parts, zs
 
