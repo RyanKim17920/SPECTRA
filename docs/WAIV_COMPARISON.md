@@ -125,6 +125,31 @@ Superseded (retained to show what was corrected) — the published column, previ
 
 **Midnight absolutes are not comparable.** Our base is **+0.0169 above** Waiv's — already near Mascaret's 0.4167 — because Waiv never state a pooling protocol for Midnight and 0.3952 is plausibly CLS-only against our CLS+mean. A test of exactly this is running (job 384456, Midnight base under `cls`, fresh exp_code `midnight_base_cls_9task_v1`).
 
+### 3.0 PROTOCOL CORRECTION (2026-08-18) — this overturns §3.1
+
+**MEASURED.** Waiv's published HEST base numbers are **CLS-only**, not CLS+mean. Confirmed exactly:
+
+| | our base | Waiv base | match |
+|---|---|---|---|
+| Midnight under `cls` (job 386354) | **0.39521** | **0.3952** | exact to 4 dp |
+
+Re-measuring the Midnight fine-tuned model under the same protocol (job 386398) changes the result completely:
+
+| protocol | our base | our FT | **our Δ** | vs 0.0075 bar |
+|---|---|---|---|---|
+| `clsmean` (what §3.1 used) | 0.41210 | 0.41322 | **+0.0011** | inside noise — "no result" |
+| **`cls` (matched to Waiv)** | **0.39521** | **0.41180** | **+0.0166** | **2.2x the bar — REAL** |
+
+Waiv's Mascaret Δ is +0.0215, so under matched protocol **we close 77% of their Midnight HEST gain** — not "no result".
+
+**Mechanism.** Under `clsmean` our base already sits at 0.4121, close to where fine-tuning lands, because the mean component supplies information the adapter would otherwise have to learn. Measuring a delta on an inflated base masks the entire effect. Same checkpoint, same benchmark, only the pooling changed.
+
+**Consequence.** The §3.1 verdict below ("our fine-tuning preserves HEST; Waiv's improves it") was a protocol artifact for Midnight and is RETRACTED for that backbone. phikon-v2 was already measured under `cls` so it stands. Virchow2 was measured under `clsmean` (+0.0050) and is being re-measured under `cls` (jobs 386451/386452) — if it shows the same inflated-base pattern its real gain is also understated.
+
+**RULE, to prevent this class of error:** never compare an absolute or a delta against Waiv's published table without matching their pooling protocol per backbone (`cls` for phikon-v2 and Midnight). Two operational traps when testing this: `run_hest.py` keys its embedding cache on `--exp-code` ALONE with pooling NOT in the key, so a protocol test must use a fresh exp_code or it silently rescores stale features; and the HEST dataloader crashes in shared-memory teardown at `--num-workers` 8 and 2 alike — use 0.
+
+---
+
 ### 3.1 Verdict — say this precisely
 
 All three of our deltas sit **inside** the 0.0075 seed bar. All three of Waiv's sit **outside** it.
