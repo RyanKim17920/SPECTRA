@@ -144,7 +144,25 @@ Waiv's Mascaret Δ is +0.0215, so under matched protocol **we close 77% of their
 
 **Mechanism.** Under `clsmean` our base already sits at 0.4121, close to where fine-tuning lands, because the mean component supplies information the adapter would otherwise have to learn. Measuring a delta on an inflated base masks the entire effect. Same checkpoint, same benchmark, only the pooling changed.
 
-**Consequence.** The §3.1 verdict below ("our fine-tuning preserves HEST; Waiv's improves it") was a protocol artifact for Midnight and is RETRACTED for that backbone. phikon-v2 was already measured under `cls` so it stands. Virchow2 was measured under `clsmean` (+0.0050) and is being re-measured under `cls` (jobs 386451/386452) — if it shows the same inflated-base pattern its real gain is also understated.
+**The protocol is PER-BACKBONE and must be determined empirically** — score the base under both poolings and keep whichever reproduces Waiv's published base. Measured (job 386451): Virchow2 under `cls` gives **0.39791** vs their published 0.4034, off by 0.0055 — whereas `clsmean` gives 0.40327, within 0.00013. **So Waiv used `clsmean` for Virchow2 and `cls` for the other two.**
+
+| backbone | Waiv's protocol | our base | their base | agreement |
+|---|---|---|---|---|
+| phikon-v2 | `cls` | 0.37470 | 0.3747 | exact |
+| Midnight | `cls` | 0.39521 | 0.3952 | exact |
+| Virchow2 | **`clsmean`** | 0.40327 | 0.4034 | 0.00013 |
+
+Do NOT assume one protocol across backbones: assuming `cls` everywhere would have manufactured a -0.0055 base discrepancy on Virchow2 where none exists.
+
+**Consequence.** The §3.1 verdict below ("our fine-tuning preserves HEST; Waiv's improves it") was a protocol artifact **for Midnight only** and is RETRACTED for that backbone. phikon-v2 (`cls`) and Virchow2 (`clsmean`) were already on the matched protocol and their verdicts stand.
+
+Corrected HEST summary, each backbone on its matched protocol:
+
+| backbone | protocol | our Δ | Waiv Δ | vs 0.0075 bar |
+|---|---|---|---|---|
+| phikon-v2 | cls | +0.0047 (+0.0098 best step) | +0.0196 | marginal |
+| **Midnight** | cls | **+0.0166** | +0.0215 | **2.2x — real, 77% of theirs** |
+| Virchow2 | clsmean | +0.0050 | +0.0101 | below bar |
 
 **RULE, to prevent this class of error:** never compare an absolute or a delta against Waiv's published table without matching their pooling protocol per backbone (`cls` for phikon-v2 and Midnight). Two operational traps when testing this: `run_hest.py` keys its embedding cache on `--exp-code` ALONE with pooling NOT in the key, so a protocol test must use a fresh exp_code or it silently rescores stale features; and the HEST dataloader crashes in shared-memory teardown at `--num-workers` 8 and 2 alike — use 0.
 
