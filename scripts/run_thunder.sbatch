@@ -111,7 +111,14 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 # image_pre_loading is the wrong lever -- it caches decoded *tiles* in RAM and OOMs a 128G
 # box on the 300k-tile sets.
 MODE=embedding_pre_loading
-case "$TASKS" in *segmentation*) MODE=online_loading ;; esac
+# adversarial_attack joins segmentation here: it PGD-perturbs raw pixels and backprops
+# through the frozen backbone (tasks/adversarial_attack.py builds its PatchDataset with
+# embedding_pre_loading=False unconditionally), so a cached embedding is useless to it.
+# Left on embedding_pre_loading the job still *works*, but the cold-cache branch below
+# would prepend a multi-hour pre_computing_embeddings step that nothing then reads --
+# and the phikon-v2/Midnight embedding caches were swept off /data, so every adversarial
+# job would pay it.
+case "$TASKS" in *segmentation*|*adversarial*) MODE=online_loading ;; esac
 
 # embedding_pre_loading READS a cache; it does not CREATE one. THUNDER exposes cache
 # creation as its own task (`pre_computing_embeddings`, benchmark.py:25). Without it,

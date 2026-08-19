@@ -84,7 +84,7 @@ fi
 
 echo "=== PHASE 2: offload sizing ladder ==="
 "$PY" scripts/sizing_probe_grid.py \
-  --geoms $GEOMS --chunk "$CHUNK" --steps "$STEPS" \
+  --geoms $GEOMS --chunk $CHUNK --steps "$STEPS" \
   --grad-checkpointing --activation-offload \
   --out "runs/sizing_grid_${TAG}.json"
 

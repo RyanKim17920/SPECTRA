@@ -67,11 +67,14 @@ VIRCHOW2 = "paige-ai/Virchow2"
 # segmentation ~-0.9 against these, so treat ~1 point as agreement, not a regression.
 #
 # THUNDER's leaderboard DOES carry a Midnight-12k row, but nobody has transcribed it into
-# this file, so there is deliberately no MIDNIGHT key below. Adding one (same task ->
-# dataset -> percent shape, plus a PUBLISHED_SOURCE entry) is all that is needed to turn
-# the Midnight cross-check back on; until then Midnight runs print an explicit
-# "NO published counterpart" note rather than a comparison against phikon-v2's numbers.
-# The same holds for paige-ai/Virchow2: no transcribed row, so no key, so no columns.
+# this file, so there is deliberately no MIDNIGHT key in PUBLISHED below -- PUBLISHED holds
+# THUNDER-paper per-DATASET F1s and those exist here for phikon-v2 only.
+#
+# Midnight and Virchow2 published rows DO now exist in this script, but as a SEPARATE dict:
+# PUBLISHED_TASKMEAN, sourced from the WAIV paper (arXiv:2607.22861 Table 2), which reports
+# per-TASK means rather than per-dataset F1s. The two dicts are kept apart on purpose --
+# see the long note on PUBLISHED_TASKMEAN for why merging them would be a category error.
+
 PUBLISHED = {
     PHIKONV2: {
         "knn": {
@@ -93,6 +96,89 @@ PUBLISHED = {
 
 # Citation printed on the `# cross-check` line, per backbone.
 PUBLISHED_SOURCE = {PHIKONV2: "arXiv:2507.07860v3"}
+
+# ---------------------------------------------------------------------------------------
+# Published per-TASK means, KEYED BY BACKBONE. DIFFERENT PAPER, DIFFERENT SHAPE, DIFFERENT
+# DICT -- read this before using it.
+#
+# PUBLISHED above comes from arXiv:2507.07860v3, THUNDER's own paper, and is per DATASET
+# (the 12 classification + 4 segmentation F1s in appendix Tables S37/S39/S50). It exists
+# for phikon-v2 only, because that is the only backbone whose per-dataset appendix rows
+# anyone has transcribed.
+#
+# PUBLISHED_TASKMEAN below comes from arXiv:2607.22861 Table 2 -- the WAIV paper, a
+# different group evaluating a different roster -- and is per TASK: one number per model
+# per task, ALREADY averaged over THUNDER's datasets. Full transcription of all 20 models
+# and all four of Waiv's tables lives in docs/waiv_published.json; the three backbones this
+# repo actually runs are copied here so the cross-check works without loading that file.
+#
+# WHY NOT ONE DICT. A task mean is not a dataset score. Pasting Waiv's 80.0 kNN into the
+# per-dataset PUBLISHED shape would put an average in a cell headed `bach` and the script
+# would happily print a delta against it. Worse, the two dicts disagree by construction:
+# they are two labs' independent evaluations, so phikon-v2 appears in BOTH with different
+# numbers (THUNDER's own per-dataset rows vs Waiv's re-run task means), and averaging or
+# silently preferring one would erase a real reproducibility signal. Hence: two dicts, two
+# source citations, two clearly-labelled cross-check lines, never merged.
+#
+# TASK-NAME MAPPING. Waiv's task keys are not ours:
+#     Waiv "knn"          -> our "knn"
+#     Waiv "linear"       -> our "linear_probing"
+#     Waiv "few_shot"     -> our "simple_shot"
+#     Waiv "segmentation" -> our "segmentation"
+# Waiv additionally score "calibration" and "adversarial", which this script does not
+# compute; they are transcribed below for completeness and are excluded from every mean
+# and delta the script prints. Any aggregate built here is over 4 tasks, NOT Waiv's 6, and
+# is therefore NOT comparable to their rank sum.
+#
+# CAVEAT ON THE DELTA. Our task mean is over the datasets WE ran, which for most sweeps is
+# a subset of THUNDER's 12+4. Waiv's is over their full set. The cross-check line prints n
+# so an unequal-support comparison is visible rather than implied; treat it as a sanity
+# check on magnitude, not as a matched-pairs delta.
+#
+# variant="base" rows only. Waiv also publish their own fine-tuned Virchow2 (RI 0.918,
+# thunder knn 82.6 / linear 85.1 / few_shot 76.6 / segmentation 68.0); that is THEIR method's
+# output, not a published base to reproduce, so it is deliberately not a cross-check target
+# here. It is in docs/waiv_published.json under variant "fine-tuned" for the
+# Delta-vs-Delta comparison in docs/RESULTS.md.
+PUBLISHED_TASKMEAN = {
+    VIRCHOW2: {  # Waiv Table 2, "Virchow2" variant=base
+        "knn": 82.9, "linear": 84.8, "few_shot": 73.9,
+        "segmentation": 68.2,
+        # not computed by this script -- transcribed for completeness only:
+        "calibration": 3.6, "adversarial": 31.1,
+    },
+    MIDNIGHT: {  # Waiv Table 2, "Midnight-12k" variant=base
+        "knn": 80.0, "linear": 84.4, "few_shot": 71.5,
+        "segmentation": 66.0,
+        # not computed by this script -- transcribed for completeness only:
+        "calibration": 2.4, "adversarial": 35.7,
+    },
+    PHIKONV2: {  # Waiv Table 2, "Phikon-v2" variant=base
+        "knn": 74.0, "linear": 79.3, "few_shot": 71.8,
+        "segmentation": 66.5,
+        # not computed by this script -- transcribed for completeness only:
+        "calibration": 4.5, "adversarial": 41.9,
+    },
+}
+
+# Citation printed on the `# cross-check taskmean` line, per backbone. Distinct from
+# PUBLISHED_SOURCE on purpose: these are not the same paper.
+PUBLISHED_TASKMEAN_SOURCE = {
+    PHIKONV2: "arXiv:2607.22861 Table 2 (Waiv)",
+    MIDNIGHT: "arXiv:2607.22861 Table 2 (Waiv)",
+    VIRCHOW2: "arXiv:2607.22861 Table 2 (Waiv)",
+}
+
+# Waiv task key -> this script's TASKS name. Waiv-only tasks map to None (not computed here).
+WAIV_TASK_ALIAS = {
+    "knn": "knn",
+    "linear": "linear_probing",
+    "few_shot": "simple_shot",
+    "segmentation": "segmentation",
+    "calibration": None,
+    "adversarial": None,
+}
+
 
 # HOW THE BACKBONE IS DETERMINED, and why it is not read from metadata.
 #
@@ -122,9 +208,21 @@ PUBLISHED_SOURCE = {PHIKONV2: "arXiv:2507.07860v3"}
 # keeping the per-backbone letters grouped above the bare phikon-v2 pair preserves that
 # property if a future run name ever drops the leading letter.
 #
-# There is deliberately no VIRCHOW2 key in PUBLISHED: this repo holds no transcribed
-# THUNDER leaderboard row for Virchow2, so it takes the same "NO published counterpart"
-# path Midnight takes, and its F1s are never diffed against phikon-v2's appendix.
+# PUBLISHED still holds only PHIKONV2, and that is now a TRANSCRIPTION gap, not an absence
+# in the literature. Waiv publish per-task THUNDER for every backbone here in
+# arXiv:2607.22861 Table 2 -- including Virchow2 and Midnight -- and all four of their tables
+# are transcribed in docs/waiv_published.json. Two things block a straight paste into
+# PUBLISHED, both real:
+#   1. PUBLISHED is keyed per DATASET (the 12+4 F1s from the phikon-v2 appendix, S37/S39/S50).
+#      Table 2 is per TASK -- one kNN/linear/few-shot/segmentation number per model, already
+#      averaged over the datasets. The two are not the same shape, and pasting task means into
+#      a per-dataset dict would silently compare an average against a single dataset.
+#   2. Table 2 scores 6 tasks; this script computes 4. Any mean built from it must exclude
+#      calibration and adversarial attack, which is a different quantity from Waiv's rank sum.
+# So the Delta-vs-Delta comparison lives in docs/RESULTS.md Sections 2 and 6, computed from
+# waiv_published.json at the task level where the shapes match. Do NOT add a VIRCHOW2 key
+# here until PUBLISHED grows a per-task variant; the "NO published counterpart" line this
+# script prints means "none transcribed IN THIS DICT", and docs/RESULTS.md says so explicitly.
 BACKBONE_RUN_PREFIXES = (
     ("mbase", MIDNIGHT),
     ("mft", MIDNIGHT),
@@ -203,6 +301,10 @@ def main() -> None:
                      + "; they cannot share one table. Pass --backbone if this is wrong.")
         backbone = next(iter(distinct)) if distinct else None
     pub_tbl: dict[str, dict[str, float]] = PUBLISHED.get(backbone or "", {})
+    # Waiv's per-task means are available for all three backbones we run, so this one is
+    # NOT gated the same way as pub_tbl -- a Midnight run gets a task-level cross-check even
+    # though it has no per-dataset row.
+    pub_task: dict[str, float] = PUBLISHED_TASKMEAN.get(backbone or "", {})
 
     res = Path(args.root) / "outputs" / "res"
     table: dict[str, dict[str, tuple]] = {}
@@ -294,17 +396,45 @@ def main() -> None:
         worst = max(ds_, key=abs)
         print(f"# cross-check {t}: n={len(ds_)} meanΔ={sum(ds_)/len(ds_):+.2f} "
               f"max|Δ|={worst:+.1f} vs {src_cite}")
+    if pub_task:
+        # Our side of this comparison is a mean over the datasets present in `table`, which
+        # is why n is printed: an n far below THUNDER's 12 (classification) or 4
+        # (segmentation) means the two means do not rest on the same support.
+        cite = PUBLISHED_TASKMEAN_SOURCE.get(backbone or "", "published")
+        print(f"# taskmean source: {cite} -- per-TASK means, NOT the per-dataset "
+              f"{PUBLISHED_SOURCE.get(backbone or '', 'THUNDER paper')} rows above")
+        for waiv_key, ours in WAIV_TASK_ALIAS.items():
+            pub = pub_task.get(waiv_key)
+            if pub is None:
+                continue
+            if ours is None:
+                print(f"# taskmean {waiv_key}: pub={pub:.1f} -- not computed by this script")
+                continue
+            vals = [table[ds][ours][0] * 100 for ds in table
+                    if ours in table[ds] and table[ds][ours][0] is not None]
+            if not vals:
+                print(f"# taskmean {waiv_key}: pub={pub:.1f} ours=-- (no rows)")
+                continue
+            ours_mean = sum(vals) / len(vals)
+            print(f"# taskmean {waiv_key}: n={len(vals)} ours={ours_mean:.1f} "
+                  f"pub={pub:.1f} \u0394={ours_mean - pub:+.1f}")
+
     if not pub_tbl:
         # Say it out loud. Silently dropping the columns would read as "the cross-check was
         # forgotten"; silently keeping them would be the bug this guard exists to stop.
         # Wording mirrors scripts/run_hest.py's own NO-published-counterpart note.
         if backbone:
-            print(f"# backbone={backbone} has NO published counterpart here -- this table is "
-                  "our own reference for")
-            print("# checkpoint-to-checkpoint retention only, so no published columns and no "
-                  "cross-check are")
-            print(f"# emitted. arXiv:2507.07860v3's rows in this script are "
-                  f"{PHIKONV2} and nothing else.")
+            print(f"# backbone={backbone} has NO PER-DATASET published counterpart -- the "
+                  "table above is our own")
+            print("# reference for checkpoint-to-checkpoint retention only, so no "
+                  "per-dataset published columns")
+            print(f"# and no per-dataset cross-check are emitted. arXiv:2507.07860v3's "
+                  f"rows in this script are")
+            print(f"# {PHIKONV2} and nothing else. The `# taskmean` lines above, when "
+                  "present, are a DIFFERENT")
+            print("# paper (Waiv, arXiv:2607.22861) at a DIFFERENT granularity (per-task "
+                  "means) -- do not read")
+            print("# them as the same cross-check.")
         else:
             print(f"# backbone UNKNOWN for run name(s) {', '.join(args.model)} -- no prefix in "
                   "BACKBONE_RUN_PREFIXES")
