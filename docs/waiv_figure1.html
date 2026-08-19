@@ -1,0 +1,601 @@
+<title>Waiv Figure 1</title>
+<style>
+/* ── CSS tokens: light (default) ── */
+:root {
+  --surface:      #fcfcfb;
+  --ink-primary:  #0b0b0b;
+  --ink-secondary:#52514e;
+  --ink-muted:    #898781;
+  --gridline:     #e1e0d9;
+  --baseline:     #c3c2b7;
+  --s1:           #2a78d6;   /* Waiv base */
+  --s2:           #eb6834;   /* Waiv fine-tuned */
+  --s3:           #1baf7a;   /* Ours */
+  --range-fill:   rgba(27,175,122,0.13);
+  --range-stroke: rgba(27,175,122,0.38);
+}
+/* dark via OS preference */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface:      #1a1a19;
+    --ink-primary:  #ffffff;
+    --ink-secondary:#c3c2b7;
+    --ink-muted:    #898781;
+    --gridline:     #2c2c2a;
+    --baseline:     #383835;
+    --s1:           #3987e5;
+    --s2:           #d95926;
+    --s3:           #199e70;
+    --range-fill:   rgba(25,158,112,0.15);
+    --range-stroke: rgba(25,158,112,0.40);
+  }
+}
+/* dark via data-theme toggle (wins over media query) */
+:root[data-theme="dark"] {
+  --surface:      #1a1a19;
+  --ink-primary:  #ffffff;
+  --ink-secondary:#c3c2b7;
+  --ink-muted:    #898781;
+  --gridline:     #2c2c2a;
+  --baseline:     #383835;
+  --s1:           #3987e5;
+  --s2:           #d95926;
+  --s3:           #199e70;
+  --range-fill:   rgba(25,158,112,0.15);
+  --range-stroke: rgba(25,158,112,0.40);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--surface);
+  color: var(--ink-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 28px 20px;
+}
+
+#wrap {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+/* ── header ── */
+.chart-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 3px 0;
+  color: var(--ink-primary);
+}
+.chart-subtitle {
+  font-size: 12.5px;
+  color: var(--ink-secondary);
+  margin: 0 0 14px 0;
+  line-height: 1.5;
+}
+
+/* ── legend ── */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-bottom: 14px;
+  align-items: center;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--ink-secondary);
+}
+.leg-swatch-circle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.leg-swatch-diamond {
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+.leg-swatch-open {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid;
+  background: transparent;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+.leg-swatch-range {
+  width: 18px;
+  height: 6px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── SVG chart CSS classes (colour tokens) ── */
+/* dots */
+.dot-base  { fill: var(--s1); stroke: var(--surface); stroke-width: 2; }
+.dot-ft    { fill: var(--s2); stroke: var(--surface); stroke-width: 2; }
+.dot-ours  { fill: var(--s3); stroke: var(--surface); stroke-width: 2; }
+.dot-scen-a{ fill: none;      stroke: var(--s3); stroke-width: 1.5; opacity: 0.45; }
+/* stems */
+.stem-base { stroke: var(--s1); stroke-width: 1.5; fill: none; }
+.stem-ft   { stroke: var(--s2); stroke-width: 1.5; fill: none; }
+.stem-ours { stroke: var(--s3); stroke-width: 1.5; fill: none; }
+/* grid / axes */
+.gridline  { stroke: var(--gridline); stroke-width: 1; fill: none; }
+.axis-line { stroke: var(--baseline); stroke-width: 1; fill: none; }
+/* range bar */
+.range-bar { fill: var(--range-fill); stroke: var(--range-stroke); stroke-width: 1; }
+/* text */
+.tick-text  { fill: var(--ink-muted);    font-size: 11px; font-family: system-ui,-apple-system,"Segoe UI",sans-serif; }
+.row-text   { fill: var(--ink-secondary);font-size: 11px; font-family: system-ui,-apple-system,"Segoe UI",sans-serif; }
+.label-text { fill: var(--ink-secondary);font-size: 11px; font-family: system-ui,-apple-system,"Segoe UI",sans-serif; font-weight:600; }
+.axis-label { fill: var(--ink-secondary);font-size: 11.5px;font-family: system-ui,-apple-system,"Segoe UI",sans-serif; }
+/* hit targets */
+.hit-row    { fill: transparent; cursor: default; }
+
+/* ── svg container ── */
+#fig {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  display: block;
+}
+
+/* ── captions ── */
+.captions {
+  margin-top: 14px;
+  border-top: 1px solid var(--gridline);
+  padding-top: 10px;
+}
+.caption-line {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  line-height: 1.6;
+  margin: 0 0 4px 0;
+}
+.caption-line strong { color: var(--ink-secondary); }
+
+/* ── table toggle ── */
+.table-toggle {
+  margin-top: 14px;
+  background: none;
+  border: 1px solid var(--baseline);
+  border-radius: 4px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-family: inherit;
+}
+.table-toggle:hover { background: var(--gridline); }
+
+/* ── data table ── */
+#tbl { margin-top: 14px; overflow-x: auto; display: none; }
+#tbl.open { display: block; }
+#tbl table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+#tbl th {
+  text-align: left;
+  border-bottom: 2px solid var(--baseline);
+  padding: 6px 8px;
+  color: var(--ink-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+#tbl td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--gridline);
+  color: var(--ink-primary);
+  white-space: nowrap;
+}
+#tbl tr:last-child td { border-bottom: none; }
+#tbl .s0-dot { color: var(--s1); }
+#tbl .s1-dot { color: var(--s2); }
+#tbl .s2-dot { color: var(--s3); }
+
+/* ── tooltip ── */
+#tip {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  padding: 10px 13px;
+  font-size: 12px;
+  color: var(--ink-primary);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.08s;
+  z-index: 999;
+  max-width: 270px;
+  line-height: 1.65;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  font-family: system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+#tip.vis { opacity: 1; }
+#tip .tip-name { font-weight: 600; margin-bottom: 3px; }
+#tip .tip-row  { color: var(--ink-secondary); }
+#tip .tip-warn { color: var(--ink-muted); font-style: italic; margin-top: 4px; }
+
+/* ── dark toggle button ── */
+#theme-btn {
+  position: fixed;
+  top: 14px; right: 14px;
+  background: none;
+  border: 1px solid var(--baseline);
+  border-radius: 4px;
+  padding: 4px 9px;
+  font-size: 12px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  z-index: 100;
+}
+#theme-btn:hover { background: var(--gridline); }
+</style>
+
+<button id="theme-btn" onclick="toggleTheme()" aria-label="Toggle dark/light mode">◑ Theme</button>
+
+<div id="wrap">
+  <h1 class="chart-title">Composite Benchmark Performance — Figure 1 Reproduction</h1>
+  <p class="chart-subtitle">
+    Waiv's composite score: <em>y = (58 − total rank) / 53</em>, where total = HEST + THUNDER + Patho-Bench rank.<br>
+    Our models: <em>y = (40 − total) / 38</em>, HEST + THUNDER only, renormalised (Patho-Bench is unmeasurable — see captions).
+  </p>
+
+  <!-- Legend -->
+  <div class="legend" role="list">
+    <div class="legend-item" role="listitem">
+      <span class="leg-swatch-circle" style="background:var(--s1)"></span>
+      Waiv base model
+    </div>
+    <div class="legend-item" role="listitem">
+      <span class="leg-swatch-circle" style="background:var(--s2)"></span>
+      Waiv fine-tuned
+    </div>
+    <div class="legend-item" role="listitem">
+      <span class="leg-swatch-diamond" style="background:var(--s3)"></span>
+      Ours — HEST + THUNDER only (◆)
+    </div>
+    <div class="legend-item" role="listitem">
+      <span class="leg-swatch-open" style="border-color:var(--s3)"></span>
+      Scenario A: inherited Patho-Bench rank (assumption)
+    </div>
+    <div class="legend-item" role="listitem">
+      <span class="leg-swatch-range" style="background:var(--range-fill);border:1px solid var(--range-stroke)"></span>
+      Scenario B: Patho-Bench best → worst bound
+    </div>
+  </div>
+
+  <!-- SVG chart (built by JS) -->
+  <div style="overflow-x:auto;">
+    <svg id="fig" role="img" aria-label="Ranked horizontal dot plot of 23 models by composite benchmark score; best at top, worst at bottom"></svg>
+  </div>
+
+  <!-- Captions -->
+  <div class="captions" role="note">
+    <p class="caption-line">
+      <strong>Patho-Bench limitation:</strong> Our models cannot be scored on Patho-Bench — Waiv's benchmark uses UNI2-h patch embeddings requiring ~7–8 TB of WSIs and a full extraction pass not available to us; their published figures have no traceable source table.
+    </p>
+    <p class="caption-line">
+      <strong>THUNDER note:</strong> Our THUNDER ranks use 4 shared tasks (kNN, linear, few-shot, segmentation) recomputed identically for all 21 models; Waiv's published ranks include 2 additional tasks (adversarial, calibration) that we do not run.
+    </p>
+    <p class="caption-line">
+      Scenario A (open circle) assumes our fine-tuned model inherits the base model's Patho-Bench rank — an explicit proxy, flagged.
+      Scenario B (shaded band) spans best-case (rank 1) to worst-case (rank 20) Patho-Bench bounds using Waiv's 3-component formula.
+    </p>
+  </div>
+
+  <!-- Table toggle -->
+  <button class="table-toggle" onclick="toggleTable()" aria-expanded="false" aria-controls="tbl">Show data table</button>
+  <div id="tbl" role="region" aria-label="Data table for all models"></div>
+</div>
+
+<!-- Tooltip -->
+<div id="tip" role="tooltip" aria-hidden="true"></div>
+
+<script>
+// ─── Data ────────────────────────────────────────────────────────────────────
+// Each row: {id, dn (display name for left axis), s (0=base,1=ft,2=ours),
+//            y, h (HEST rank), t (THUNDER rank), pb (Patho-Bench rank), tot,
+//            label (direct label string or null),
+//            rangeY [worst,best] for ours, scenA y for ours}
+// Sorted by y descending (ties broken as noted inline).
+
+const ROWS = [
+  // ── Waiv published models ──────────────────────────────────────────────────
+  {id:"uni2h_ft",    dn:"UNI2-h",         s:1, y:1.000000,  h:2,  t:1,  pb:2,  tot:5,  label:null},
+  {id:"mascaret_ft", dn:"Mascaret",        s:1, y:0.886792,  h:5,  t:5,  pb:1,  tot:11, label:"Mascaret (Waiv)"},
+  {id:"hopt0_ft",    dn:"H-Optimus-0",     s:1, y:0.849057,  h:1,  t:7,  pb:5,  tot:13, label:null},
+  {id:"v2_ft_waiv",  dn:"Virchow2",        s:1, y:0.754717,  h:8,  t:4,  pb:6,  tot:18, label:"Virchow2 ft (Waiv)"},
+  {id:"gbpfm_ft",    dn:"GenBio-PathFM",   s:1, y:0.754717,  h:4,  t:3,  pb:11, tot:18, label:null},
+  {id:"uni2h_base",  dn:"UNI2-h",          s:0, y:0.698113,  h:7,  t:2,  pb:12, tot:21, label:null},
+  {id:"aquavit_ft",  dn:"AquaViT",         s:1, y:0.641509,  h:11, t:10, pb:3,  tot:24, label:null},
+  // ── Our models (HEST+THUNDER, scenario c) ──────────────────────────────────
+  {id:"v2_ft_ours",  dn:"Virchow2 ft",     s:2, y:0.631579,  h:10, t:6,  pb:"—",tot:null, label:"Virchow2 ft (ours)",
+    rangeY:[0.4151,0.7736], scenA:0.5472},
+  {id:"mid_ft_ours", dn:"Midnight ft",     s:2, y:0.605263,  h:9,  t:8,  pb:"—",tot:null, label:"Midnight ft (ours)",
+    rangeY:[0.3962,0.7547], scenA:0.4906},
+  // ── Waiv continued ────────────────────────────────────────────────────────
+  {id:"gpg_ft",      dn:"Prov-GigaPath",   s:1, y:0.603774,  h:9,  t:9,  pb:8,  tot:26, label:null},
+  {id:"h0mini_ft",   dn:"H0-mini",         s:1, y:0.584906,  h:10, t:13, pb:4,  tot:27, label:null},
+  {id:"gbpfm_base",  dn:"GenBio-PathFM",   s:0, y:0.566038,  h:3,  t:6,  pb:19, tot:28, label:null},
+  {id:"aquavit_base",dn:"AquaViT",         s:0, y:0.509434,  h:12, t:10, pb:9,  tot:31, label:null},
+  {id:"h0mini_base", dn:"H0-mini",         s:0, y:0.471698,  h:14, t:12, pb:7,  tot:33, label:null},
+  {id:"v2_base",     dn:"Virchow2",        s:0, y:0.452830,  h:13, t:8,  pb:13, tot:34, label:null},
+  {id:"hopt0_base",  dn:"H-Optimus-0",     s:0, y:0.396226,  h:6,  t:14, pb:17, tot:37, label:null},
+  {id:"phaet_ft",    dn:"Phaet",           s:1, y:0.264151,  h:16, t:18, pb:10, tot:44, label:"Phaet (Waiv)"},
+  {id:"mid_base",    dn:"Midnight-12k",    s:0, y:0.245283,  h:15, t:15, pb:15, tot:45, label:null},
+  {id:"phikon_ft",   dn:"Phikon",          s:1, y:0.169811,  h:18, t:17, pb:14, tot:49, label:null},
+  {id:"gpg_base",    dn:"Prov-GigaPath",   s:0, y:0.169811,  h:17, t:16, pb:16, tot:49, label:null},
+  // ── Our models (continued) ────────────────────────────────────────────────
+  {id:"phv2_ft_ours",dn:"Phikon-v2 ft",   s:2, y:0.026316,  h:19, t:20, pb:"—",tot:null, label:"Phikon-v2 ft (ours)",
+    rangeY:[0.0, 0.3396], scenA:0.0189},
+  // ── Waiv base Phikon-v2 and Phikon ────────────────────────────────────────
+  {id:"phv2_base",   dn:"Phikon-v2",       s:0, y:0.018868,  h:19, t:20, pb:18, tot:57, label:null},
+  {id:"phikon_base", dn:"Phikon",          s:0, y:0.000000,  h:20, t:18, pb:20, tot:58, label:null},
+];
+
+// ─── SVG helpers ─────────────────────────────────────────────────────────────
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+  return e;
+}
+function txt(tag, attrs, content) {
+  const e = el(tag, attrs);
+  e.textContent = content;
+  return e;
+}
+
+// ─── Build chart ─────────────────────────────────────────────────────────────
+function buildChart() {
+  const svg = document.getElementById('fig');
+  svg.innerHTML = '';
+
+  // Layout
+  const W     = 870;
+  const LEFT  = 186;   // left of plot (right edge of name labels)
+  const RIGHT = 716;   // right edge of plot
+  const PW    = RIGHT - LEFT;   // plot width = 530
+  const TOP   = 44;    // top of plot rows
+  const RH    = 28;    // row height
+  const N     = ROWS.length;
+  const H     = TOP + N * RH + 42;  // total SVG height
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  // x-coordinate for a score value (clipped to 0 on left)
+  const xS = v => LEFT + Math.max(0, Math.min(1, v)) * PW;
+  // y-center of row i
+  const yR = i => TOP + i * RH + RH / 2;
+
+  // Gridlines + tick labels
+  const TICKS = [0, 0.25, 0.5, 0.75, 1.0];
+  for (const tick of TICKS) {
+    const x = LEFT + tick * PW;
+    if (tick === 0) {
+      // Baseline axis
+      svg.appendChild(el('line', {class:'axis-line', x1:x, y1:TOP, x2:x, y2:TOP+N*RH}));
+    } else {
+      svg.appendChild(el('line', {class:'gridline', x1:x, y1:TOP, x2:x, y2:TOP+N*RH}));
+    }
+    const label = tick === 1.0 ? '1.0' : tick === 0 ? '0' : tick.toFixed(2);
+    svg.appendChild(txt('text', {class:'tick-text', x:x, y:TOP+N*RH+16, 'text-anchor':'middle'}, label));
+  }
+
+  // Bottom axis line
+  svg.appendChild(el('line', {class:'axis-line', x1:LEFT, y1:TOP+N*RH, x2:RIGHT, y2:TOP+N*RH}));
+
+  // X-axis label
+  svg.appendChild(txt('text', {
+    class:'axis-label', x:(LEFT+RIGHT)/2, y:TOP+N*RH+34, 'text-anchor':'middle'
+  }, 'Composite score (higher = better rank)'));
+
+  // Draw rows
+  ROWS.forEach((row, i) => {
+    const yC   = yR(i);
+    const xDot = xS(row.y);
+    const cls  = row.s === 0 ? 'base' : row.s === 1 ? 'ft' : 'ours';
+    const isOurs = row.s === 2;
+
+    // Row name label (left side)
+    const suffix = row.s === 0 ? ' (base)' : row.s === 1 ? ' (ft)' : ' (ours)';
+    svg.appendChild(txt('text', {
+      class: 'row-text',
+      x: LEFT - 7,
+      y: yC + 4,
+      'text-anchor': 'end'
+    }, row.dn + suffix));
+
+    // Range bar (scenario B, ours only)
+    if (isOurs && row.rangeY) {
+      const xW = xS(row.rangeY[0]);
+      const xB = xS(row.rangeY[1]);
+      svg.appendChild(el('rect', {
+        class: 'range-bar',
+        x: xW, y: yC - 4,
+        width: Math.max(0, xB - xW),
+        height: 8, rx: 2
+      }));
+    }
+
+    // Stem
+    svg.appendChild(el('line', {
+      class: `stem-${cls}`,
+      x1: LEFT, y1: yC, x2: xDot, y2: yC
+    }));
+
+    // Scenario A marker (ours only, open circle, subordinate)
+    if (isOurs && row.scenA !== undefined) {
+      const xA = xS(row.scenA);
+      svg.appendChild(el('circle', {
+        class: 'dot-scen-a',
+        cx: xA, cy: yC, r: 4
+      }));
+    }
+
+    // Main marker: circle (base/ft) or diamond (ours)
+    if (!isOurs) {
+      svg.appendChild(el('circle', {
+        class: `dot-${cls}`,
+        cx: xDot, cy: yC, r: 5
+      }));
+    } else {
+      const s = 6.5; // half-diagonal of diamond
+      svg.appendChild(el('polygon', {
+        class: `dot-${cls}`,
+        points: `${xDot},${yC-s} ${xDot+s},${yC} ${xDot},${yC+s} ${xDot-s},${yC}`
+      }));
+    }
+
+    // Direct label (6 key models)
+    if (row.label) {
+      // Place label to right of dot; for very high-scoring models offset slightly left
+      const lx = xDot + 10;
+      // Nudge vertically for very close adjacent labels (rows 7 & 8 — our models)
+      let dy = 4;
+      if (row.id === 'v2_ft_ours')  dy = -1;   // Virchow2 ft ours, slightly up
+      if (row.id === 'mid_ft_ours') dy = 10;   // Midnight ft ours, slightly down
+      svg.appendChild(txt('text', {
+        class: 'label-text',
+        x: lx, y: yC + dy,
+        'text-anchor': 'start'
+      }, row.label));
+    }
+
+    // Invisible hit-target rect for hover/tooltip
+    const hit = el('rect', {
+      class: 'hit-row',
+      x: 0, y: TOP + i * RH,
+      width: W, height: RH
+    });
+    hit.addEventListener('mouseenter', ev => showTip(ev, row));
+    hit.addEventListener('mouseleave', hideTip);
+    svg.appendChild(hit);
+  });
+}
+
+// ─── Tooltip ─────────────────────────────────────────────────────────────────
+const tip = document.getElementById('tip');
+
+function seriesLabel(s) {
+  return s === 0 ? 'Waiv base model' : s === 1 ? 'Waiv fine-tuned' : 'Ours (HEST+THUNDER only)';
+}
+
+function showTip(ev, row) {
+  const isOurs = row.s === 2;
+  let html = `<div class="tip-name">${row.dn}${row.s===0?' (base)':row.s===1?' (ft)':' (ours)'}</div>`;
+  html += `<div class="tip-row">Series: ${seriesLabel(row.s)}</div>`;
+  html += `<div class="tip-row">HEST rank: ${row.h}/21</div>`;
+  html += `<div class="tip-row">THUNDER rank: ${row.t}/21${isOurs?' (4 tasks)':''}</div>`;
+  if (isOurs) {
+    html += `<div class="tip-row">Patho-Bench rank: not measurable</div>`;
+    html += `<div class="tip-row">Score (scenario c, 2-component): ${row.y.toFixed(3)}</div>`;
+    if (row.rangeY)
+      html += `<div class="tip-row">Scenario B range: ${row.rangeY[0].toFixed(3)} – ${row.rangeY[1].toFixed(3)}</div>`;
+    if (row.scenA !== undefined)
+      html += `<div class="tip-row">Scenario A (inherited PB rank): ${row.scenA.toFixed(3)}</div>`;
+    html += `<div class="tip-warn">⚠ Not directly comparable to Waiv's 3-component y.</div>`;
+  } else {
+    html += `<div class="tip-row">Patho-Bench rank: ${row.pb}/20</div>`;
+    html += `<div class="tip-row">Total rank sum: ${row.tot}</div>`;
+    html += `<div class="tip-row">Score y: ${row.y.toFixed(3)}</div>`;
+  }
+  tip.innerHTML = html;
+  positionTip(ev);
+  tip.classList.add('vis');
+  tip.setAttribute('aria-hidden','false');
+}
+
+function positionTip(ev) {
+  const margin = 12;
+  const tw = 272, th = 150;
+  let lx = ev.clientX + margin;
+  let ty = ev.clientY + margin;
+  if (lx + tw > window.innerWidth)  lx = ev.clientX - tw - margin;
+  if (ty + th > window.innerHeight) ty = ev.clientY - th - margin;
+  tip.style.left = lx + 'px';
+  tip.style.top  = ty + 'px';
+}
+
+function hideTip() {
+  tip.classList.remove('vis');
+  tip.setAttribute('aria-hidden','true');
+}
+
+document.addEventListener('mousemove', ev => {
+  if (tip.classList.contains('vis')) positionTip(ev);
+});
+
+// ─── Data table ──────────────────────────────────────────────────────────────
+function buildTable() {
+  const div = document.getElementById('tbl');
+  const dotCls = r => r.s===0?'s0-dot':r.s===1?'s1-dot':'s2-dot';
+  const dotChar = r => r.s===2?'◆':'●';
+  let html = `<table>
+<thead><tr>
+  <th></th><th>Model</th><th>Series</th>
+  <th>HEST rank</th><th>THUNDER rank</th><th>Patho-Bench rank</th>
+  <th>Total</th><th>Score y</th><th>Notes</th>
+</tr></thead><tbody>`;
+  ROWS.forEach(row => {
+    const isOurs = row.s === 2;
+    html += `<tr>
+      <td class="${dotCls(row)}">${dotChar(row)}</td>
+      <td>${row.dn}${row.s===0?' (base)':row.s===1?' (ft)':' (ours)'}</td>
+      <td>${seriesLabel(row.s)}</td>
+      <td>${row.h}/21</td>
+      <td>${row.t}/21${isOurs?'*':''}</td>
+      <td>${isOurs?'not measurable':row.pb+'/20'}</td>
+      <td>${row.tot !== null ? row.tot : '39† / 17† / 16†'}</td>
+      <td>${row.y.toFixed(4)}</td>
+      <td>${isOurs?'HEST+THUNDER only; renorm. (40−total)/38':''}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  html += `<p style="font-size:11px;color:var(--ink-muted);margin-top:8px">
+    * Our THUNDER ranks: 4 tasks (kNN, linear, few-shot, segmentation).
+    † Two-component totals for our three models: Phikon-v2 ft=39, Midnight ft=17, Virchow2 ft=16.
+  </p>`;
+  div.innerHTML = html;
+}
+
+// ─── Toggle table ─────────────────────────────────────────────────────────────
+function toggleTable() {
+  const div = document.getElementById('tbl');
+  const btn = document.querySelector('.table-toggle');
+  if (!div.dataset.built) { buildTable(); div.dataset.built = '1'; }
+  const open = div.classList.toggle('open');
+  btn.textContent = open ? 'Hide data table' : 'Show data table';
+  btn.setAttribute('aria-expanded', open);
+}
+
+// ─── Theme toggle ────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const root = document.documentElement;
+  const cur = root.getAttribute('data-theme');
+  if (cur === 'dark') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', 'dark');
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+buildChart();
+// Rebuild on window resize for responsiveness
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(buildChart, 150);
+});
+</script>

@@ -54,17 +54,40 @@ deltas are meaningful rather than merely plausible.
 | LoRA rank 32 | **0.8080** | 1000 |
 | full FT | 0.8007 | 500 |
 
-### Third backbone — `paige-ai/Virchow2`, base only
+### Third backbone — `paige-ai/Virchow2`
 
 | dataset | camelyon | tolkach_esca | tcga | **Avg** | Waiv T1 |
 |---|---|---|---|---|---|
 | our base RI | 0.7989 | 0.9541 | 0.8218 | **0.8582** | 0.858 |
+| ours step 250 | **0.9006** | **0.9673** | **0.8425** | **0.9035** | 0.918 |
+
+| benchmark | base ours | fine-tuned ours | Waiv Virchow2 |
+|---|---|---|---|
+| PathoROB Avg RI ↑ | 0.8582 | **0.9035** | 0.918 |
+| THUNDER mean Δ over 4 tasks ↑ | — | **+1.42** | +0.62 |
+| HEST Avg Pearson ↑ | 0.4032 | **0.4083** | 0.4135 |
 
 PathoROB is the primary axis and is never seen in training. THUNDER covers all 16 of Waiv's
-datasets; we match or beat them on 7 of 8 model × task pairs, the exception being Midnight
-segmentation. Full FT did not beat LoRA. Virchow2 (timm ViT-H, 4 register tokens) reproduces
-its published base to +0.0002, which is what validates the pipeline on a backbone it was not
-written against.
+datasets on all three backbones; we match or beat them on 11 of 12 comparable model × task
+pairs, the exception being Midnight segmentation. Full FT did not beat LoRA. Virchow2 (timm ViT-H, 4
+register tokens) reproduces its published base to +0.0002, which is what validates the
+pipeline on a backbone it was not written against, and then gains +0.0453 RI (~76% of the
+headroom to Waiv's 0.918).
+
+Across three backbones the result is consistent: **robustness reproduces (3/3), classification
+performance improves (32 of 36 model × dataset pairs, sign test p ≈ 2×10⁻⁶), segmentation does
+not (3 of 12, p ≈ 0.15), and retention does not (HEST +0.0047 / +0.0011 / +0.0051 against
+Waiv's +0.0196 / +0.0215 / +0.0101)**. The gain shrinks as the base encoder gets stronger —
+gap-closed 101% → 90% → 76% as base RI goes 0.469 → 0.759 → 0.858.
+
+**How we compare to Waiv overall.** Their published numbers are transcribed in
+[`docs/waiv_published.json`](docs/waiv_published.json) (arXiv:2607.22861, Tables 1–4). Placing
+our runs on their Figure 1 composite rank axis — the one their headline figure plots — puts us
+within **1–2 rank points** of them on every backbone: total 45 vs their 44 (phikon-v2), 12 vs 11
+(Midnight), 20 vs 18 (Virchow2). We are *ahead* on THUNDER deltas and *behind* on HEST deltas,
+and those largely cancel. Our absolute levels run ~0.2–1.0 points below theirs on THUNDER
+because our base reproductions start low, not because the recipe underperforms. We do not run
+Patho-Bench, so that rank is assumed equal to theirs in the placement above.
 
 **Retention is the axis that does not reproduce**, and four experiments say it is not a tuning
 problem: it survives every checkpoint, LoRA ranks 8–128 (both axes flat within one arm's own

@@ -1,0 +1,841 @@
+{
+  "_generated_by": "scripts/waiv_figure1.py",
+  "_date": "2026-08-18",
+  "_note": "thunder_rank in waiv_table is Waiv's 6-task rank (published). thunder_rank_4task is recomputed from their published per-task values for like-for-like comparison. our thunder ranks are also on 4 tasks. Patho-Bench is UNMEASURABLE \u2014 see scenarios.",
+  "caveats": {
+    "thunder_dataset_coverage": "Our THUNDER classification means are computed over 12/16 classification datasets (the 4 missing are not present in our outputs dir). This makes our absolute means systematically 1-4 points lower than a full-16 run. Rank comparisons are therefore conservative: our models would rank the same or higher on a full 16-dataset run.",
+    "thunder_rank_sum_not_reproducible": "Waiv's published thunder_rank_sum cannot be reproduced from the 6 per-task values in waiv_published.json under any combination of directionality or tie-breaking (brute-force: best 4/20 match). The per-task ordering is consistent with adversarial and calibration being lower-is-better (Spearman ~0.99), but the absolute sums differ. The 4-task like-for-like reranking uses the published per-task values directly and applies consistent rules to both their 20 and our models.",
+    "midnight_virchow2_segmentation": "Midnight and Virchow2 clsmean runs crash the ViT-g segmentation decoder. Segmentation scores for these models come from the sibling _cls run names (mft500_cls, vft250_cls), which ARE run and scored \u2014 see thunder_key seg field.",
+    "hest_protocol": "phikon-v2 HEST uses cls pooling \u2014 exact match to Waiv's protocol. Virchow2 HEST uses clsmean \u2014 within 0.00013 of Waiv's published base. Midnight HEST uses clsmean \u2014 +0.0169 above Waiv's published midnight base (known open discrepancy, documented)."
+  },
+  "figure1_y_formula": {
+    "expr": "(58 - total) / 53",
+    "worst_total": 58,
+    "best_total": 5
+  },
+  "thunder_shared_with_us": [
+    "knn",
+    "linear",
+    "few_shot",
+    "segmentation"
+  ],
+  "verification": {
+    "all_totals_match": true,
+    "n_models": 20,
+    "mismatches": [],
+    "thunder_rank_sum_reproducible": false,
+    "thunder_rank_sum_note": "hest_rank + thunder_rank + pathobench_rank == total for all 20 models (verified). However, thunder_rank_sum itself cannot be rebuilt from the 6 per-task values in the JSON \u2014 the absolute sums disagree. The ranks are correct; the input sums are opaque."
+  },
+  "waiv_table": [
+    {
+      "name": "UNI2-h",
+      "variant": "base",
+      "ri_avg": 0.757,
+      "hest_avg": 0.4141,
+      "hest_rank": 7,
+      "thunder_rank": 2,
+      "thunder_rank_sum": 26,
+      "pathobench": 55.6,
+      "pathobench_rank": 12,
+      "total": 21,
+      "computed_total": 21,
+      "total_ok": true,
+      "figure1_y": 0.698113,
+      "thunder_tasks": {
+        "knn": 83.3,
+        "linear": 86.3,
+        "few_shot": 79.8,
+        "segmentation": 68.1,
+        "calibration": 3.7,
+        "adversarial": 31.0
+      },
+      "thunder_4task_mean": 79.375
+    },
+    {
+      "name": "UNI2-h",
+      "variant": "fine-tuned",
+      "ri_avg": 0.908,
+      "hest_avg": 0.429,
+      "hest_rank": 2,
+      "thunder_rank": 1,
+      "thunder_rank_sum": 20,
+      "pathobench": 57.3,
+      "pathobench_rank": 2,
+      "total": 5,
+      "computed_total": 5,
+      "total_ok": true,
+      "figure1_y": 1.0,
+      "thunder_tasks": {
+        "knn": 83.4,
+        "linear": 85.5,
+        "few_shot": 79.5,
+        "segmentation": 67.6,
+        "calibration": 2.5,
+        "adversarial": 24.1
+      },
+      "thunder_4task_mean": 79.0
+    },
+    {
+      "name": "GenBio-PathFM",
+      "variant": "base",
+      "ri_avg": 0.886,
+      "hest_avg": 0.4197,
+      "hest_rank": 3,
+      "thunder_rank": 6,
+      "thunder_rank_sum": 40,
+      "pathobench": 54.0,
+      "pathobench_rank": 19,
+      "total": 28,
+      "computed_total": 28,
+      "total_ok": true,
+      "figure1_y": 0.566038,
+      "thunder_tasks": {
+        "knn": 83.5,
+        "linear": 85.1,
+        "few_shot": 79.4,
+        "segmentation": 67.2,
+        "calibration": 3.7,
+        "adversarial": 32.7
+      },
+      "thunder_4task_mean": 78.8
+    },
+    {
+      "name": "GenBio-PathFM",
+      "variant": "fine-tuned",
+      "ri_avg": 0.918,
+      "hest_avg": 0.4178,
+      "hest_rank": 4,
+      "thunder_rank": 3,
+      "thunder_rank_sum": 29,
+      "pathobench": 55.8,
+      "pathobench_rank": 11,
+      "total": 18,
+      "computed_total": 18,
+      "total_ok": true,
+      "figure1_y": 0.754717,
+      "thunder_tasks": {
+        "knn": 83.9,
+        "linear": 85.3,
+        "few_shot": 79.6,
+        "segmentation": 66.8,
+        "calibration": 4.0,
+        "adversarial": 26.2
+      },
+      "thunder_4task_mean": 78.9
+    },
+    {
+      "name": "Virchow2",
+      "variant": "base",
+      "ri_avg": 0.858,
+      "hest_avg": 0.4034,
+      "hest_rank": 13,
+      "thunder_rank": 8,
+      "thunder_rank_sum": 43,
+      "pathobench": 55.4,
+      "pathobench_rank": 13,
+      "total": 34,
+      "computed_total": 34,
+      "total_ok": true,
+      "figure1_y": 0.45283,
+      "thunder_tasks": {
+        "knn": 82.9,
+        "linear": 84.8,
+        "few_shot": 73.9,
+        "segmentation": 68.2,
+        "calibration": 3.6,
+        "adversarial": 31.1
+      },
+      "thunder_4task_mean": 77.45
+    },
+    {
+      "name": "Virchow2",
+      "variant": "fine-tuned",
+      "ri_avg": 0.918,
+      "hest_avg": 0.4135,
+      "hest_rank": 8,
+      "thunder_rank": 4,
+      "thunder_rank_sum": 32,
+      "pathobench": 56.8,
+      "pathobench_rank": 6,
+      "total": 18,
+      "computed_total": 18,
+      "total_ok": true,
+      "figure1_y": 0.754717,
+      "thunder_tasks": {
+        "knn": 82.6,
+        "linear": 85.1,
+        "few_shot": 76.6,
+        "segmentation": 68.0,
+        "calibration": 4.2,
+        "adversarial": 7.7
+      },
+      "thunder_4task_mean": 78.075
+    },
+    {
+      "name": "Midnight-12k",
+      "variant": "base",
+      "ri_avg": 0.759,
+      "hest_avg": 0.3952,
+      "hest_rank": 15,
+      "thunder_rank": 15,
+      "thunder_rank_sum": 70,
+      "pathobench": 54.6,
+      "pathobench_rank": 15,
+      "total": 45,
+      "computed_total": 45,
+      "total_ok": true,
+      "figure1_y": 0.245283,
+      "thunder_tasks": {
+        "knn": 80.0,
+        "linear": 84.4,
+        "few_shot": 71.5,
+        "segmentation": 66.0,
+        "calibration": 2.4,
+        "adversarial": 35.7
+      },
+      "thunder_4task_mean": 75.475
+    },
+    {
+      "name": "Mascaret",
+      "variant": "fine-tuned",
+      "ri_avg": 0.924,
+      "hest_avg": 0.4167,
+      "hest_rank": 5,
+      "thunder_rank": 5,
+      "thunder_rank_sum": 34,
+      "pathobench": 58.0,
+      "pathobench_rank": 1,
+      "total": 11,
+      "computed_total": 11,
+      "total_ok": true,
+      "figure1_y": 0.886792,
+      "thunder_tasks": {
+        "knn": 81.7,
+        "linear": 84.6,
+        "few_shot": 75.2,
+        "segmentation": 67.6,
+        "calibration": 2.3,
+        "adversarial": 23.2
+      },
+      "thunder_4task_mean": 77.275
+    },
+    {
+      "name": "H-Optimus-0",
+      "variant": "base",
+      "ri_avg": 0.811,
+      "hest_avg": 0.415,
+      "hest_rank": 6,
+      "thunder_rank": 14,
+      "thunder_rank_sum": 68,
+      "pathobench": 54.4,
+      "pathobench_rank": 17,
+      "total": 37,
+      "computed_total": 37,
+      "total_ok": true,
+      "figure1_y": 0.396226,
+      "thunder_tasks": {
+        "knn": 81.5,
+        "linear": 83.7,
+        "few_shot": 76.2,
+        "segmentation": 63.5,
+        "calibration": 3.6,
+        "adversarial": 42.1
+      },
+      "thunder_4task_mean": 76.225
+    },
+    {
+      "name": "H-Optimus-0",
+      "variant": "fine-tuned",
+      "ri_avg": 0.917,
+      "hest_avg": 0.429,
+      "hest_rank": 1,
+      "thunder_rank": 7,
+      "thunder_rank_sum": 41,
+      "pathobench": 56.8,
+      "pathobench_rank": 5,
+      "total": 13,
+      "computed_total": 13,
+      "total_ok": true,
+      "figure1_y": 0.849057,
+      "thunder_tasks": {
+        "knn": 81.9,
+        "linear": 84.0,
+        "few_shot": 77.4,
+        "segmentation": 68.1,
+        "calibration": 3.2,
+        "adversarial": 32.4
+      },
+      "thunder_4task_mean": 77.85
+    },
+    {
+      "name": "AquaViT",
+      "variant": "base",
+      "ri_avg": 0.793,
+      "hest_avg": 0.4045,
+      "hest_rank": 12,
+      "thunder_rank": 10,
+      "thunder_rank_sum": 60,
+      "pathobench": 56.2,
+      "pathobench_rank": 9,
+      "total": 31,
+      "computed_total": 31,
+      "total_ok": true,
+      "figure1_y": 0.509434,
+      "thunder_tasks": {
+        "knn": 80.5,
+        "linear": 82.7,
+        "few_shot": 75.7,
+        "segmentation": 68.0,
+        "calibration": 5.2,
+        "adversarial": 32.0
+      },
+      "thunder_4task_mean": 76.725
+    },
+    {
+      "name": "AquaViT",
+      "variant": "fine-tuned",
+      "ri_avg": 0.875,
+      "hest_avg": 0.4064,
+      "hest_rank": 11,
+      "thunder_rank": 10,
+      "thunder_rank_sum": 60,
+      "pathobench": 57.1,
+      "pathobench_rank": 3,
+      "total": 24,
+      "computed_total": 24,
+      "total_ok": true,
+      "figure1_y": 0.641509,
+      "thunder_tasks": {
+        "knn": 80.1,
+        "linear": 82.4,
+        "few_shot": 75.1,
+        "segmentation": 68.3,
+        "calibration": 5.3,
+        "adversarial": 29.3
+      },
+      "thunder_4task_mean": 76.475
+    },
+    {
+      "name": "Prov-GigaPath",
+      "variant": "base",
+      "ri_avg": 0.622,
+      "hest_avg": 0.3875,
+      "hest_rank": 17,
+      "thunder_rank": 16,
+      "thunder_rank_sum": 78,
+      "pathobench": 54.5,
+      "pathobench_rank": 16,
+      "total": 49,
+      "computed_total": 49,
+      "total_ok": true,
+      "figure1_y": 0.169811,
+      "thunder_tasks": {
+        "knn": 79.4,
+        "linear": 82.4,
+        "few_shot": 75.5,
+        "segmentation": 61.1,
+        "calibration": 3.4,
+        "adversarial": 40.6
+      },
+      "thunder_4task_mean": 74.6
+    },
+    {
+      "name": "Prov-GigaPath",
+      "variant": "fine-tuned",
+      "ri_avg": 0.885,
+      "hest_avg": 0.4098,
+      "hest_rank": 9,
+      "thunder_rank": 9,
+      "thunder_rank_sum": 52,
+      "pathobench": 56.7,
+      "pathobench_rank": 8,
+      "total": 26,
+      "computed_total": 26,
+      "total_ok": true,
+      "figure1_y": 0.603774,
+      "thunder_tasks": {
+        "knn": 80.8,
+        "linear": 83.0,
+        "few_shot": 76.7,
+        "segmentation": 65.8,
+        "calibration": 3.2,
+        "adversarial": 28.6
+      },
+      "thunder_4task_mean": 76.575
+    },
+    {
+      "name": "H0-mini",
+      "variant": "base",
+      "ri_avg": 0.814,
+      "hest_avg": 0.3958,
+      "hest_rank": 14,
+      "thunder_rank": 12,
+      "thunder_rank_sum": 61,
+      "pathobench": 56.7,
+      "pathobench_rank": 7,
+      "total": 33,
+      "computed_total": 33,
+      "total_ok": true,
+      "figure1_y": 0.471698,
+      "thunder_tasks": {
+        "knn": 79.7,
+        "linear": 83.5,
+        "few_shot": 75.0,
+        "segmentation": 67.7,
+        "calibration": 3.0,
+        "adversarial": 33.7
+      },
+      "thunder_4task_mean": 76.475
+    },
+    {
+      "name": "H0-mini",
+      "variant": "fine-tuned",
+      "ri_avg": 0.868,
+      "hest_avg": 0.4076,
+      "hest_rank": 10,
+      "thunder_rank": 13,
+      "thunder_rank_sum": 65,
+      "pathobench": 56.9,
+      "pathobench_rank": 4,
+      "total": 27,
+      "computed_total": 27,
+      "total_ok": true,
+      "figure1_y": 0.584906,
+      "thunder_tasks": {
+        "knn": 78.7,
+        "linear": 82.4,
+        "few_shot": 73.8,
+        "segmentation": 67.5,
+        "calibration": 3.7,
+        "adversarial": 27.6
+      },
+      "thunder_4task_mean": 75.6
+    },
+    {
+      "name": "Phikon-v2",
+      "variant": "base",
+      "ri_avg": 0.469,
+      "hest_avg": 0.3747,
+      "hest_rank": 19,
+      "thunder_rank": 20,
+      "thunder_rank_sum": 97,
+      "pathobench": 54.1,
+      "pathobench_rank": 18,
+      "total": 57,
+      "computed_total": 57,
+      "total_ok": true,
+      "figure1_y": 0.018868,
+      "thunder_tasks": {
+        "knn": 74.0,
+        "linear": 79.3,
+        "few_shot": 71.8,
+        "segmentation": 66.5,
+        "calibration": 4.5,
+        "adversarial": 41.9
+      },
+      "thunder_4task_mean": 72.9
+    },
+    {
+      "name": "Phaet",
+      "variant": "fine-tuned",
+      "ri_avg": 0.806,
+      "hest_avg": 0.3943,
+      "hest_rank": 16,
+      "thunder_rank": 18,
+      "thunder_rank_sum": 83,
+      "pathobench": 55.8,
+      "pathobench_rank": 10,
+      "total": 44,
+      "computed_total": 44,
+      "total_ok": true,
+      "figure1_y": 0.264151,
+      "thunder_tasks": {
+        "knn": 77.7,
+        "linear": 80.7,
+        "few_shot": 73.3,
+        "segmentation": 65.3,
+        "calibration": 3.0,
+        "adversarial": 38.8
+      },
+      "thunder_4task_mean": 74.25
+    },
+    {
+      "name": "Phikon",
+      "variant": "base",
+      "ri_avg": 0.476,
+      "hest_avg": 0.366,
+      "hest_rank": 20,
+      "thunder_rank": 18,
+      "thunder_rank_sum": 83,
+      "pathobench": 53.3,
+      "pathobench_rank": 20,
+      "total": 58,
+      "computed_total": 58,
+      "total_ok": true,
+      "figure1_y": 0.0,
+      "thunder_tasks": {
+        "knn": 75.7,
+        "linear": 80.2,
+        "few_shot": 73.6,
+        "segmentation": 66.8,
+        "calibration": 5.1,
+        "adversarial": 32.2
+      },
+      "thunder_4task_mean": 74.075
+    },
+    {
+      "name": "Phikon",
+      "variant": "fine-tuned",
+      "ri_avg": 0.63,
+      "hest_avg": 0.3832,
+      "hest_rank": 18,
+      "thunder_rank": 17,
+      "thunder_rank_sum": 81,
+      "pathobench": 55.0,
+      "pathobench_rank": 14,
+      "total": 49,
+      "computed_total": 49,
+      "total_ok": true,
+      "figure1_y": 0.169811,
+      "thunder_tasks": {
+        "knn": 76.1,
+        "linear": 79.8,
+        "few_shot": 73.2,
+        "segmentation": 66.6,
+        "calibration": 5.4,
+        "adversarial": 24.5
+      },
+      "thunder_4task_mean": 73.925
+    }
+  ],
+  "our_models": [
+    {
+      "label": "phikon_ft",
+      "display_name": "Phikon-v2 fine-tuned (ours)",
+      "base_model": "Phikon-v2",
+      "ri": {
+        "recon_run": "phikon_ft_recon",
+        "best_checkpoint": {
+          "model": "waiv_waiv_real_369043_s0001000",
+          "step": 1000,
+          "avg": 0.808,
+          "camelyon": 0.7169,
+          "tolkach_esca": 0.9279,
+          "tcga": 0.7791,
+          "provenance": "/admin/home/ryan.kim/waiv/runs/waiv-real-369043/ri_curve.json"
+        },
+        "gem_run": "phikon_gem",
+        "gem_best_checkpoint": {
+          "model": "waiv_finalgem_phikon_384585_s0001000",
+          "step": 1000,
+          "avg": 0.8219,
+          "camelyon": 0.7559,
+          "tolkach_esca": 0.933,
+          "tcga": 0.777,
+          "provenance": "/admin/home/ryan.kim/waiv/runs/finalgem-phikon-384585/ri_curve.json"
+        }
+      },
+      "hest": {
+        "avg": 0.3794,
+        "per_cancer": {
+          "IDC": 0.5476,
+          "PRAD": 0.3268,
+          "PAAD": 0.4627,
+          "SKCM": 0.5813,
+          "COAD": 0.2907,
+          "READ": 0.1455,
+          "CCRCC": 0.2681,
+          "LUNG": 0.5316,
+          "LYMPH_IDC": 0.26
+        },
+        "rank_in_21": 19,
+        "pooling_note": "cls \u2014 matches Waiv exactly for phikon-v2",
+        "provenance": "/admin/home/ryan.kim/waiv/results_backup/hest_work_results/ft1000_cls_summary.json"
+      },
+      "thunder_4task": {
+        "tasks": {
+          "knn": {
+            "mean": 75.203,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/ft1000_cls/<ds>/<task>/frozen/outputs.json"
+          },
+          "linear": {
+            "mean": 79.236,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/ft1000_cls/<ds>/<task>/frozen/outputs.json"
+          },
+          "few_shot": {
+            "mean": 70.988,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/ft1000_cls/<ds>/<task>/frozen/outputs.json"
+          },
+          "segmentation": {
+            "mean": 67.607,
+            "n_cls": 0,
+            "n_seg": 4,
+            "provenance": "THUNDER_ROOT/ft1000_cls/<ds>/<task>/frozen/outputs.json"
+          }
+        },
+        "mean": 73.258,
+        "rank_in_21": 20,
+        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Waiv's 6-task thunder_rank",
+        "segmentation_pooling_note": "cls \u2014 same as classification"
+      },
+      "pathobench": {
+        "status": "UNMEASURABLE",
+        "reason": "Waiv's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
+        "base_model_rank": 18
+      },
+      "scenarios": {
+        "a_pathobench_inherited": {
+          "assumption": "Our fine-tuned model keeps base model's pathobench_rank=18 (explicit proxy, FLAGGED)",
+          "hest_rank": 19,
+          "thunder_rank_4task": 20,
+          "pathobench_rank_assumed": 18,
+          "total": 57,
+          "figure1_y": 0.0189
+        },
+        "b_pathobench_bounds": {
+          "note": "Bounds using rank 1 (best) and rank 20 (worst) for Patho-Bench",
+          "best_total": 40,
+          "best_y": 0.3396,
+          "worst_total": 59,
+          "worst_y": -0.0189
+        },
+        "c_two_component": {
+          "note": "HEST+THUNDER only, no Patho-Bench. Renormalized: (40-total)/38 where best=2, worst=40",
+          "hest_rank": 19,
+          "thunder_rank_4task": 20,
+          "two_comp_total": 39,
+          "two_comp_y": 0.0263
+        }
+      }
+    },
+    {
+      "label": "midnight_ft",
+      "display_name": "Midnight-12k fine-tuned (ours)",
+      "base_model": "Midnight-12k",
+      "ri": {
+        "recon_run": "midnight_ft_recon",
+        "best_checkpoint": {
+          "model": "waiv_waiv_midnight_369159_s0000500",
+          "step": 500,
+          "avg": 0.908,
+          "camelyon": 0.8844,
+          "tolkach_esca": 0.9683,
+          "tcga": 0.8712,
+          "provenance": "/admin/home/ryan.kim/waiv/runs/waiv-midnight-369159/ri_curve.json"
+        },
+        "gem_run": "midnight_gem",
+        "gem_best_checkpoint": {
+          "model": "waiv_finalgem_midnight_384586_s0000750",
+          "step": 750,
+          "avg": 0.9028,
+          "camelyon": 0.8831,
+          "tolkach_esca": 0.9703,
+          "tcga": 0.8549,
+          "provenance": "/admin/home/ryan.kim/waiv/runs/finalgem-midnight-384586/ri_curve.json"
+        }
+      },
+      "hest": {
+        "avg": 0.4132,
+        "per_cancer": {
+          "IDC": 0.5898,
+          "PRAD": 0.3481,
+          "PAAD": 0.5166,
+          "SKCM": 0.6506,
+          "COAD": 0.3109,
+          "READ": 0.1887,
+          "CCRCC": 0.266,
+          "LUNG": 0.575,
+          "LYMPH_IDC": 0.2731
+        },
+        "rank_in_21": 9,
+        "pooling_note": "clsmean \u2014 +0.0169 off Waiv's published midnight HEST (known open discrepancy)",
+        "provenance": "/admin/home/ryan.kim/waiv/results_backup/hest_work_results/mft500_clsmean_summary.json"
+      },
+      "thunder_4task": {
+        "tasks": {
+          "knn": {
+            "mean": 80.444,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/mft500_clsmean/<ds>/<task>/frozen/outputs.json"
+          },
+          "linear": {
+            "mean": 84.122,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/mft500_clsmean/<ds>/<task>/frozen/outputs.json"
+          },
+          "few_shot": {
+            "mean": 76.38,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/mft500_clsmean/<ds>/<task>/frozen/outputs.json"
+          },
+          "segmentation": {
+            "mean": 68.399,
+            "n_cls": 0,
+            "n_seg": 4,
+            "provenance": "THUNDER_ROOT/mft500_cls/<ds>/<task>/frozen/outputs.json"
+          }
+        },
+        "mean": 77.336,
+        "rank_in_21": 8,
+        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Waiv's 6-task thunder_rank",
+        "segmentation_pooling_note": "cls variant used for segmentation (clsmean crashes ViT-g seg decoder)"
+      },
+      "pathobench": {
+        "status": "UNMEASURABLE",
+        "reason": "Waiv's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
+        "base_model_rank": 15
+      },
+      "scenarios": {
+        "a_pathobench_inherited": {
+          "assumption": "Our fine-tuned model keeps base model's pathobench_rank=15 (explicit proxy, FLAGGED)",
+          "hest_rank": 9,
+          "thunder_rank_4task": 8,
+          "pathobench_rank_assumed": 15,
+          "total": 32,
+          "figure1_y": 0.4906
+        },
+        "b_pathobench_bounds": {
+          "note": "Bounds using rank 1 (best) and rank 20 (worst) for Patho-Bench",
+          "best_total": 18,
+          "best_y": 0.7547,
+          "worst_total": 37,
+          "worst_y": 0.3962
+        },
+        "c_two_component": {
+          "note": "HEST+THUNDER only, no Patho-Bench. Renormalized: (40-total)/38 where best=2, worst=40",
+          "hest_rank": 9,
+          "thunder_rank_4task": 8,
+          "two_comp_total": 17,
+          "two_comp_y": 0.6053
+        }
+      }
+    },
+    {
+      "label": "virchow2_ft",
+      "display_name": "Virchow2 fine-tuned (ours)",
+      "base_model": "Virchow2",
+      "ri": {
+        "recon_run": "virchow2_ft_recon",
+        "best_checkpoint": {
+          "model": "waiv_waiv_virchow2_375367_s0000250",
+          "step": 250,
+          "avg": 0.9035,
+          "camelyon": 0.9006,
+          "tolkach_esca": 0.9673,
+          "tcga": 0.8425,
+          "provenance": "/admin/home/ryan.kim/waiv/runs/waiv-virchow2-375367/ri_curve.json"
+        },
+        "gem_run": "virchow2_gem",
+        "gem_best_checkpoint": {
+          "model": "waiv_finalgem_virchow2_384587_s0000250",
+          "step": 250,
+          "avg": 0.9007,
+          "camelyon": 0.8999,
+          "tolkach_esca": 0.9673,
+          "tcga": 0.8348,
+          "provenance": "/admin/home/ryan.kim/waiv/runs/finalgem-virchow2-384587/ri_curve.json"
+        }
+      },
+      "hest": {
+        "avg": 0.4083,
+        "per_cancer": {
+          "IDC": 0.5907,
+          "PRAD": 0.3804,
+          "PAAD": 0.4971,
+          "SKCM": 0.6244,
+          "COAD": 0.2936,
+          "READ": 0.2025,
+          "CCRCC": 0.2585,
+          "LUNG": 0.5715,
+          "LYMPH_IDC": 0.2561
+        },
+        "rank_in_21": 10,
+        "pooling_note": "clsmean \u2014 Virchow2: within 0.00013 of Waiv; Midnight: +0.0169 off (known open discrepancy)",
+        "provenance": "/admin/home/ryan.kim/waiv/results_backup/hest_work_results/vft250_clsmean_summary.json"
+      },
+      "thunder_4task": {
+        "tasks": {
+          "knn": {
+            "mean": 80.906,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/vft250_clsmean/<ds>/<task>/frozen/outputs.json"
+          },
+          "linear": {
+            "mean": 84.589,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/vft250_clsmean/<ds>/<task>/frozen/outputs.json"
+          },
+          "few_shot": {
+            "mean": 77.163,
+            "n_cls": 12,
+            "n_seg": 0,
+            "provenance": "THUNDER_ROOT/vft250_clsmean/<ds>/<task>/frozen/outputs.json"
+          },
+          "segmentation": {
+            "mean": 68.892,
+            "n_cls": 0,
+            "n_seg": 4,
+            "provenance": "THUNDER_ROOT/vft250_cls/<ds>/<task>/frozen/outputs.json"
+          }
+        },
+        "mean": 77.888,
+        "rank_in_21": 6,
+        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Waiv's 6-task thunder_rank",
+        "segmentation_pooling_note": "cls variant used for segmentation (clsmean crashes ViT-g seg decoder)"
+      },
+      "pathobench": {
+        "status": "UNMEASURABLE",
+        "reason": "Waiv's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
+        "base_model_rank": 13
+      },
+      "scenarios": {
+        "a_pathobench_inherited": {
+          "assumption": "Our fine-tuned model keeps base model's pathobench_rank=13 (explicit proxy, FLAGGED)",
+          "hest_rank": 10,
+          "thunder_rank_4task": 6,
+          "pathobench_rank_assumed": 13,
+          "total": 29,
+          "figure1_y": 0.5472
+        },
+        "b_pathobench_bounds": {
+          "note": "Bounds using rank 1 (best) and rank 20 (worst) for Patho-Bench",
+          "best_total": 17,
+          "best_y": 0.7736,
+          "worst_total": 36,
+          "worst_y": 0.4151
+        },
+        "c_two_component": {
+          "note": "HEST+THUNDER only, no Patho-Bench. Renormalized: (40-total)/38 where best=2, worst=40",
+          "hest_rank": 10,
+          "thunder_rank_4task": 6,
+          "two_comp_total": 16,
+          "two_comp_y": 0.6316
+        }
+      }
+    }
+  ],
+  "provenance": {
+    "waiv_published_json": "/admin/home/ryan.kim/waiv/docs/waiv_published.json",
+    "hest_backup_dir": "/admin/home/ryan.kim/waiv/results_backup/hest_work_results",
+    "thunder_root": "/data/ryan.kim/thunder/outputs/res",
+    "ri_run_dirs": {
+      "phikon_ft_recon": "/admin/home/ryan.kim/waiv/runs/waiv-real-369043",
+      "midnight_ft_recon": "/admin/home/ryan.kim/waiv/runs/waiv-midnight-369159",
+      "virchow2_ft_recon": "/admin/home/ryan.kim/waiv/runs/waiv-virchow2-375367",
+      "phikon_gem": "/admin/home/ryan.kim/waiv/runs/finalgem-phikon-384585",
+      "midnight_gem": "/admin/home/ryan.kim/waiv/runs/finalgem-midnight-384586",
+      "virchow2_gem": "/admin/home/ryan.kim/waiv/runs/finalgem-virchow2-384587"
+    }
+  }
+}
