@@ -28,3 +28,8 @@ runs/
 
 # scratch: throwaway sizing probes, never part of a run
 .scratch/
+
+# large output dirs — jobs write here, never committed
+logs/
+core/
+results_backup/
