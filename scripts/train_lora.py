@@ -225,6 +225,12 @@ def parse_args():
                          "Use a lower learning rate (e.g. 1e-5 instead of 1e-4). "
                          "Checkpoints are ~3.4 GiB each for ViT-L (backbone.safetensors "
                          "1.13 GiB + optim.pt ~2.26 GiB of AdamW moments + projector).")
+    ap.add_argument("--min-tissue-frac", type=float, default=0.0,
+                    help="Exclude grid sampler tiles whose tissue fraction (grayscale<220 "
+                         "pixel fraction in the GMH_S60 reference condition) is below this "
+                         "threshold. 0.0 = no filtering (default, identical to all prior runs). "
+                         "Tile fractions saved at runs/.plism_tissue_fraction.npy. "
+                         "Only effective with --grid.")
     return ap.parse_args()
 
 
@@ -424,10 +430,26 @@ def main() -> int:
             f"{args.grid_tiles - 1} negatives/row, "
             f"{args.grid_conditions * (args.grid_conditions - 1) * args.grid_tiles} query rows"
         )
+        # Build tile index subset for tissue filtering
+        _tile_indices = None
+        if args.min_tissue_frac > 0.0:
+            import numpy as _np
+            _frac_path = Path("/admin/home/ryan.kim/waiv/runs/.plism_tissue_fraction.npy")
+            if not _frac_path.exists():
+                raise SystemExit(
+                    f"--min-tissue-frac requires {_frac_path}; run the tissue fraction "
+                    "computation script first.")
+            _fracs = _np.load(_frac_path)
+            _tile_indices = _np.where(_fracs >= args.min_tissue_frac)[0].astype(_np.int64)
+            print(
+                f"[train] TISSUE FILTER: min_tissue_frac={args.min_tissue_frac} "
+                f"-> {len(_tile_indices)}/16278 tiles kept", flush=True
+            )
         train_loader = build_grid_loader(
             args.packed_dir, conditions=train_conds, n_cond=args.grid_conditions,
             n_tiles=args.grid_tiles, batches_per_epoch=args.max_steps,
             num_workers=args.workers, seed=args.seed,
+            tile_indices=_tile_indices,
         )
         # There are fewer held-out conditions than training ones, so the held-out grid
         # may have to be narrower. Its loss is a monitoring signal, not a comparison
@@ -542,6 +564,7 @@ def main() -> int:
         grid_conditions=args.grid_conditions if args.grid else 0,
         grid_tiles=args.grid_tiles if args.grid else 0,
         grid_forward_chunk=args.grid_forward_chunk if args.grid else 0,
+        min_tissue_frac=args.min_tissue_frac if args.grid else 0.0,
         activation_offload=args.activation_offload,
         grad_accum=args.grad_accum, num_workers=args.workers, amp_dtype=args.amp,
         ckpt_every=args.ckpt_every, eval_every=args.eval_every, seed=args.seed,

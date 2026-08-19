@@ -389,6 +389,7 @@ def build_grid_loader(
     seed: int = 0,
     transform=None,
     conditions: Sequence[Condition] | None = None,
+    tile_indices: np.ndarray | None = None,
 ) -> torch.utils.data.DataLoader:
     """Convenience wiring, mirroring :func:`waivphaet.data.pairs.build_pair_loader`."""
     if conditions is None:
@@ -401,6 +402,7 @@ def build_grid_loader(
         n_tiles=n_tiles,
         batches_per_epoch=batches_per_epoch,
         seed=seed,
+        tile_indices=tile_indices,
     )
     return torch.utils.data.DataLoader(
         ds,

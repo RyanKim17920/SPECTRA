@@ -821,6 +821,10 @@ class TrainConfig:
     #: into its bias. ``gem`` / ``attn`` / ``lse`` have token-dependent gradients.
     #: Recorded here (not only in ``encoder``) so ``config.json`` names the objective.
     pool_head: str = "mean"
+    #: Tissue fraction threshold for the GRID sampler tile pool. 0.0 = no filtering
+    #: (identical to every prior run). When > 0, tiles from the reference condition
+    #: with tissue fraction below this threshold are excluded from the sampler pool.
+    min_tissue_frac: float = 0.0
     encoder: dict = field(default_factory=dict)
 
 
