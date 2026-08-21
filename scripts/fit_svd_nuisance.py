@@ -192,6 +192,7 @@ def main() -> int:
         make_split,
         parse_filename,
     )
+    from waivphaet.data.repack import npy_path
 
     # --- which conditions -------------------------------------------------------------
     if args.conditions_file is not None:
@@ -233,7 +234,9 @@ def main() -> int:
     F = np.empty((len(conditions), n_tiles, model.embed_dim), dtype=np.float32)
     t1 = time.time()
     for ci, cond in enumerate(conditions):
-        path = args.packed_dir / f"{cond.slide_id}.npy"
+        # slide_id keeps the ".tif" infix; repack strips it, so go through its helper
+        # rather than rebuilding the name here and drifting from the on-disk layout.
+        path = npy_path(args.packed_dir, Path(cond.filename))
         if not path.exists():
             raise SystemExit(f"missing PLISM condition {path}")
         F[ci] = _embed_condition(model, path, tile_idx, args.device, args.batch_size, args.amp)
