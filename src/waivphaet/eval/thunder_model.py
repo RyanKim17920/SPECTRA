@@ -184,11 +184,21 @@ class WaivPhikonEncoder(PretrainedModel):
             lora_alpha=int(os.environ.get("WAIV_LORA_ALPHA", 32)),
             proj_out_dim=int(os.environ.get("WAIV_PROJ_OUT_DIM", 512)),
             backbone=backbone,
+            # Training-free nuisance projection, same npz and same rank-k subtraction
+            # that run_hest.py takes as --svd-fit/--svd-k. THUNDER hands us no CLI, so
+            # it arrives by env like every other knob here.
+            svd_fit=os.environ.get("WAIV_SVD_FIT") or None,
+            svd_k=int(os.environ.get("WAIV_SVD_K", 0)),
         )
         self.t = build_transform(self.encoder.cfg.backbone)
 
         slug = self.encoder.cfg.backbone.split("/")[-1].replace("-", "").replace(".", "")
         default_name = f"waiv_{slug}_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")
+        # THUNDER keys its results directory on self.name, so k belongs in the default:
+        # two ranks under one name would overwrite each other's results.
+        svd_k = int(os.environ.get("WAIV_SVD_K", 0))
+        if svd_k > 0:
+            default_name += f"_svd{svd_k:03d}"
         self.name = os.environ.get("WAIV_RUN_NAME", default_name)
         # Derived from the backbone: phikon-v2 1024/2048, midnight 1536/3072,
         # Virchow2 1280/2560 (cls/clsmean).

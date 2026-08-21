@@ -245,7 +245,8 @@ def _restore_pool_head(model, ckpt_dir: Path) -> dict:
 def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = None,
                 lora_rank: int = 16, lora_alpha: int = 32, proj_out_dim: int = 512,
                 backbone: str | None = None, pool_head: str | None = None,
-                infer_pool_head: bool = False):
+                infer_pool_head: bool = False,
+                svd_fit: str | None = None, svd_k: int = 0):
     """Single loader shared by PathoROB, HEST and THUNDER (see ``hest_adapter``).
 
     ``backbone`` defaults to ``DEFAULT_BACKBONE`` (owkin/phikon-v2) so every existing
@@ -426,6 +427,16 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
         # Full-FT checkpoint guard: prove the loaded weights differ from the base model.
         model.eval()
         assert_checkpoint_applied(model, checkpoint)
+
+    # Training-free nuisance projection, attached ONCE on the finished encoder
+    # whichever branch above built it. Every consumer of build_model -- this script's
+    # PathoROB extraction, run_hest.py, thunder_model.py -- therefore gets the
+    # identical intervention, applied at the identical place (WaivEncoder._pool).
+    # Deliberately after the adapter/checkpoint assertions above: those compare
+    # projected-vs-base embeddings to prove the weights loaded, and a subspace removed
+    # from both sides would only shrink the delta they measure.
+    if svd_k or svd_fit:
+        model.load_svd_nuisance(svd_fit, svd_k)
 
     return model.eval()
 

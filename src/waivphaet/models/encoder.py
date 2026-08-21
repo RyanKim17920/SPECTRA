@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import torch
@@ -392,6 +393,24 @@ class EncoderConfig:
     #: encoder is rebuilt with no split heads at all, and the head is restored from the
     #: checkpoint's ``pool_head.pt``.
     infer_pool_head: bool = False
+    #: **Training-free nuisance-subspace projection**, applied at INFERENCE time.
+    #: Path to an npz written by ``scripts/fit_svd_nuisance.py``: ``V`` of shape
+    #: ``(D, D)``, eigenvector ROWS sorted by descending eigenvalue, plus the
+    #: ``backbone``/``pooling``/``D`` the fit was taken under.
+    #:
+    #: ``scripts/apply_svd_nuisance.py`` already does this arithmetic on PathoROB's
+    #: CACHED feature npzs, which is far cheaper. That route is closed to HEST and
+    #: THUNDER: both embed the tiles themselves and never expose a vector we could
+    #: post-process, so for those two the projection has to live inside the encoder.
+    #: Same maths, same fit file, different application point.
+    svd_fit: str | None = None
+    #: Rank of the removed subspace: ``f -> f - (f @ Vk.T) @ Vk`` with ``Vk = V[:k]``.
+    #:
+    #: ``0`` is the control arm and an EXACT no-op -- no buffer is registered and the
+    #: arithmetic is skipped entirely rather than multiplying by an empty matrix, so a
+    #: k=0 run reproduces the unprojected number to the last digit (the same rule
+    #: ``apply_svd_nuisance.py`` follows for its k=0 passthrough).
+    svd_k: int = 0
     #: ``None`` (the default) = **discover** the target leaf names from the loaded
     #: backbone by intersecting ``LORA_CANDIDATE_MODULES`` with the block Linears it
     #: actually has. Pass an explicit tuple only to deliberately narrow the set.
@@ -658,6 +677,10 @@ class WaivEncoder(nn.Module):
         self.backbone = backbone
 
         self.embed_dim = self.hidden_size * (2 if cfg.pooling == "clsmean" else 1)
+
+        # Nuisance basis, if this config asked for one. Registered here, after
+        # ``embed_dim`` exists, because the fit's D is checked against it.
+        self.load_svd_nuisance(cfg.svd_fit, cfg.svd_k)
         #: Which pools get their own loss head. ``()`` = the legacy single concat head,
         #: which is the path every published number was produced on and is left
         #: bit-identical (same module, same construction order, same RNG draws).
@@ -730,6 +753,110 @@ class WaivEncoder(nn.Module):
 
     # --- pooling ------------------------------------------------------------------
 
+    # --- inference-time nuisance projection -----------------------------------------
+
+    def load_svd_nuisance(self, fit_path: str | None, k: int) -> None:
+        """Attach (or clear) the rank-``k`` nuisance basis from a ``fit_svd_nuisance`` npz.
+
+        Called from ``__init__`` off ``cfg.svd_fit``/``cfg.svd_k``, and again by
+        ``extract_pathorob_features.build_model`` for the callers that only learn the
+        fit path after construction (``run_hest.py --svd-fit``, ``WAIV_SVD_FIT``).
+        Re-calling it REPLACES the buffer rather than composing a second projection,
+        so the intervention stays exactly one rank-k subtraction either way.
+
+        The buffer is non-persistent on purpose. This is a post-hoc intervention on the
+        exported embedding, not a learned weight: putting it in ``state_dict()`` would
+        give every checkpoint saved afterwards a silent k-dependent tail, and a strict
+        ``load_state_dict`` into an unprojected encoder would then fail.
+        """
+        import numpy as np
+
+        k = int(k or 0)
+        self.cfg.svd_fit = str(fit_path) if fit_path else None
+        self.cfg.svd_k = k
+        if k <= 0:
+            # Control arm: no buffer, so ``_project_nuisance`` returns its input object
+            # untouched instead of running an identity matmul in float32.
+            self.register_buffer("svd_basis", None, persistent=False)
+            return
+        if not fit_path:
+            raise ValueError(
+                f"svd_k={k} but no svd_fit given; the rank means nothing without the "
+                "npz that fit_svd_nuisance.py wrote the basis into"
+            )
+        path = Path(fit_path)
+        if not path.exists():
+            raise FileNotFoundError(f"svd_fit {path} does not exist")
+        z = np.load(path, allow_pickle=False)
+        V = z["V"]
+        if V.ndim != 2 or V.shape[0] != V.shape[1]:
+            raise ValueError(f"{path}: V must be a square (D, D) basis, got {V.shape}")
+        # Hard error, never a silent slice. A basis fitted at another width is not a
+        # weaker intervention, it is a different one, and the matmul below would either
+        # crash deep in torch or -- with clsmean vs cls on the same backbone -- succeed
+        # on half the vector.
+        if V.shape[0] != self.embed_dim:
+            raise ValueError(
+                f"{path}: basis is {V.shape[0]}-d but this encoder exports "
+                f"{self.embed_dim}-d (backbone={self.cfg.backbone!r} "
+                f"pooling={self.cfg.pooling!r}); refit or fix --pooling"
+            )
+        if k > V.shape[0]:
+            raise ValueError(f"k={k} exceeds the {V.shape[0]} available components in {path}")
+        # Backbone/pooling disagreement is only a WARNING: the fit is a plain rotation
+        # of a D-dim space, so it is arithmetically valid on any encoder of that width,
+        # and a deliberate transfer experiment ("does Virchow2's nuisance basis help
+        # midnight?") is a legitimate thing to run. Say so loudly and continue.
+        fit_backbone = str(z["backbone"]) if "backbone" in z.files else None
+        fit_pooling = str(z["pooling"]) if "pooling" in z.files else None
+        if fit_backbone and fit_backbone != self.cfg.backbone:
+            print(
+                f"[encoder] WARNING: svd_fit {path.name} was fitted on "
+                f"{fit_backbone!r} but this encoder is {self.cfg.backbone!r}; "
+                "projecting anyway (widths agree)",
+                flush=True,
+            )
+        if fit_pooling and fit_pooling != self.cfg.pooling:
+            print(
+                f"[encoder] WARNING: svd_fit {path.name} was fitted under "
+                f"pooling={fit_pooling!r} but this encoder pools {self.cfg.pooling!r}; "
+                "projecting anyway (widths agree)",
+                flush=True,
+            )
+        self.register_buffer(
+            "svd_basis",
+            torch.from_numpy(np.ascontiguousarray(V[:k])).float(),
+            persistent=False,
+        )
+        print(
+            f"[encoder] nuisance projection ON: k={k} of {V.shape[0]}-d from {path}",
+            flush=True,
+        )
+
+    def _project_nuisance(self, emb: torch.Tensor) -> torch.Tensor:
+        """``f -> f - (f @ Vk.T) @ Vk``. THE single application point.
+
+        Every exported embedding passes through here exactly once. ``_pool`` (which
+        ``embed`` and ``forward`` go through) and ``pool_from_parts`` (which the
+        split-head eval path goes through) each call it on their FINAL pooled vector,
+        and nothing else calls it. ``_pool_parts`` deliberately does NOT: the basis
+        spans the full pooled width, so a clsmean half cannot be projected on its own,
+        and projecting the halves separately would not equal projecting the concat.
+
+        Run in float32 whatever autocast is active. HEST embeds tiles under
+        ``autocast('cuda', dtype=float16)``, and a rank-256 subtraction accumulated in
+        fp16 is not the arithmetic ``apply_svd_nuisance.py`` performs on the cached
+        vectors -- the cached-feature and inference-time routes have to agree.
+        """
+        V = getattr(self, "svd_basis", None)
+        if V is None:
+            return emb
+        out = emb.float()
+        out = out - (out @ V.t()) @ V
+        return out.to(emb.dtype)
+
+    # --- pooling ------------------------------------------------------------------
+
     def _pool(self, tokens: torch.Tensor) -> torch.Tensor:
         # ``num_prefix_tokens`` is 1 on every HF backbone (CLS only), so this slice is
         # ``tokens[:, 1:, :]`` there -- bit-identical to what it always was. It is 5 on
@@ -737,7 +864,7 @@ class WaivEncoder(nn.Module):
         # ``cat([output[:, 0], output[:, 5:].mean(1)])``.
         cls, patches = tokens[:, 0, :], tokens[:, self.num_prefix_tokens :, :]
         if self.cfg.pooling == "cls":
-            return cls
+            return self._project_nuisance(cls)
         # OFF by default, so this is the literal `patches.mean(dim=1)` it always was. When
         # on, the mean SLOT is filled by the learned pool head instead -- same shape, same
         # dtype, so `embed_dim` and every downstream probe are untouched.
@@ -746,9 +873,9 @@ class WaivEncoder(nn.Module):
         else:
             mean = patches.mean(dim=1)
         if self.cfg.pooling == "mean":
-            return mean
+            return self._project_nuisance(mean)
         if self.cfg.pooling == "clsmean":
-            return torch.cat([cls, mean], dim=1)
+            return self._project_nuisance(torch.cat([cls, mean], dim=1))
         raise ValueError(f"unknown pooling {self.cfg.pooling!r}")
 
     def _pool_parts(self, tokens: torch.Tensor) -> dict[str, torch.Tensor]:
@@ -773,11 +900,11 @@ class WaivEncoder(nn.Module):
         single-head path would have produced, without a second backbone forward.
         """
         if self.cfg.pooling == "cls":
-            return parts["cls"]
+            return self._project_nuisance(parts["cls"])
         if self.cfg.pooling == "mean":
-            return parts["mean"]
+            return self._project_nuisance(parts["mean"])
         if self.cfg.pooling == "clsmean":
-            return torch.cat([parts["cls"], parts["mean"]], dim=1)
+            return self._project_nuisance(torch.cat([parts["cls"], parts["mean"]], dim=1))
         raise ValueError(f"unknown pooling {self.cfg.pooling!r}")
 
     # --- forward ------------------------------------------------------------------

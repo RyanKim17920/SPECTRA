@@ -59,6 +59,14 @@ def main() -> int:
                          "protocol constant and the trained pooling reaches the readout "
                          "only via the LoRA weights it shaped. Must match what the run "
                          "was trained with. Dimensionality is unchanged.")
+    ap.add_argument("--svd-fit", type=Path, default=None,
+                    help="npz written by scripts/fit_svd_nuisance.py. Its top --svd-k "
+                         "eigenvector rows are projected out of every exported "
+                         "embedding, inside the encoder -- the training-free nuisance "
+                         "removal that apply_svd_nuisance.py does on cached PathoROB "
+                         "features and cannot do here, because HEST embeds its own tiles")
+    ap.add_argument("--svd-k", type=int, default=0,
+                    help="rank of the removed subspace; 0 is an exact no-op (control arm)")
     ap.add_argument("--exp-code", default=None)
     ap.add_argument("--tasks", nargs="+", default=list(H.LEADERBOARD_TASKS),
                     help="default = HEST's 9 leaderboard tasks. HCC is deliberately "
@@ -85,6 +93,31 @@ def main() -> int:
     paths.embed_dir.mkdir(parents=True, exist_ok=True)
     paths.results_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.svd_k > 0 and args.svd_fit is None:
+        raise SystemExit("--svd-k needs --svd-fit: the rank means nothing without the "
+                         "npz the basis was fitted into")
+
+    exp_code = args.exp_code or f"{args.pooling}_{'base' if not (args.checkpoint or args.adapter) else 'ckpt'}"
+
+    # ------------------------------------------------------------------------------
+    # SVD CACHE-KEY GUARD. Hard error, not a warning like the --pool-head block below.
+    # The embedding cache key is `embed_dir / exp_code` and nothing else, so an
+    # exp_code that does not name k will happily reuse .h5 files extracted at a
+    # different k -- including k=0. That failure is invisible: HEST reads the stale
+    # embeddings, the run completes, and prints a plausible HEST average that is the
+    # UNPROJECTED backbone's score attributed to the projection. Refuse to start.
+    if args.svd_k > 0:
+        marker = f"svd{args.svd_k:03d}"
+        if marker not in exp_code:
+            raise SystemExit(
+                f"--svd-k={args.svd_k} but --exp-code={exp_code!r} does not contain "
+                f"{marker!r}. The HEST embedding cache is keyed on exp_code ALONE, so "
+                f"a run under this exp_code would silently reuse embeddings cached at "
+                f"another k (or with no projection at all), score the UNPROJECTED "
+                f"backbone, and report it as a real number for k={args.svd_k}. "
+                f"Re-run with an exp_code containing {marker!r}."
+            )
+
     if args.pool_head and not args.adapter:
         raise SystemExit("--pool-head needs --adapter: pool_head.pt lives in the "
                          "checkpoint dir alongside adapter/")
@@ -93,7 +126,9 @@ def main() -> int:
                              lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
                              proj_out_dim=args.proj_out_dim, backbone=args.backbone,
                              pool_head=args.pool_head,
-                             infer_pool_head=bool(args.pool_head))
+                             infer_pool_head=bool(args.pool_head),
+                             svd_fit=str(args.svd_fit) if args.svd_fit else None,
+                             svd_k=args.svd_k)
     wrapped = H.HestEncoderWrapper(encoder)
     # Derived from the backbone's own hidden size, not a literal: 1024/2048 on phikon-v2,
     # 1536/3072 on midnight. Still asserted -- a pooling/embed_dim desync would write
@@ -103,10 +138,9 @@ def main() -> int:
         raise RuntimeError(f"pooling={args.pooling} should give {expected}-d, "
                            f"got {wrapped.embed_dim}")
     print(f"[hest] backbone={encoder.cfg.backbone} pooling={args.pooling} "
-          f"embed_dim={wrapped.embed_dim} "
+          f"embed_dim={wrapped.embed_dim} svd_k={args.svd_k} "
           f"precision={args.precision} tasks={len(args.tasks)}", flush=True)
 
-    exp_code = args.exp_code or f"{args.pooling}_{'base' if not (args.checkpoint or args.adapter) else 'ckpt'}"
     benchmark = H.import_hest_benchmark()
 
     t0 = time.time()
@@ -174,7 +208,9 @@ def main() -> int:
     payload = {
         "exp_code": exp_code, "backbone": encoder.cfg.backbone,
         "pooling": args.pooling, "embed_dim": wrapped.embed_dim,
-        "pool_head": args.pool_head, "infer_pool_head": bool(args.pool_head),
+        "pool_head": args.pool_head,
+        "svd_fit": str(args.svd_fit) if args.svd_fit else None,
+        "svd_k": args.svd_k, "infer_pool_head": bool(args.pool_head),
         "precision": args.precision, "seconds": round(dt, 1),
         "results": results, "hest_perf_per_encoder": per_enc,
         "results_dir": str(exp_dirs[-1]) if exp_dirs else None,
