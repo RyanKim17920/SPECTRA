@@ -36,16 +36,47 @@ DEFAULT_FEATURES_DIR = REPO / "third_party" / "PathoROB" / "data" / "features"
 
 
 def load_basis(fit_npz: Path, k: int) -> tuple[np.ndarray, dict]:
-    """``(Vk, meta)`` -- the top-``k`` eigenvector ROWS plus the fit's metadata."""
+    """``(Vk, meta)`` -- the rank-``k`` eigenvector ROWS plus the fit's metadata.
+
+    Two packings, told apart by the ``basis`` field the fit writes. An npz written before
+    that flag existed has no such field and is read back as ``joint``, which is what it is.
+
+    ``joint``
+        ``V`` is one ``(D, D)`` basis over the whole embedding; rank ``k`` is ``V[:k]``,
+        i.e. **k directions removed**.
+    ``split``
+        ``V`` is block-diagonal -- rows ``0..H-1`` supported on the cls half, rows
+        ``H..2H-1`` on the mean half (see ``fit_svd_nuisance.nuisance_basis_split``). Rank
+        ``k`` is the top ``k`` of *each* half, ``V[:k]`` stacked on ``V[H:H+k]``, i.e.
+        **2k directions removed**, and ``k`` is therefore capped at ``H`` and not ``D``.
+        This is the only place the packing is decoded; a split sweep at k is not
+        comparable to a joint sweep at k, which is why ``meta`` carries the true count.
+    """
     z = np.load(fit_npz, allow_pickle=False)
     V = z["V"]
     if V.ndim != 2 or V.shape[0] != V.shape[1]:
         raise ValueError(f"{fit_npz}: V must be square (D, D), got {V.shape}")
-    if not 0 <= k <= V.shape[0]:
-        raise ValueError(f"k={k} out of range for a {V.shape[0]}-d fit")
     meta = {key: z[key].item() if z[key].ndim == 0 else z[key]
-            for key in z.files if key not in ("V", "eigvals", "tile_idx")}
-    return V[:k].astype(np.float32), meta
+            for key in z.files
+            if key not in ("V", "eigvals", "eigvals_cls", "eigvals_mean", "tile_idx")}
+
+    basis = str(meta.get("basis", "joint"))
+    if basis == "split":
+        H = int(meta["half_dim"])
+        if 2 * H != V.shape[0]:
+            raise ValueError(f"{fit_npz}: half_dim={H} does not halve V {V.shape}")
+        if not 0 <= k <= H:
+            raise ValueError(f"k={k} out of range for a split fit with half_dim={H}")
+        rows = np.concatenate([V[:k], V[H:H + k]])
+    elif basis == "joint":
+        if not 0 <= k <= V.shape[0]:
+            raise ValueError(f"k={k} out of range for a {V.shape[0]}-d fit")
+        rows = V[:k]
+    else:
+        raise ValueError(f"{fit_npz}: unknown basis {basis!r}")
+    meta["basis"] = basis
+    meta["directions_removed"] = int(len(rows))
+    return rows.astype(np.float32), meta
 
 
 def project_out(feats: np.ndarray, Vk: np.ndarray) -> np.ndarray:
@@ -122,6 +153,10 @@ def apply_fit(
                 f, dst_root / dataset / f.name, Vk
             )
     return {"dst_model": dst_model, "k": k, "D": width, "vectors": counts,
+            "basis": meta.get("basis"),
+            # Under a split basis this is 2k, not k. Reported explicitly so a sweep table
+            # never puts a split k next to a joint k as though they cost the same.
+            "directions_removed": meta.get("directions_removed"),
             "fit_backbone": meta.get("backbone"), "fit_pooling": meta.get("pooling")}
 
 

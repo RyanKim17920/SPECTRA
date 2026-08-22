@@ -9,6 +9,9 @@ Tests:
   (c) the subspace-overlap helper is ~1 for identical subspaces and ~0 for orthogonal ones
   (d) the shift helper translates by exactly the requested pixel count
   (e) the one-axis-at-a-time delta helper isolates the axis it is told to
+  (f) the linear probe decodes a condition identity planted in ONE known, LOW-VARIANCE
+      direction, and stops decoding it the moment that direction is projected out --
+      the decodability-is-not-variance-share point, made on data where the answer is known
 
 No GPU, no PLISM, no backbone. Everything here runs off np.random.
 """
@@ -24,10 +27,14 @@ sys.path.insert(0, str(_SCRIPTS))
 from diagnose_nuisance import (  # noqa: E402
     axis_deltas,
     gram_eigh,
+    linear_probe_diagnostic,
     offset_interaction_split,
+    probe_design,
+    probe_tile_split,
     shift_tiles,
     subspace_overlap,
 )
+from fit_svd_nuisance import nuisance_basis  # noqa: E402
 
 
 def _pure_offset(C, N, D, seed=0, noise=0.0):
@@ -211,3 +218,131 @@ def test_axis_deltas_gram_matches_a_direct_computation():
 def test_axis_deltas_rejects_bad_shape():
     with pytest.raises(ValueError):
         axis_deltas(np.zeros((3, 4, 5), dtype=np.float32), axis=1)
+
+
+# ----- (f) the linear probe -----------------------------------------------
+
+def _one_direction_corpus(n_class=4, n_rep=3, N=60, D=16, gap=1.0, seed=21):
+    """Class identity lives in ONE direction that holds almost none of the variance.
+
+    ``F[c, i] = tissue[i] + a[class(c)] * u``, with ``tissue`` built entirely inside the
+    orthogonal complement of ``u``. So along ``u`` the within-class scatter is only the
+    noise floor while the classes sit ``gap`` apart -- perfectly separable -- yet ``u``
+    carries a vanishing share of the total embedding variance -- ``gap``-scale against a
+    tissue direction 5x wider in each of D-1 dimensions. That is the whole point of
+    diagnostic 5 in synthetic form: the two quantities are not the same quantity.
+
+    Returns ``(F, labels, u)`` with ``n_class * n_rep`` conditions.
+    """
+    rng = np.random.default_rng(seed)
+    Q, _ = np.linalg.qr(rng.standard_normal((D, D)))
+    u = Q[:, 0].astype(np.float32)
+
+    # Tissue coordinates in the complement of u: column 0 (the u coordinate) is exactly 0.
+    coords = rng.standard_normal((N, D)).astype(np.float32) * 5.0
+    coords[:, 0] = 0.0
+    tissue = (coords @ Q.T).astype(np.float32)
+
+    labels = np.repeat(np.arange(n_class), n_rep)
+    a = (labels.astype(np.float32) - labels.mean()) * gap
+    F = tissue[None, :, :] + a[:, None, None] * u[None, None, :]
+    F = F + rng.standard_normal(F.shape).astype(np.float32) * (gap * 1e-2)
+    return F.astype(np.float32), labels, u
+
+
+def test_probe_tile_split_is_disjoint_and_covers_every_tile():
+    """Held-out must mean held-out: a random ROW split would leak, since all 91 conditions
+    image the same tile."""
+    tr, te = probe_tile_split(50, 0.5, seed=0)
+    assert len(tr) == 25 and len(te) == 25
+    assert set(tr).isdisjoint(set(te))
+    assert set(tr) | set(te) == set(range(50))
+    assert np.all(np.diff(tr) > 0) and np.all(np.diff(te) > 0), "positions stay sorted"
+
+
+def test_probe_tile_split_keeps_both_sides_non_empty():
+    for frac in (0.01, 0.99):
+        tr, te = probe_tile_split(4, frac, seed=1)
+        assert len(tr) >= 1 and len(te) >= 1
+
+
+def test_probe_tile_split_rejects_a_degenerate_fraction():
+    for frac in (0.0, 1.0, 1.5):
+        with pytest.raises(ValueError):
+            probe_tile_split(10, frac, seed=0)
+
+
+def test_probe_design_labels_every_row_by_its_condition():
+    F = np.arange(3 * 5 * 2, dtype=np.float32).reshape(3, 5, 2)
+    labels = np.array([7, 8, 9])
+    X, y = probe_design(F, np.array([0, 2, 4]), labels, max_rows=0, seed=0)
+    assert X.shape == (9, 2) and y.shape == (9,)
+    assert list(y) == [7, 7, 7, 8, 8, 8, 9, 9, 9]
+    assert np.array_equal(X[4], F[1, 2])
+
+
+def test_probe_design_subsamples_when_capped():
+    F = np.zeros((4, 20, 3), dtype=np.float32)
+    X, y = probe_design(F, np.arange(20), np.arange(4), max_rows=10, seed=0)
+    assert len(X) == len(y) == 10
+
+
+def test_probe_decodes_a_low_variance_direction_and_loses_it_at_k1():
+    """The reconciliation, on data where the answer is known.
+
+    k=0: near-perfect decoding of a class that occupies a direction holding well under 1%
+    of the embedding variance. k=1: that one direction is the whole nuisance basis's top
+    eigenvector, and once it is projected out the probe is at chance.
+    """
+    F, labels, u = _one_direction_corpus()
+    V, eigvals = nuisance_basis(F)
+
+    # The planted direction IS the nuisance top-1 ...
+    assert abs(float(V[0] @ u)) > 0.99
+    # ... and it is quiet: its share of the total embedding variance is tiny.
+    total_var = float(((F - F.mean(axis=(0, 1))) ** 2).sum())
+    assert float(eigvals.sum()) / total_var < 0.01
+
+    out = linear_probe_diagnostic(
+        F, {"cond": labels}, V, ranks=(0, 1, 2), pc_dims=(1, 2),
+        train_frac=0.5, max_rows=0, max_iter=500, seed=0)
+    acc = out["cond"]["project_out_k"]
+    chance = out["cond"]["chance_balanced_accuracy"]
+    assert chance == pytest.approx(0.25)
+    assert acc["0"] > 0.95, f"a separable low-variance direction must decode: {acc}"
+    assert acc["1"] < 0.45, f"removing the one direction must kill it: {acc}"
+    assert acc["2"] <= acc["1"] + 0.05
+
+
+def test_probe_reports_the_split_sizes_and_chance_level():
+    F, labels, _ = _one_direction_corpus(N=40)
+    V, _ = nuisance_basis(F)
+    out = linear_probe_diagnostic(F, {"cond": labels}, V, ranks=(0,), pc_dims=(1,),
+                                  train_frac=0.5, max_rows=0, max_iter=200, seed=0)
+    assert out["n_train_tiles"] == 20 and out["n_test_tiles"] == 20
+    assert out["cond"]["rows_train"] == 12 * 20 and out["cond"]["rows_test"] == 12 * 20
+    assert out["cond"]["subsampled"] is False
+    assert out["cond"]["n_classes"] == 4
+
+
+def test_probe_marks_a_capped_run_as_subsampled():
+    """A capped run must SAY it is capped in the JSON -- an accuracy read off 12k of 182k
+    rows is a different measurement from one read off all of them."""
+    F, labels, _ = _one_direction_corpus(N=40)
+    V, _ = nuisance_basis(F)
+    out = linear_probe_diagnostic(F, {"cond": labels}, V, ranks=(0,), pc_dims=(1,),
+                                  train_frac=0.5, max_rows=50, max_iter=200, seed=0)
+    assert out["cond"]["subsampled"] is True
+    assert out["cond"]["rows_train"] == 50 and out["cond"]["rows_test"] == 50
+
+
+def test_probe_top_m_pcs_needs_more_than_one_pc_for_a_quiet_direction():
+    """The top principal component of the EMBEDDING is tissue, not the planted class
+    direction, so a 1-PC probe is near chance even though the class is linearly separable
+    in the full space. Variance ordering and decodability are different orderings."""
+    F, labels, _ = _one_direction_corpus()
+    V, _ = nuisance_basis(F)
+    out = linear_probe_diagnostic(F, {"cond": labels}, V, ranks=(0,), pc_dims=(1,),
+                                  train_frac=0.5, max_rows=0, max_iter=500, seed=0)
+    assert out["cond"]["top_m_pcs"]["1"] < 0.5
+    assert out["cond"]["project_out_k"]["0"] > 0.95

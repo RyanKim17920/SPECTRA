@@ -125,6 +125,92 @@ def spectrum_report(eigvals: np.ndarray, ranks=SPECTRUM_RANKS) -> dict[int, floa
 
 
 # --------------------------------------------------------------------------------------
+# split (per-readout-site) basis
+#
+# The reference implementation fits a SEPARATE nuisance basis per readout site -- one from
+# the cls-token deltas, one from the patch-mean deltas -- whereas `nuisance_basis` above
+# concatenates the two halves into one 2H-d vector and diagonalises once. Those are not the
+# same estimator. In the joint fit a loud direction living entirely inside one half claims
+# rank the other half never warranted, so "top-k" silently means k_cls + k_mean with the
+# split picked by whichever half happens to dominate. `--basis split` fits the two halves
+# independently, so each half gets its own k.
+
+
+def split_half_dim(pooling: str, D: int) -> int:
+    """Half-width ``H`` for a two-site pooling, or a hard error.
+
+    A split basis is only meaningful when the embedding really is ``[site_a | site_b]`` at
+    equal widths. ``cls`` and ``mean`` are single-site readouts: halving them is
+    arithmetically fine and semantically nonsense, so it is refused here rather than
+    silently produced.
+    """
+    if pooling != "clsmean":
+        raise ValueError(
+            f"--basis split needs a two-site pooling (clsmean), got {pooling!r}; a "
+            "single-site embedding has no cls/mean halves to fit independently"
+        )
+    if D < 2 or D % 2 != 0:
+        raise ValueError(f"clsmean width must be an even 2H, got D={D}")
+    return D // 2
+
+
+def nuisance_basis_split(F: np.ndarray, half_dim: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per-half nuisance bases, packed BLOCK-DIAGONALLY -> ``(V, ev_cls, ev_mean)``.
+
+    ``V`` is ``(2H, 2H) = (D, D)`` -- still square, still orthonormal rows, so the npz
+    keeps the shape every existing consumer already expects::
+
+        rows   0 .. H-1   =  [ V_cls ,   0    ]   supported on the cls half only
+        rows   H .. 2H-1  =  [   0   , V_mean ]   supported on the mean half only
+
+    Row ``i`` and row ``H + i`` are the i-th direction of their own half, so rank ``k`` is
+    ``rows[0:k]`` plus ``rows[H:H+k]`` -- **2k directions in total**.
+    :func:`apply_svd_nuisance.load_basis` is the single place that decodes this packing,
+    keyed off the ``basis`` field in the npz.
+
+    The two spectra are returned separately rather than merged: they have separate totals,
+    and a concatenation would be neither descending nor a meaningful ``spectrum_report``.
+    """
+    if F.ndim != 3:
+        raise ValueError(f"expected (C, N, D), got {F.shape}")
+    D = F.shape[2]
+    H = int(half_dim)
+    if 2 * H != D:
+        raise ValueError(f"half_dim={H} does not halve D={D}")
+
+    V_cls, ev_cls = nuisance_basis(F[:, :, :H])
+    V_mean, ev_mean = nuisance_basis(F[:, :, H:])
+
+    V = np.zeros((D, D), dtype=np.float32)
+    V[:H, :H] = V_cls
+    V[H:, H:] = V_mean
+    return V, ev_cls, ev_mean
+
+
+def build_basis(F: np.ndarray, basis: str, pooling: str) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Dispatch on ``--basis`` -> ``(V, row-aligned eigvals, extra npz fields)``.
+
+    ``joint`` returns :func:`nuisance_basis` verbatim -- bitwise the pre-split behaviour,
+    which is what keeps the default arm comparable to every k-sweep already run.
+    """
+    if basis == "joint":
+        V, eigvals = nuisance_basis(F)
+        return V, eigvals, {"basis": "joint", "half_dim": 0}
+    if basis != "split":
+        raise ValueError(f"unknown basis {basis!r}")
+    H = split_half_dim(pooling, F.shape[2])
+    V, ev_cls, ev_mean = nuisance_basis_split(F, H)
+    # Stored ROW-ALIGNED with V (entry i is the eigenvalue of row i), so this array is
+    # deliberately NOT globally descending; read a spectrum off the per-half arrays.
+    eigvals = np.concatenate([ev_cls, ev_mean])
+    return V, eigvals, {
+        "basis": "split", "half_dim": H,
+        "eigvals_cls": ev_cls.astype(np.float32),
+        "eigvals_mean": ev_mean.astype(np.float32),
+    }
+
+
+# --------------------------------------------------------------------------------------
 # shared setup helpers
 #
 # These three are factored out of main() so scripts/diagnose_nuisance.py can run the
@@ -244,6 +330,10 @@ def main() -> int:
     ap.add_argument("--packed-dir", type=Path, default=DEFAULT_PACKED_DIR)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--out", type=Path, required=True, help="npz to write (V + eigvals + meta)")
+    ap.add_argument("--basis", choices=("joint", "split"), default="joint",
+                    help="joint: one basis over the whole embedding (default, unchanged). "
+                         "split: an independent basis per readout site (clsmean only); "
+                         "rank k then removes k directions PER HALF = 2k in total")
     ap.add_argument("--limit-conditions", type=int, default=0,
                     help="smoke: use only the first N conditions")
     args = ap.parse_args()
@@ -259,6 +349,13 @@ def main() -> int:
     )
     if len(conditions) < 2:
         raise SystemExit("need >=2 conditions: with one condition there is no spread to fit")
+    # Checked here, before the multi-hour embedding pass, so an unusable --basis/--pooling
+    # pairing costs a second rather than a whole job.
+    if args.basis == "split" and args.pooling != "clsmean":
+        raise SystemExit(
+            f"--basis split needs --pooling clsmean, got {args.pooling!r}: only a two-site "
+            "embedding has independent cls/mean halves to fit"
+        )
 
     # --- which tiles ------------------------------------------------------------------
     tile_idx = sample_tile_idx(args.seed, args.n_tiles)
@@ -288,13 +385,31 @@ def main() -> int:
     if not np.isfinite(F).all():
         raise RuntimeError("non-finite embeddings")
 
-    V, eigvals = nuisance_basis(F)
-    spec = spectrum_report(eigvals)
+    V, eigvals, extra = build_basis(F, args.basis, args.pooling)
+    if args.basis == "split":
+        # Per-half spectra: the merged `eigvals` is row-aligned with V, not descending, so
+        # spectrum_report over it would be meaningless.
+        spec_halves = {name: spectrum_report(extra[f"eigvals_{name}"])
+                       for name in ("cls", "mean")}
+        spec = None  # no single meaningful curve; the per-half pair is the report
+    else:
+        spec_halves = {}
+        spec = spectrum_report(eigvals)
 
     print("[fit] cumulative explained variance of the nuisance spread "
           "(THE go/no-go number):", flush=True)
-    for k, v in spec.items():
-        print(f"[fit]   top {k:>4d}: {v:.4f}", flush=True)
+    if args.basis == "split":
+        # Spelt out at every print site: a split k-sweep is NOT comparable to a joint one
+        # at the same k, because it removes twice as many directions.
+        print(f"[fit] basis=split (half_dim={extra['half_dim']}): rank k removes k "
+              "directions PER HALF = 2k total -- do not compare k against a joint fit",
+              flush=True)
+        for name, sp in spec_halves.items():
+            print(f"[fit]   {name}: " + " ".join(f"{k}:{v:.4f}" for k, v in sp.items()),
+                  flush=True)
+    else:
+        for k, v in spec.items():
+            print(f"[fit]   top {k:>4d}: {v:.4f}", flush=True)
     # How big the nuisance spread is at all, relative to the embeddings themselves. A tiny
     # ratio would mean there is nothing worth projecting out no matter how concentrated it is.
     tot_nuis = float(eigvals.sum())
@@ -315,14 +430,30 @@ def main() -> int:
         tile_idx=tile_idx.astype(np.int32),
         D=np.array(model.embed_dim),
         timestamp=np.array(time.strftime("%Y-%m-%dT%H:%M:%S")),
+        # `basis` is what apply_svd_nuisance keys its row selection off; an npz written
+        # before this flag existed has no such field and is read back as "joint".
+        **{k: (np.array(v) if not isinstance(v, np.ndarray) else v) for k, v in extra.items()},
     )
     print(f"[fit] wrote {args.out}  V={V.shape} eigvals={eigvals.shape}", flush=True)
-    print(json.dumps({
+    summary = {
         "out": str(args.out), "backbone": model.cfg.backbone, "pooling": args.pooling,
         "conditions": len(conditions), "n_tiles": int(n_tiles), "D": int(model.embed_dim),
-        "explained_variance": {str(k): round(v, 6) for k, v in spec.items()},
+        "basis": args.basis, "half_dim": int(extra["half_dim"]),
+        # Directions actually removed at a given k, so a downstream reader never has to
+        # infer the factor of two from the basis name.
+        "directions_removed_per_k": 2 if args.basis == "split" else 1,
         "seconds": round(time.time() - t1, 1),
-    }))
+    }
+    if spec is not None:
+        summary["explained_variance"] = {str(k): round(v, 6) for k, v in spec.items()}
+    if spec_halves:
+        # Deliberately NOT folded into one "explained_variance" curve: the halves have
+        # separate totals, and averaging them would invent a number neither fit produced.
+        summary["explained_variance_per_half"] = {
+            name: {str(k): round(v, 6) for k, v in sp.items()}
+            for name, sp in spec_halves.items()
+        }
+    print(json.dumps(summary))
     return 0
 
 

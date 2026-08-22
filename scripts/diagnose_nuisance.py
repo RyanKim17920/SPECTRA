@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Why is the PLISM nuisance spectrum *diffuse*? Four diagnostics, one embedding pass.
+"""Why is the PLISM nuisance spectrum *diffuse*? Five diagnostics, one embedding pass.
 
 :mod:`scripts.fit_svd_nuisance` found that on Virchow2/clsmean the cross-condition spread
 is 31.7% of the total embedding variance -- large -- but that its spectrum is flat
@@ -15,7 +15,7 @@ from 0.637 at 64 to 0.826 at 256. So a large share of the nuisance is a tile x c
 **interaction** -- the encoder's response to a scanner depends on what tissue is in the
 tile. This script measures that share and then asks where it comes from.
 
-The four diagnostics
+The five diagnostics
 --------------------
 1. **Offset vs interaction.** Split ``d`` exactly into its per-condition mean part
    ``broadcast(m_c)`` and the residual, report the two energy shares (they are orthogonal,
@@ -39,10 +39,21 @@ The four diagnostics
    tissue fraction and (b) its raw pixel variance. An edge-rich, high-variance tile has more
    structure for a resampling or a stain difference to act on, so a positive correlation
    says the interaction term is carried by *which* tiles rather than spread evenly.
+5. **Is scanner/stain linearly decodable anyway?** The literature calls scanner and stain
+   "linearly separable" from pathology embeddings, which reads as a contradiction of the
+   flat spectrum above. It is not one: decodability is between-class separation relative to
+   *within-class* scatter, while the spectrum measures it relative to the *total*. A
+   direction holding 0.1% of the variance still separates the classes perfectly if they do
+   not overlap along it. A multinomial logistic probe is fitted for scanner (7 classes) and
+   stain (13), trained and tested on disjoint TILE indices, both on the raw embedding after
+   projecting out the top-k nuisance directions and on the top-m principal components
+   alone. The k at which accuracy falls to chance is how much rank the identity really
+   occupies; a high accuracy at small m is the "linearly separable" claim, quantified.
 
 Everything runs off ONE embedding pass over the 91 conditions (plus one short extra pass
-per shift in diagnostic 3). Nothing here trains, fits or writes a basis -- the output is a
-single JSON.
+per shift in diagnostic 3). Nothing here touches the encoder's weights or writes a basis --
+diagnostic 5 fits throwaway logistic probes as a measurement, and the output is a single
+JSON.
 """
 
 from __future__ import annotations
@@ -69,6 +80,7 @@ from fit_svd_nuisance import (  # noqa: E402
     DEFAULT_PACKED_DIR,
     embed_condition,
     load_frozen_encoder,
+    nuisance_basis,
     sample_tile_idx,
     select_conditions,
     spectrum_report,
@@ -333,6 +345,152 @@ def _correlations(x: np.ndarray, y: np.ndarray) -> dict:
 
 
 # --------------------------------------------------------------------------------------
+# diagnostic 5 -- linear probe for scanner / stain identity
+#
+# The literature reports that scanner and stain are "linearly separable" from pathology
+# embeddings, which looks like it contradicts diagnostics 1-2: how can a nuisance whose
+# variance spectrum is this flat be trivially decodable? It does not contradict them.
+# Linear decodability is between-class separation measured against WITHIN-class scatter;
+# variance share is between-class separation measured against the TOTAL. A direction
+# carrying 0.1% of the variance decodes scanner perfectly if the classes never overlap
+# along it. These two blocks measure exactly that, so the reconciliation stops being an
+# argument and becomes a number.
+
+#: Ranks at which the probe is re-run after projecting out the nuisance basis. 0 is the
+#: unprojected control; the entry where accuracy reaches chance is the answer to "how many
+#: directions must go before scanner identity is actually gone".
+PROBE_RANKS = (0, 1, 2, 4, 8, 16, 32, 64, 128, 256)
+
+#: Widths for the top-m PCA restriction -- the direct form of the "linearly separable"
+#: claim: how few dimensions of the embedding suffice.
+PROBE_PC_DIMS = (1, 2, 4, 8, 16, 32)
+
+
+def probe_tile_split(n_tiles: int, train_frac: float, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    """Disjoint train/test **tile positions** -- never a random row split.
+
+    Every condition contributes the same physical tile, so a random split over the
+    ``C * N`` rows puts 90 near-copies of each test tile into training and the probe then
+    scores its own memory of that tile. Splitting on the tile axis is the only split that
+    makes held-out mean held-out here.
+    """
+    if not 0.0 < train_frac < 1.0:
+        raise ValueError(f"train_frac must be strictly inside (0, 1), got {train_frac}")
+    perm = np.random.default_rng(seed).permutation(n_tiles)
+    n_train = int(round(train_frac * n_tiles))
+    n_train = min(max(n_train, 1), n_tiles - 1)  # both sides non-empty at any n_tiles >= 2
+    return np.sort(perm[:n_train]), np.sort(perm[n_train:])
+
+
+def probe_design(F: np.ndarray, positions: np.ndarray, labels: np.ndarray,
+                 max_rows: int, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    """``(C, N, D)`` restricted to ``positions`` -> flat ``(rows, D)`` design + labels.
+
+    ``labels`` is per condition (length C), so the row label is just its condition's.
+    Rows are subsampled uniformly when there are more than ``max_rows`` of them; the
+    classes stay balanced under uniform subsampling because the grid is complete (every
+    scanner appears with all 13 stains, every stain with all 7 scanners).
+    """
+    C, _, D = F.shape
+    if len(labels) != C:
+        raise ValueError(f"expected {C} labels, got {len(labels)}")
+    X = F[:, positions, :].reshape(C * len(positions), D)
+    y = np.repeat(np.asarray(labels), len(positions))
+    if 0 < max_rows < len(X):
+        pick = np.sort(np.random.default_rng(seed).choice(len(X), size=max_rows, replace=False))
+        X, y = X[pick], y[pick]
+    return np.ascontiguousarray(X), y
+
+
+def _fit_probe(Xtr: np.ndarray, ytr: np.ndarray, Xte: np.ndarray, yte: np.ndarray,
+               max_iter: int, seed: int) -> float:
+    """Balanced accuracy of a multinomial logistic regression on held-out rows.
+
+    Standardisation uses TRAIN statistics only. Balanced accuracy rather than accuracy
+    because the two label sets have different chance levels (1/7 and 1/13) and, once rows
+    are subsampled, marginally different class counts.
+    """
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import balanced_accuracy_score
+
+    mu = Xtr.mean(axis=0)
+    sd = Xtr.std(axis=0)
+    sd[sd < 1e-8] = 1.0  # a constant column carries no signal; leave it at zero, not inf
+    clf = LogisticRegression(max_iter=max_iter, random_state=seed)
+    clf.fit((Xtr - mu) / sd, ytr)
+    return float(balanced_accuracy_score(yte, clf.predict((Xte - mu) / sd)))
+
+
+def _pca_rows(Xtr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """``(mean, W)`` -- principal directions of the TRAIN rows as ROWS of ``W``, desc.
+
+    Fitted on train only: a PCA over all rows would leak the test tiles' geometry into the
+    basis the probe is then restricted to, which is precisely the axis under measurement.
+    """
+    mu = Xtr.mean(axis=0)
+    Xc = (Xtr - mu).astype(np.float64)
+    _, W = gram_eigh(Xc.T @ Xc)
+    return mu.astype(np.float32), W
+
+
+def linear_probe_diagnostic(F: np.ndarray, label_sets: dict, V: np.ndarray, *,
+                            ranks=PROBE_RANKS, pc_dims=PROBE_PC_DIMS, train_frac: float = 0.5,
+                            max_rows: int = 12000, max_iter: int = 200, seed: int = 0,
+                            verbose: bool = False) -> dict:
+    """Scanner/stain decodability vs nuisance rank removed and vs PCA width.
+
+    ``label_sets`` maps a name ("scanner", "stain") to a per-condition integer label array.
+    ``V`` is the joint nuisance basis from :func:`fit_svd_nuisance.nuisance_basis` -- the
+    same basis the apply step projects out, so ``project_out_k`` is a literal preview of
+    what the intervention does to decodability at each k of the RI sweep.
+    """
+    C, N, D = F.shape
+    tr_pos, te_pos = probe_tile_split(N, train_frac, seed)
+    ranks = tuple(k for k in ranks if k <= D)
+    pc_dims = tuple(m for m in pc_dims if m <= D)
+
+    out: dict = {
+        "n_train_tiles": int(len(tr_pos)), "n_test_tiles": int(len(te_pos)),
+        "train_frac": train_frac, "max_rows_per_split": int(max_rows),
+        "max_iter": max_iter, "seed": seed,
+        "split": "by tile index (disjoint tiles), not by row",
+    }
+
+    for name, labels in label_sets.items():
+        Xtr, ytr = probe_design(F, tr_pos, labels, max_rows, seed)
+        Xte, yte = probe_design(F, te_pos, labels, max_rows, seed + 1)
+        res = {
+            "n_classes": int(len(np.unique(labels))),
+            "chance_balanced_accuracy": 1.0 / len(np.unique(labels)),
+            "rows_train": int(len(Xtr)), "rows_test": int(len(Xte)),
+            "subsampled": bool(0 < max_rows < C * len(tr_pos)),
+            "project_out_k": {},
+            "top_m_pcs": {},
+        }
+        for k in ranks:
+            Vk = V[:k]
+            # k=0 is the unprojected control and skips the arithmetic entirely, matching
+            # apply_svd_nuisance's k=0 passthrough.
+            a = Xtr if k == 0 else Xtr - (Xtr @ Vk.T) @ Vk
+            b = Xte if k == 0 else Xte - (Xte @ Vk.T) @ Vk
+            res["project_out_k"][str(k)] = _fit_probe(a, ytr, b, yte, max_iter, seed)
+            if verbose:
+                print(f"[diag 5]   {name} k={k:<4d} bal.acc "
+                      f"{res['project_out_k'][str(k)]:.4f}", flush=True)
+
+        mu, W = _pca_rows(Xtr)
+        for m in pc_dims:
+            Wm = W[:m]
+            res["top_m_pcs"][str(m)] = _fit_probe(
+                (Xtr - mu) @ Wm.T, ytr, (Xte - mu) @ Wm.T, yte, max_iter, seed)
+            if verbose:
+                print(f"[diag 5]   {name} m={m:<4d} bal.acc "
+                      f"{res['top_m_pcs'][str(m)]:.4f}", flush=True)
+        out[name] = res
+    return out
+
+
+# --------------------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -350,6 +508,17 @@ def main() -> int:
     ap.add_argument("--tissue-fraction", type=Path, default=DEFAULT_TISSUE_FRACTION,
                     help="diagnostic 4: per-tile tissue fraction over all 16278 tiles")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--probe-train-frac", type=float, default=0.5,
+                    help="diag 5: fraction of TILES used to train the probe")
+    ap.add_argument("--probe-max-rows", type=int, default=12000,
+                    help="diag 5: cap on (condition, tile) rows per split; 0 = no cap. The "
+                         "full design is 91 x n_tiles rows, which is more than a dense "
+                         "logistic fit at D=2560 needs and far more than it wants to pay for")
+    ap.add_argument("--probe-max-iter", type=int, default=200,
+                    help="diag 5: lbfgs iterations")
+    ap.add_argument("--skip-probe", action="store_true",
+                    help="diag 5 is the only part that needs sklearn and the only part "
+                         "whose cost scales with the rank ladder; this skips it")
     ap.add_argument("--out", type=Path, required=True, help="JSON report to write")
     args = ap.parse_args()
 
@@ -510,6 +679,38 @@ def main() -> int:
     d4["pixel_variance"]["reference_condition"] = ref.key
     print(f"[diag 4]   vs pixel variance:  {d4['pixel_variance']}", flush=True)
     report["d4_tile_heterogeneity"] = d4
+
+    # --- diagnostic 5 -----------------------------------------------------------------
+    if args.skip_probe:
+        report["d5_linear_probe"] = {"note": "skipped (--skip-probe)"}
+    else:
+        print("\n[diag 5] linear probe for scanner / stain identity", flush=True)
+        scanner_idx = {s: i for i, s in enumerate(SCANNERS)}
+        stain_idx = {s: i for i, s in enumerate(STAINS)}
+        label_sets = {
+            "scanner": np.array([scanner_idx[c.scanner] for c in conditions]),
+            "stain": np.array([stain_idx[c.stain] for c in conditions]),
+        }
+        # The SAME basis apply_svd_nuisance projects out, so the k ladder below reads as a
+        # preview of the RI sweep rather than as a separate quantity that merely rhymes.
+        V_joint, _ = nuisance_basis(F)
+        d5 = linear_probe_diagnostic(
+            F, label_sets, V_joint,
+            train_frac=args.probe_train_frac, max_rows=args.probe_max_rows,
+            max_iter=args.probe_max_iter, seed=args.seed, verbose=True)
+        report["d5_linear_probe"] = d5
+        for name in ("scanner", "stain"):
+            r = d5[name]
+            print(f"[diag 5] {name}: chance {r['chance_balanced_accuracy']:.3f}, "
+                  f"k=0 {r['project_out_k']['0']:.4f} "
+                  f"<- high here with a flat spectrum is the point: decodability is not "
+                  f"variance share", flush=True)
+            print(f"[diag 5]   vs k: " + " ".join(f"{k}:{v:.3f}"
+                                                  for k, v in r["project_out_k"].items()),
+                  flush=True)
+            print(f"[diag 5]   vs m: " + " ".join(f"{m}:{v:.3f}"
+                                                  for m, v in r["top_m_pcs"].items()),
+                  flush=True)
 
     report["seconds"] = round(time.time() - t1, 1)
     args.out.parent.mkdir(parents=True, exist_ok=True)

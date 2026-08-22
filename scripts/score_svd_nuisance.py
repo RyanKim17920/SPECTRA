@@ -91,11 +91,15 @@ def main() -> int:
         t0 = time.time()
         info = apply_fit(args.fit, k, args.src_model, dst, features_dir, tuple(datasets))
         print(f"[score] k={k} -> {dst}: {info['vectors']} vectors, D={info['D']} "
+              f"basis={info['basis']} removed={info['directions_removed']} "
               f"({time.time() - t0:.1f}s)", flush=True)
         run_robustness_index(dst, datasets, paths=paths, python_exe=args.python_exe)
         ri = {d: float(read_results(dst, d, paths=paths)["robustness_index"]) for d in datasets}
         ri["avg"] = sum(ri.values()) / len(datasets)
-        rows[str(k)] = {"model": dst, "ri": ri}
+        # `directions_removed` is 2k under a split fit and k under a joint one, so the
+        # sweep table never has to be read against the basis to be read correctly.
+        rows[str(k)] = {"model": dst, "ri": ri, "basis": info["basis"],
+                        "directions_removed": info["directions_removed"]}
         print(f"[score] k={k} RI {json.dumps({d: round(v, 4) for d, v in ri.items()})}",
               flush=True)
 
@@ -108,6 +112,7 @@ def main() -> int:
         "src_model": args.src_model,
         "datasets": datasets,
         "ks": ks,
+        "basis": rows["0"]["basis"],
         "rows": rows,
         # Ranked on the paired delta, not on the absolute -- see the module docstring.
         "best_k": max(rows, key=lambda k: rows[k]["delta_vs_k0"]["avg"]),
