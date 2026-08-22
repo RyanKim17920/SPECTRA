@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=waiv-svdsweep
-#SBATCH --partition=c
+#SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=200G
