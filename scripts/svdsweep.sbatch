@@ -24,5 +24,6 @@ SEED="${SEED:-0}"
   --src-model virchow2_clsmean_base \
   --pathorob-root "$MAIN/third_party/PathoROB" \
   --python-exe "$MAIN/.venv-pathorob/bin/python" \
+  --dst-tag "_s${SEED}" \
   --out "$WT/runs/svd_nuisance_sweep_virchow2_s${SEED}.json"
 echo "=== done rc=$? seed=$SEED ==="

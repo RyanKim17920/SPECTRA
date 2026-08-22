@@ -27,18 +27,23 @@ REPO = Path(__file__).resolve().parents[1]
 DATASETS = ("camelyon", "tcga", "tolkach_esca")
 
 
-def dst_model_name(src_model: str, k: int) -> str:
+def dst_model_name(src_model: str, k: int, tag: str = "") -> str:
     """``phikonv2_clsmean_ours`` + k=8 -> ``phikonv2_clsmean_ours_svd008``.
 
     Zero-padded so the feature dirs and the results dirs sort in rank order rather than
     lexicographically (``_svd8`` after ``_svd128`` is how a sweep table gets misread).
     """
-    return f"{src_model}_svd{k:03d}"
+    # ``tag`` separates fits that differ only by seed: without it a seed-1 sweep
+    # overwrites the seed-0 feature dirs AND its PathoROB results dir, and the second
+    # run silently reports over the first one's numbers.
+    return f"{src_model}_svd{k:03d}{tag}"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--fit", type=Path, required=True, help="npz from fit_svd_nuisance.py")
+    ap.add_argument("--dst-tag", default="", help="suffix on every destination model name; "
+                    "use it to keep seed replicates from overwriting each other")
     ap.add_argument("--ks", type=int, nargs="+", default=[0, 1, 2, 4, 8, 16, 32, 64],
                     help="ranks to sweep; 0 (the control) is added if absent")
     ap.add_argument("--src-model", default="phikonv2_clsmean_ours")
@@ -71,7 +76,7 @@ def main() -> int:
 
     if args.dry_run:
         for k in ks:
-            dst = dst_model_name(args.src_model, k)
+            dst = dst_model_name(args.src_model, k, args.dst_tag)
             print(f"python scripts/apply_svd_nuisance.py --fit {args.fit} --k {k} "
                   f"--src-model {args.src_model} --dst-model {dst} "
                   f"--features-dir {features_dir} --datasets {' '.join(datasets)}")
@@ -82,7 +87,7 @@ def main() -> int:
     paths = PathoRobPaths(root=args.pathorob_root)
     rows: dict[str, dict] = {}
     for k in ks:
-        dst = dst_model_name(args.src_model, k)
+        dst = dst_model_name(args.src_model, k, args.dst_tag)
         t0 = time.time()
         info = apply_fit(args.fit, k, args.src_model, dst, features_dir, tuple(datasets))
         print(f"[score] k={k} -> {dst}: {info['vectors']} vectors, D={info['D']} "

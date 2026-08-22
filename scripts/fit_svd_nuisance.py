@@ -42,6 +42,14 @@ import torch
 
 REPO = Path(__file__).resolve().parents[1]
 
+# Module level rather than inside main(): the helpers below are imported by
+# scripts/diagnose_nuisance.py, which must be able to reach ``waivphaet`` without
+# going through this file's CLI. The heavy imports themselves stay lazy (inside the
+# helpers) so importing this module is still cheap.
+for _p in (str(REPO / "src"), str(Path(__file__).resolve().parent)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 DEFAULT_PACKED_DIR = Path("/data/plism/repacked")
 
 #: Ranks the spectrum diagnostic reports. Powers of two up to a quarter of the 2048-d
@@ -117,10 +125,70 @@ def spectrum_report(eigvals: np.ndarray, ranks=SPECTRUM_RANKS) -> dict[int, floa
 
 
 # --------------------------------------------------------------------------------------
+# shared setup helpers
+#
+# These three are factored out of main() so scripts/diagnose_nuisance.py can run the
+# *identical* loader, condition roster and tile sample rather than reimplementing them --
+# a diagnostic that disagrees with the fit about which tiles or which normalisation is in
+# play is measuring a different quantity than the one it claims to explain.
+
+
+def load_frozen_encoder(backbone: str, pooling: str, device: str):
+    """The frozen base encoder, via the same ``build_model`` the PathoROB baseline used."""
+    from extract_pathorob_features import build_model  # lazy: pulls torch/transformers
+
+    return build_model(None, pooling, backbone=backbone).to(device)
+
+
+def select_conditions(
+    *,
+    conditions_file: Path | None = None,
+    heldout_scanners: str = "",
+    heldout_stains: str = "",
+    limit_conditions: int = 0,
+    verbose: bool = True,
+):
+    """Resolve the CLI's condition selectors to a concrete list of :class:`Condition`."""
+    from waivphaet.data.conditions import all_conditions, make_split, parse_filename
+
+    if conditions_file is not None:
+        wanted = [ln.strip() for ln in Path(conditions_file).read_text().splitlines()
+                  if ln.strip() and not ln.startswith("#")]
+        by_key = {c.key: c for c in all_conditions()}
+        conditions = [parse_filename(w) if w.endswith(".h5") else by_key[w] for w in wanted]
+    elif heldout_scanners or heldout_stains:
+        split = make_split(
+            [s for s in heldout_scanners.split(",") if s],
+            [s for s in heldout_stains.split(",") if s],
+        )
+        if verbose:
+            print(f"[fit] {split.summary()}", flush=True)
+        conditions = split.train
+    else:
+        conditions = all_conditions()
+    if limit_conditions:
+        conditions = conditions[:limit_conditions]
+    return conditions
+
+
+def sample_tile_idx(seed: int, n_tiles: int) -> np.ndarray:
+    """``n_tiles`` distinct tile indices, SORTED.
+
+    Sorted because each condition is a 3.3 GB memmap and a shuffled index turns one
+    sequential scan into ``n_tiles`` random seeks.
+    """
+    from waivphaet.data.conditions import NUM_TILES
+
+    rng = np.random.default_rng(seed)
+    n = min(n_tiles, NUM_TILES)
+    return np.sort(rng.choice(NUM_TILES, size=n, replace=False))
+
+
+# --------------------------------------------------------------------------------------
 # embedding
 
 
-def _embed_condition(model, path: Path, tile_idx: np.ndarray, device: str,
+def embed_condition(model, path: Path, tile_idx: np.ndarray, device: str,
                      batch_size: int, amp: str) -> np.ndarray:
     """Embed ``tile_idx`` of one PLISM condition -> ``(N, D)`` float32.
 
@@ -180,51 +248,24 @@ def main() -> int:
                     help="smoke: use only the first N conditions")
     args = ap.parse_args()
 
-    sys.path.insert(0, str(REPO / "src"))
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    # build_model, not a reimplementation: the whole claim is that the fit runs through the
-    # identical loader that produced the baseline PathoROB row.
-    from extract_pathorob_features import build_model
-
-    from waivphaet.data.conditions import (
-        NUM_TILES,
-        all_conditions,
-        make_split,
-        parse_filename,
-    )
     from waivphaet.data.repack import npy_path
 
     # --- which conditions -------------------------------------------------------------
-    if args.conditions_file is not None:
-        wanted = [ln.strip() for ln in args.conditions_file.read_text().splitlines()
-                  if ln.strip() and not ln.startswith("#")]
-        by_key = {c.key: c for c in all_conditions()}
-        conditions = []
-        for w in wanted:
-            conditions.append(parse_filename(w) if w.endswith(".h5") else by_key[w])
-    elif args.heldout_scanners or args.heldout_stains:
-        split = make_split(
-            [s for s in args.heldout_scanners.split(",") if s],
-            [s for s in args.heldout_stains.split(",") if s],
-        )
-        print(f"[fit] {split.summary()}", flush=True)
-        conditions = split.train
-    else:
-        conditions = all_conditions()
-    if args.limit_conditions:
-        conditions = conditions[: args.limit_conditions]
+    conditions = select_conditions(
+        conditions_file=args.conditions_file,
+        heldout_scanners=args.heldout_scanners,
+        heldout_stains=args.heldout_stains,
+        limit_conditions=args.limit_conditions,
+    )
     if len(conditions) < 2:
         raise SystemExit("need >=2 conditions: with one condition there is no spread to fit")
 
     # --- which tiles ------------------------------------------------------------------
-    # SORTED: each condition is a 3.3 GB memmap and a shuffled index turns a sequential
-    # scan into 2000 random seeks.
-    rng = np.random.default_rng(args.seed)
-    n_tiles = min(args.n_tiles, NUM_TILES)
-    tile_idx = np.sort(rng.choice(NUM_TILES, size=n_tiles, replace=False))
+    tile_idx = sample_tile_idx(args.seed, args.n_tiles)
+    n_tiles = len(tile_idx)
 
     t0 = time.time()
-    model = build_model(None, args.pooling, backbone=args.backbone).to(args.device)
+    model = load_frozen_encoder(args.backbone, args.pooling, args.device)
     print(f"[fit] backbone={model.cfg.backbone} pooling={args.pooling} "
           f"embed_dim={model.embed_dim} norm mean={model.norm_mean} std={model.norm_std}",
           flush=True)
@@ -239,7 +280,7 @@ def main() -> int:
         path = npy_path(args.packed_dir, Path(cond.filename))
         if not path.exists():
             raise SystemExit(f"missing PLISM condition {path}")
-        F[ci] = _embed_condition(model, path, tile_idx, args.device, args.batch_size, args.amp)
+        F[ci] = embed_condition(model, path, tile_idx, args.device, args.batch_size, args.amp)
         done = ci + 1
         rate = done / (time.time() - t1)
         print(f"[fit] {done}/{len(conditions)} {cond.key}  "
