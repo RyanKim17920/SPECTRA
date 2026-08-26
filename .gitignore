@@ -29,6 +29,11 @@ runs/
 # scratch: throwaway sizing probes, never part of a run
 .scratch/
 
+# temporary scratch files from development
+_tmp_*
+*.bak
+*.bak.*
+
 # large output dirs — jobs write here, never committed
 logs/
 core/
