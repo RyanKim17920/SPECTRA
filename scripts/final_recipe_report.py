@@ -86,7 +86,30 @@ import collect_thunder as _ct         # noqa: E402
 import eval_common as _ec             # noqa: E402
 import scoreboard as _sb              # noqa: E402
 
-PAPER_CLS = _c5.PAPER_CLS                       # the 12 classification datasets
+# ---------------------------------------------------------------------------
+# CLASSIFICATION ROSTER (2026-08-26).  Owned by collect_final5; selected here.
+# ---------------------------------------------------------------------------
+# DEFAULT IS THE 16-SET WAIV ROSTER.  Waiv's published THUNDER classification numbers
+# (arXiv:2607.22861 Table 2) are means over 16 datasets -- the THUNDER paper's 12 plus
+# the 4 SPIDER organ subsets, which postdate that paper.  We averaged over 12.  That
+# mismatch put our base task means 0.86-3.72 points BELOW Waiv's published bases on all
+# 9 (backbone, task) cells, and since pct_of_waiv = (ours - our_base) / waiv_gain, a base
+# that is not the same quantity as theirs is not a comparison at all.  On the 16-set
+# roster the same 9 gaps collapse to -0.61..+0.43 -- i.e. the base gap IS the roster.
+#
+# `--cls-roster 12` reproduces every pre-2026-08-26 number for before/after inspection.
+#
+# CAVEAT THAT MUST TRAVEL WITH THE 16-SET NUMBERS: THUNDER_FLOOR and THUNDER_SEED_SD
+# below were measured on the 12-DATASET task mean (n=5 seeds).  A 16-dataset mean
+# averages over MORE datasets and is therefore LESS noisy, so reusing the 12ds SD as the
+# error floor OVER-states the noise.  That is the safe direction for an error bar, and it
+# is used rather than rescaled because no 5-seed SPIDER cohort exists to measure with.
+CLS_ROSTERS = {
+    "12": _c5.PAPER_CLS_THUNDER12,   # THUNDER paper panel; what the seed floors were measured on
+    "16": _c5.PAPER_CLS_WAIV16,      # Waiv's Table-2 panel = 12 + 4 SPIDER
+}
+CLS_ROSTER_DEFAULT = "16"
+PAPER_CLS = CLS_ROSTERS[CLS_ROSTER_DEFAULT]
 THUNDER_ROOT = _c5.THUNDER_ROOT
 WAIV_THUNDER = _sb.WAIV_THUNDER                 # published Table 2, 0-100 scale
 WAIV_THUNDER_SOURCE = _sb.WAIV_THUNDER_SOURCE
@@ -369,11 +392,53 @@ def thunder_base_12ds(backbone: str) -> dict[str, tuple[float | None, int]]:
     Read through collect_final5's base-dir mapping so base and FT go through the same
     path and the same pooling convention per backbone.
     """
-    per_ds = _c5._thunder_base_per_ds(backbone)
+    per_ds = _c5._thunder_base_per_ds(backbone, cls_datasets=PAPER_CLS)
     out = {}
     for task in CLS_TASKS:
         vals = [v for k, v in (per_ds.get(task) or {}).items() if k in PAPER_CLS and v is not None]
         out[task] = ((sum(vals) / len(vals)) if len(vals) == len(PAPER_CLS) else None, len(vals))
+    return out
+
+
+def thunder_base_gap() -> dict:
+    """OUR base task mean MINUS Waiv's PUBLISHED base, on both rosters.
+
+    This is the validity test for every THUNDER pct_of_waiv in this report.  pct_of_waiv
+    subtracts OUR base from OUR score and divides by WAIV's gain; if our base is not
+    measuring the same quantity as their base, the numerator carries a constant offset
+    that has nothing to do with the recipe.  A roster that closes this gap is the only
+    evidence that the two sides are like-for-like.
+
+    Nothing here is hardcoded: our side is read from disk through the same
+    _thunder_base_per_ds path the cells use, and Waiv's side comes from
+    scoreboard.WAIV_THUNDER, which is loaded from docs/waiv_published.json.
+    """
+    out: dict = {"waiv_source": WAIV_THUNDER_SOURCE, "rosters": {}}
+    for label, roster in CLS_ROSTERS.items():
+        per_roster: dict = {}
+        for a in ARMS:
+            per_ds = _c5._thunder_base_per_ds(a, cls_datasets=roster)
+            for task in CLS_TASKS:
+                vals = [v for k, v in (per_ds.get(task) or {}).items()
+                        if k in roster and v is not None]
+                ours = (100.0 * sum(vals) / len(vals)) if len(vals) == len(roster) else None
+                waiv = WAIV_THUNDER[a]["base"][task]
+                per_roster["%s/%s" % (a, task)] = {
+                    "our_base_pct": ours,
+                    "coverage": "%d/%d" % (len(vals), len(roster)),
+                    "waiv_published_base_pct": waiv,
+                    "gap_pct_points": (None if ours is None else ours - waiv),
+                }
+        gaps = [v["gap_pct_points"] for v in per_roster.values()
+                if v["gap_pct_points"] is not None]
+        out["rosters"][label] = {
+            "n_datasets": len(roster),
+            "datasets": list(roster),
+            "cells": per_roster,
+            "n_cells_with_full_coverage": len(gaps),
+            "max_abs_gap_pct_points": (max(abs(g) for g in gaps) if gaps else None),
+            "mean_gap_pct_points": (sum(gaps) / len(gaps) if gaps else None),
+        }
     return out
 
 
@@ -567,8 +632,13 @@ def fmt_cell(c: dict) -> str:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-def build_report(hest_assume_step: int | None = None) -> dict:
+def build_report(hest_assume_step: int | None = None,
+                 cls_roster: str = CLS_ROSTER_DEFAULT) -> dict:
     """Build the verdict report.
+
+    `cls_roster` selects the THUNDER classification panel: "16" (default, Waiv's
+    Table-2 roster) or "12" (the THUNDER paper's, which is what the seed floors were
+    measured on).  See CLS_ROSTERS above.
 
     `hest_assume_step` (F5 fix, 2026-08-26) is an explicit, opt-in, reversible escape
     hatch.  Runs that have finished training and have HEST summaries at every step but
@@ -578,8 +648,28 @@ def build_report(hest_assume_step: int | None = None) -> dict:
     THUNDER cells (both of which need the curve), and they never enter the primary
     rule-selected HEST cell that the verdict is scored on.
     """
+    global PAPER_CLS
+    PAPER_CLS = CLS_ROSTERS[cls_roster]
     runs = discover_runs()
     report: dict = {
+        "thunder_cls_roster": {
+            "selected": cls_roster,
+            "n_datasets": len(PAPER_CLS),
+            "datasets": list(PAPER_CLS),
+            "why": ("Waiv average THUNDER classification over 16 datasets (the THUNDER "
+                    "paper's 12 + the 4 SPIDER organ subsets, which postdate that paper). "
+                    "Averaging over 12 while comparing to their 16-set figures is a roster "
+                    "mismatch that biases every pct_of_waiv numerator."),
+            "seed_floor_caveat": ("THUNDER_FLOOR / THUNDER_SEED_SD were measured on the "
+                                  "12-dataset task mean (n=5 seeds).  A 16-dataset mean is "
+                                  "LESS noisy, so reusing the 12ds SD OVER-states the error "
+                                  "bar -- the safe direction.  No 5-seed SPIDER cohort "
+                                  "exists to remeasure with, so it is reused, not rescaled."),
+            "segmentation": ("still 0/4 -- no SPIDER segmentation task exists and the two "
+                             "segpath cells are not run on this cohort.  'THUNDER' in this "
+                             "report means CLASSIFICATION ONLY."),
+        },
+        "thunder_base_gap_validation": thunder_base_gap(),
         "criterion": {
             "pass_bar_per_cell": PASS_BAR,
             "overall_average_bar": OVERALL_BAR,
@@ -1102,6 +1192,75 @@ def build_report(hest_assume_step: int | None = None) -> dict:
                                  "reason": c.get("reason")} for a, b, c in ungraded_cells]
     report["verdict"] = verdict
     report["verdict_reason"] = reason
+
+    # ---- THE CRITERION: PER MODEL, not pooled across models -----------------
+    # Corrected 2026-08-26.  The bar is applied to EACH backbone on its own:
+    #   * pct_of_waiv >= 70 on EACH of RI, HEST, THUNDER, and
+    #   * the mean of that backbone's three benchmark percentages > 80.
+    # Pooling still happens WITHIN a cell (the 3 THUNDER tasks are pooled by
+    # ratio-of-means), but NOT across backbones.  The pooled-across-backbones block in
+    # report["benchmark_averages"] is retained as a SECONDARY view and is explicitly not
+    # what decides the verdict -- a benchmark mean over three backbones lets one model's
+    # surplus pay for another's shortfall, which is exactly what a per-model bar forbids.
+    per_model = {}
+    for a in ARMS:
+        cells_a = {b: (report["cells"].get(a, {}).get(b) or {}) for b in benches}
+        pcts = {b: cells_a[b].get("pct") for b in benches}
+        stats = {b: cells_a[b].get("status", "NO_DATA") for b in benches}
+        gradeable = [b for b in benches if pcts[b] is not None]
+        avg = (sum(pcts[b] for b in gradeable) / len(gradeable)
+               if len(gradeable) == len(benches) else None)
+        fails = [b for b in gradeable if stats[b] == "FAIL"]
+        unres = [b for b in gradeable if stats[b] == "NOT RESOLVED"]
+        ungraded = [b for b in benches if pcts[b] is None]
+        if ungraded or unres:
+            v = "INDETERMINATE"
+            why = "; ".join(filter(None, [
+                ("no gradeable number for " + ", ".join("%s (%s)" % (b, stats[b])
+                                                        for b in ungraded)) if ungraded else "",
+                ("error bar straddles the %g bar for " % PASS_BAR
+                 + ", ".join("%s (%.1f+/-%.1f)" % (b, pcts[b], cells_a[b]["ci"])
+                             for b in unres)) if unres else ""]))
+        elif fails:
+            v = "FAIL"
+            why = "below the %g bar: " % PASS_BAR + ", ".join(
+                "%s = %.1f+/-%.1f" % (b, pcts[b], cells_a[b]["ci"]) for b in fails)
+        elif avg is not None and avg <= OVERALL_BAR:
+            v = "FAIL"
+            why = ("every benchmark clears %g but this model's average %.1f does not "
+                   "exceed %g" % (PASS_BAR, avg, OVERALL_BAR))
+        else:
+            v = "PASS"
+            wb = min(gradeable, key=lambda b: pcts[b])
+            why = ("worst benchmark %s = %.1f (lower bound %.1f) >= %g; model average "
+                   "%.1f > %g" % (wb, pcts[wb], cells_a[wb]["lower_uncapped"], PASS_BAR,
+                                  avg, OVERALL_BAR))
+        per_model[a] = {
+            "pct": pcts,
+            "ci": {b: cells_a[b].get("ci") for b in benches},
+            "lower_uncapped": {b: cells_a[b].get("lower_uncapped") for b in benches},
+            "status": stats,
+            "n": {b: cells_a[b].get("n") for b in benches},
+            "average": avg,
+            "average_note": ("mean of this model's three benchmark percentages"
+                             if avg is not None else
+                             "UNDEFINED: this model has no gradeable number on "
+                             + ", ".join(ungraded)),
+            "verdict": v,
+            "verdict_reason": why,
+        }
+    report["per_model"] = per_model
+    report["per_model_criterion"] = (
+        "THE CRITERION.  Each backbone independently: pct_of_waiv >= %g on EACH of "
+        "RI/HEST/THUNDER AND the mean of its three percentages > %g.  No pooling across "
+        "backbones." % (PASS_BAR, OVERALL_BAR))
+    pm_v = [per_model[a]["verdict"] for a in ARMS]
+    report["per_model_verdict"] = ("FAIL" if "FAIL" in pm_v else
+                                   "INDETERMINATE" if "INDETERMINATE" in pm_v else "PASS")
+    report["pooled_across_backbones_NOT_THE_CRITERION"] = (
+        "report['benchmark_averages'], report['overall_average'] and report['verdict'] "
+        "pool across the three backbones.  They are SECONDARY.  The criterion is "
+        "report['per_model'] / report['per_model_verdict'].")
     return report
 
 
@@ -1302,6 +1461,45 @@ def print_report(rep: dict) -> None:
     print(f"Gate change 2026-08-26   : {rep['sources']['denominator_gate_change_2026_08_26']}")
     print(f"CI construction          : {rep['sources']['ci_construction']}")
     print()
+    r = rep["thunder_cls_roster"]
+    print("-- THUNDER CLASSIFICATION ROSTER " + "-" * 45)
+    print(f"   panel                 : {r['n_datasets']} datasets ({r['selected']}-set)")
+    print(f"   segmentation          : {r['segmentation']}")
+    print(f"   seed-floor caveat     : {r['seed_floor_caveat']}")
+    print()
+    print("-- BASE GAP: OUR BASE minus WAIV'S PUBLISHED BASE (pct points) " + "-" * 15)
+    keys = sorted(rep["thunder_base_gap_validation"]["rosters"]["12"]["cells"])
+    print(f"   {'cell':<28} {'ours12':>8} {'ours16':>8} {'waiv':>8} {'gap12':>8} {'gap16':>8}")
+    for k in keys:
+        c12 = rep["thunder_base_gap_validation"]["rosters"]["12"]["cells"][k]
+        c16 = rep["thunder_base_gap_validation"]["rosters"]["16"]["cells"][k]
+        f = lambda x: "    --  " if x is None else f"{x:8.2f}"
+        print(f"   {k:<28} {f(c12['our_base_pct'])} {f(c16['our_base_pct'])} "
+              f"{f(c12['waiv_published_base_pct'])} {f(c12['gap_pct_points'])} "
+              f"{f(c16['gap_pct_points'])}")
+    for lab in ("12", "16"):
+        b = rep["thunder_base_gap_validation"]["rosters"][lab]
+        print("   %s-set: max |gap| = %.4f  mean gap = %+.4f  (%d/9 cells at full coverage)"
+              % (lab, b["max_abs_gap_pct_points"], b["mean_gap_pct_points"],
+                 b["n_cells_with_full_coverage"]))
+    print()
+    print("== THE CRITERION: PER MODEL " + "=" * 50)
+    print(f"   {rep['per_model_criterion']}")
+    print(f"   {'backbone':<10} {'RI':>16} {'HEST':>16} {'THUNDER':>16} {'avg':>8}  verdict")
+    for a in ARMS:
+        pm = rep["per_model"][a]
+        cells = []
+        for b in ("RI", "HEST", "THUNDER"):
+            v, ci = pm["pct"][b], pm["ci"][b]
+            cells.append("%16s" % (pm["status"][b][:16] if v is None
+                                   else "%.1f+/-%s" % (v, "?" if ci is None else "%.1f" % ci)))
+        avg = "      --" if pm["average"] is None else "%8.1f" % pm["average"]
+        print(f"   {a:<10} {' '.join(cells)} {avg}  {pm['verdict']}")
+    for a in ARMS:
+        print(f"   {a}: {rep['per_model'][a]['verdict_reason']}")
+    print(f"   PER-MODEL VERDICT: {rep['per_model_verdict']}")
+    print(f"   ({rep['pooled_across_backbones_NOT_THE_CRITERION']})")
+    print()
     print("-- RETIRED LITERALS vs THE VALUES NOW READ FROM DISK " + "-" * 25)
     for k, v in rep["retired_literal_agreement"].items():
         flag = "ok" if v["agrees_to_4dp"] else "*** DISAGREES ***"
@@ -1320,9 +1518,16 @@ def main() -> None:
                          "this explicit step.  They never enter the RI or THUNDER cells, "
                          "and never the primary rule-selected HEST cell the verdict is "
                          "scored on.  Off by default; remove the flag to revert.")
+    ap.add_argument("--cls-roster", choices=sorted(CLS_ROSTERS), default=CLS_ROSTER_DEFAULT,
+                    help="THUNDER classification panel: 16 = Waiv's Table-2 roster "
+                         "(12 THUNDER-paper sets + 4 SPIDER), the default and the only "
+                         "one on which our base is comparable to their published base; "
+                         "12 = the THUNDER paper's panel, which reproduces every "
+                         "pre-2026-08-26 number.")
     args = ap.parse_args()
 
-    rep = build_report(hest_assume_step=args.hest_assume_step)
+    rep = build_report(hest_assume_step=args.hest_assume_step,
+                       cls_roster=args.cls_roster)
     print_report(rep)
     if args.json:
         out = Path(args.json_out)

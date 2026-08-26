@@ -259,10 +259,32 @@ HEST_BASE, HEST_BASE_SOURCE = _load_hest_base()
 THUNDER_ROOT = Path(os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder"))
 
 # THUNDER dataset lists (from collect_thunder.py)
-PAPER_CLS = [
+# ---------------------------------------------------------------------------
+# CLASSIFICATION ROSTER -- SINGLE OWNER (2026-08-26)
+# ---------------------------------------------------------------------------
+# PAPER_CLS_THUNDER12 -- the 12 classification datasets of the THUNDER paper.
+# PAPER_CLS_SPIDER    -- the 4 SPIDER organ subsets.  These POSTDATE the THUNDER paper,
+#                        which is why they are not in the 12; they are classification-
+#                        only (no segmentation task exists for them).
+# PAPER_CLS_WAIV16    -- the 16 datasets WAIV average over in arXiv:2607.22861 Table 2.
+#
+# WHY THIS MATTERS.  Waiv's published THUNDER classification numbers are means over 16
+# datasets; ours were means over 12.  That is a ROSTER mismatch, not a model difference,
+# and it moved every one of our base task means 0.86-3.72 points BELOW Waiv's published
+# base -- which then flowed straight into pct_of_waiv as a bogus numerator offset.  On
+# the 16-set roster our bases agree with Waiv's published bases to within 0.61 points on
+# all 9 (backbone, task) cells; see docs/THUNDER_16DS_2026-08-26.md.
+#
+# `PAPER_CLS` stays the 12-set panel so that every existing consumer (the seed-floor
+# measurement, scoreboard, thunder_seed_delta) keeps reading the quantity it was built
+# against.  Consumers that grade against Waiv must ask for PAPER_CLS_WAIV16 explicitly.
+PAPER_CLS_THUNDER12 = [
     "bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
     "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds",
 ]
+PAPER_CLS_SPIDER = ["spider_breast", "spider_colorectal", "spider_skin", "spider_thorax"]
+PAPER_CLS_WAIV16 = PAPER_CLS_THUNDER12 + PAPER_CLS_SPIDER
+PAPER_CLS = PAPER_CLS_THUNDER12
 # ---------------------------------------------------------------------------
 # SEGMENTATION ROSTER -- SINGLE OWNER (2026-08-26)
 # ---------------------------------------------------------------------------
@@ -488,6 +510,7 @@ def _thunder_score_by_model(model: str) -> dict[str, float | None]:
 def _thunder_per_ds_by_model(model: str,
                               cls_model: str | None = None,
                               seg_model: str | None = None,
+                              cls_datasets: list[str] | None = None,
                               ) -> dict[str, dict[str, float | None]]:
     """Return per-dataset F1 for each task, keyed by dataset name.
 
@@ -504,7 +527,7 @@ def _thunder_per_ds_by_model(model: str,
         return results
     for task in THUNDER_TASKS:
         m = (seg_model if task == "segmentation" else cls_model) or model
-        datasets = PAPER_CLS if task != "segmentation" else PAPER_SEG
+        datasets = (cls_datasets or PAPER_CLS) if task != "segmentation" else PAPER_SEG
         for ds in datasets:
             p = res_root / ds / m / task / "frozen" / "outputs.json"
             if not p.exists():
@@ -555,8 +578,13 @@ def _thunder_base_score(arm: str) -> dict[str, float | None]:
     return results
 
 
-def _thunder_base_per_ds(arm: str) -> dict[str, dict[str, float | None]]:
-    """Return per-dataset F1 for the BASE checkpoint.  Returns dict[task, dict[ds, float]]."""
+def _thunder_base_per_ds(arm: str, cls_datasets: list[str] | None = None,
+                         ) -> dict[str, dict[str, float | None]]:
+    """Return per-dataset F1 for the BASE checkpoint.  Returns dict[task, dict[ds, float]].
+
+    `cls_datasets` selects the classification roster (default PAPER_CLS = the 12
+    THUNDER-paper sets).  Callers that grade against Waiv must pass PAPER_CLS_WAIV16.
+    """
     dirs = THUNDER_BASE_DIRS.get(arm)
     if dirs is None:
         return {t: {} for t in THUNDER_TASKS}
@@ -566,6 +594,7 @@ def _thunder_base_per_ds(arm: str) -> dict[str, dict[str, float | None]]:
         model=cls_model,
         cls_model=cls_model,
         seg_model=seg_model,
+        cls_datasets=cls_datasets,
     )
 
 

@@ -1,7 +1,7 @@
 {
   "thunder_cls_roster": {
-    "selected": "16",
-    "n_datasets": 16,
+    "selected": "12",
+    "n_datasets": 12,
     "datasets": [
       "bach",
       "bracs",
@@ -14,11 +14,7 @@
       "tcga_crc_msi",
       "tcga_tils",
       "tcga_uniform",
-      "wilds",
-      "spider_breast",
-      "spider_colorectal",
-      "spider_skin",
-      "spider_thorax"
+      "wilds"
     ],
     "why": "Waiv average THUNDER classification over 16 datasets (the THUNDER paper's 12 + the 4 SPIDER organ subsets, which postdate that paper). Averaging over 12 while comparing to their 16-set figures is a roster mismatch that biases every pct_of_waiv numerator.",
     "seed_floor_caveat": "THUNDER_FLOOR / THUNDER_SEED_SD were measured on the 12-dataset task mean (n=5 seeds).  A 16-dataset mean is LESS noisy, so reusing the 12ds SD OVER-states the error bar -- the safe direction.  No 5-seed SPIDER cohort exists to remeasure with, so it is reused, not rescaled.",
@@ -340,9 +336,9 @@
       "thunder_model": "f5_ci-midnight-s0-392670_s0000125",
       "thunder": {
         "knn": {
-          "coverage": 16,
-          "mean": 0.8182927376920639,
-          "partial_mean": 0.8182927376920639,
+          "coverage": 12,
+          "mean": 0.8048795914394568,
+          "partial_mean": 0.8048795914394568,
           "datasets_present": [
             "bach",
             "bracs",
@@ -352,10 +348,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -364,9 +356,9 @@
           "datasets_missing": []
         },
         "linear_probing": {
-          "coverage": 16,
-          "mean": 0.8594534712640725,
-          "partial_mean": 0.8594534712640725,
+          "coverage": 12,
+          "mean": 0.8459918164264343,
+          "partial_mean": 0.8459918164264343,
           "datasets_present": [
             "bach",
             "bracs",
@@ -376,10 +368,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -388,9 +376,9 @@
           "datasets_missing": []
         },
         "simple_shot": {
-          "coverage": 16,
-          "mean": 0.7705847854501564,
-          "partial_mean": 0.7705847854501564,
+          "coverage": 12,
+          "mean": 0.7601259278562021,
+          "partial_mean": 0.7601259278562021,
           "datasets_present": [
             "bach",
             "bracs",
@@ -400,10 +388,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -476,9 +460,9 @@
       "thunder_model": "f5_ci-midnight-s1-392673_s0000125",
       "thunder": {
         "knn": {
-          "coverage": 16,
-          "mean": 0.8192163936429254,
-          "partial_mean": 0.8192163936429254,
+          "coverage": 12,
+          "mean": 0.8049385775563113,
+          "partial_mean": 0.8049385775563113,
           "datasets_present": [
             "bach",
             "bracs",
@@ -488,10 +472,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -500,9 +480,9 @@
           "datasets_missing": []
         },
         "linear_probing": {
-          "coverage": 16,
-          "mean": 0.8559725912310072,
-          "partial_mean": 0.8559725912310072,
+          "coverage": 12,
+          "mean": 0.8412427785385425,
+          "partial_mean": 0.8412427785385425,
           "datasets_present": [
             "bach",
             "bracs",
@@ -512,10 +492,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -524,9 +500,9 @@
           "datasets_missing": []
         },
         "simple_shot": {
-          "coverage": 16,
-          "mean": 0.7739422555222043,
-          "partial_mean": 0.7739422555222043,
+          "coverage": 12,
+          "mean": 0.7635394333625016,
+          "partial_mean": 0.7635394333625016,
           "datasets_present": [
             "bach",
             "bracs",
@@ -536,10 +512,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -612,9 +584,9 @@
       "thunder_model": "f5_ci-phikon-s0-392669_s0000250",
       "thunder": {
         "knn": {
-          "coverage": 16,
-          "mean": 0.7764640283384108,
-          "partial_mean": 0.7764640283384108,
+          "coverage": 12,
+          "mean": 0.7537605861942777,
+          "partial_mean": 0.7537605861942777,
           "datasets_present": [
             "bach",
             "bracs",
@@ -624,10 +596,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -636,9 +604,9 @@
           "datasets_missing": []
         },
         "linear_probing": {
-          "coverage": 16,
-          "mean": 0.8126631675957615,
-          "partial_mean": 0.8126631675957615,
+          "coverage": 12,
+          "mean": 0.7869478628579044,
+          "partial_mean": 0.7869478628579044,
           "datasets_present": [
             "bach",
             "bracs",
@@ -648,10 +616,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -660,9 +624,9 @@
           "datasets_missing": []
         },
         "simple_shot": {
-          "coverage": 16,
-          "mean": 0.7228069099407827,
-          "partial_mean": 0.7228069099407827,
+          "coverage": 12,
+          "mean": 0.7022588529385101,
+          "partial_mean": 0.7022588529385101,
           "datasets_present": [
             "bach",
             "bracs",
@@ -672,10 +636,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -748,9 +708,9 @@
       "thunder_model": "f5_ci-phikon-s1-392672_s0000250",
       "thunder": {
         "knn": {
-          "coverage": 16,
-          "mean": 0.7638882072383317,
-          "partial_mean": 0.7638882072383317,
+          "coverage": 12,
+          "mean": 0.7381318380301704,
+          "partial_mean": 0.7381318380301704,
           "datasets_present": [
             "bach",
             "bracs",
@@ -760,10 +720,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -772,9 +728,9 @@
           "datasets_missing": []
         },
         "linear_probing": {
-          "coverage": 16,
-          "mean": 0.8089324405358959,
-          "partial_mean": 0.8089324405358959,
+          "coverage": 12,
+          "mean": 0.7833252577389395,
+          "partial_mean": 0.7833252577389395,
           "datasets_present": [
             "bach",
             "bracs",
@@ -784,10 +740,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -796,9 +748,9 @@
           "datasets_missing": []
         },
         "simple_shot": {
-          "coverage": 16,
-          "mean": 0.7181414872768838,
-          "partial_mean": 0.7181414872768838,
+          "coverage": 12,
+          "mean": 0.6967060555719412,
+          "partial_mean": 0.6967060555719412,
           "datasets_present": [
             "bach",
             "bracs",
@@ -808,10 +760,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -884,9 +832,9 @@
       "thunder_model": "f5_ci-virchow2-s0-392671_s0000125",
       "thunder": {
         "knn": {
-          "coverage": 16,
-          "mean": 0.8286280305644607,
-          "partial_mean": 0.8286280305644607,
+          "coverage": 12,
+          "mean": 0.8132719314546324,
+          "partial_mean": 0.8132719314546324,
           "datasets_present": [
             "bach",
             "bracs",
@@ -896,10 +844,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -908,9 +852,9 @@
           "datasets_missing": []
         },
         "linear_probing": {
-          "coverage": 16,
-          "mean": 0.856057599316986,
-          "partial_mean": 0.856057599316986,
+          "coverage": 12,
+          "mean": 0.8387348810425467,
+          "partial_mean": 0.8387348810425467,
           "datasets_present": [
             "bach",
             "bracs",
@@ -920,10 +864,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -932,9 +872,9 @@
           "datasets_missing": []
         },
         "simple_shot": {
-          "coverage": 16,
-          "mean": 0.7801352492851259,
-          "partial_mean": 0.7801352492851259,
+          "coverage": 12,
+          "mean": 0.7609428577268592,
+          "partial_mean": 0.7609428577268592,
           "datasets_present": [
             "bach",
             "bracs",
@@ -944,10 +884,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -1020,9 +956,9 @@
       "thunder_model": "f5_ci-virchow2-s1-392674_s0000125",
       "thunder": {
         "knn": {
-          "coverage": 16,
-          "mean": 0.8302088521473499,
-          "partial_mean": 0.8302088521473499,
+          "coverage": 12,
+          "mean": 0.8142970854627203,
+          "partial_mean": 0.8142970854627203,
           "datasets_present": [
             "bach",
             "bracs",
@@ -1032,10 +968,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -1044,9 +976,9 @@
           "datasets_missing": []
         },
         "linear_probing": {
-          "coverage": 16,
-          "mean": 0.8565973926736709,
-          "partial_mean": 0.8565973926736709,
+          "coverage": 12,
+          "mean": 0.8401179339318007,
+          "partial_mean": 0.8401179339318007,
           "datasets_present": [
             "bach",
             "bracs",
@@ -1056,10 +988,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -1068,9 +996,9 @@
           "datasets_missing": []
         },
         "simple_shot": {
-          "coverage": 16,
-          "mean": 0.7816163986015732,
-          "partial_mean": 0.7816163986015732,
+          "coverage": 12,
+          "mean": 0.7624751990995727,
+          "partial_mean": 0.7624751990995727,
           "datasets_present": [
             "bach",
             "bracs",
@@ -1080,10 +1008,6 @@
             "esca",
             "mhist",
             "patch_camelyon",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax",
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
@@ -1172,11 +1096,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         },
         "linear_probing": {
@@ -1196,11 +1116,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         },
         "simple_shot": {
@@ -1220,11 +1136,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         }
       }
@@ -1308,11 +1220,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         },
         "linear_probing": {
@@ -1332,11 +1240,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         },
         "simple_shot": {
@@ -1356,11 +1260,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         }
       }
@@ -1444,11 +1344,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         },
         "linear_probing": {
@@ -1468,11 +1364,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         },
         "simple_shot": {
@@ -1492,11 +1384,7 @@
             "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
-            "wilds",
-            "spider_breast",
-            "spider_colorectal",
-            "spider_skin",
-            "spider_thorax"
+            "wilds"
           ]
         }
       }
@@ -1600,28 +1488,28 @@
         }
       },
       "THUNDER": {
-        "pct": 78.24016097006557,
-        "pct_capped": 78.24016097006557,
-        "pct_uncapped": 78.24016097006557,
-        "ci": 22.901189091545586,
-        "lower_uncapped": 55.338971878519985,
-        "upper_uncapped": 101.14135006161116,
-        "was_capped": false,
-        "status": "NOT RESOLVED",
+        "pct": 104.61721366542909,
+        "pct_capped": 100.0,
+        "pct_uncapped": 104.61721366542909,
+        "ci": 27.421102802226034,
+        "lower_uncapped": 77.19611086320306,
+        "upper_uncapped": 132.03831646765514,
+        "was_capped": true,
+        "status": "PASS",
         "n": 2,
         "tasks": {
           "knn": {
             "waiv_gain": 0.037000000000000026,
             "floor": 0.0233,
-            "our_base": 0.740514352251981,
-            "our_base_coverage": "16/16",
-            "pct": 80.16693388213565,
-            "pct_capped": 80.16693388213565,
-            "pct_uncapped": 80.16693388213565,
-            "ci": 33.988705675889264,
-            "lower_uncapped": 46.17822820624639,
-            "upper_uncapped": 114.15563955802492,
-            "was_capped": false,
+            "our_base": 0.70280675807706,
+            "our_base_coverage": "12/12",
+            "pct": 116.59311901395682,
+            "pct_capped": 100.0,
+            "pct_uncapped": 116.59311901395682,
+            "ci": 42.23985990299269,
+            "lower_uncapped": 74.35325911096413,
+            "upper_uncapped": 158.83297891694951,
+            "was_capped": true,
             "resolvability_floor_offset_2se": 0.0233,
             "seed_sd_of_task_mean": 0.006390496947880815,
             "percell_denominator_diagnostic": {
@@ -1636,40 +1524,40 @@
             },
             "sd_waiv_gain": 0.006390496947880815,
             "seed_sd_pct_points": 17.27161337265084,
-            "empirical_ci": 33.988705675889264,
+            "empirical_ci": 42.23985990299269,
             "floor_ci": 24.42574987566733,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=34.0, measured seed floor=24.4) [floor = 2 * seed_SD_12ds(0.006390) / |waiv_gain|(0.0370) * 100 / sqrt(2)]",
-            "status": "NOT RESOLVED",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=42.2, measured seed floor=24.4) [floor = 2 * seed_SD_12ds(0.006390) / |waiv_gain|(0.0370) * 100 / sqrt(2)]",
+            "status": "PASS",
             "n": 2,
-            "raw_mean": 0.7701761177883713,
+            "raw_mean": 0.745946212112224,
             "per_seed_pct": [
-              97.16128672008028,
-              63.17258104419101
+              137.71304896545317,
+              95.47318906246048
             ],
             "per_seed_pct_uncapped": [
-              97.16128672008028,
-              63.17258104419101
+              137.71304896545317,
+              95.47318906246048
             ],
             "per_seed_pct_capped": [
-              97.16128672008028,
-              63.17258104419101
+              100.0,
+              95.47318906246048
             ],
-            "coverage": "16/16",
-            "our_delta": 0.029661765536390217,
+            "coverage": "12/12",
+            "our_delta": 0.04313945403516406,
             "se_our_delta": 0.004518763726998459
           },
           "linear_probing": {
             "waiv_gain": 0.014000000000000058,
             "floor": 0.0097,
-            "our_base": 0.7973474836171492,
-            "our_base_coverage": "16/16",
-            "pct": 96.07371749056736,
-            "pct_capped": 96.07371749056736,
-            "pct_uncapped": 96.07371749056736,
-            "ci": 26.648050427611807,
-            "lower_uncapped": 69.42566706295555,
-            "upper_uncapped": 122.72176791817917,
-            "was_capped": false,
+            "our_base": 0.7654134679125493,
+            "our_base_coverage": "12/12",
+            "pct": 140.87923132766176,
+            "pct_capped": 100.0,
+            "pct_uncapped": 140.87923132766176,
+            "ci": 25.875750849749622,
+            "lower_uncapped": 115.00348047791213,
+            "upper_uncapped": 166.75498217741136,
+            "was_capped": true,
             "resolvability_floor_offset_2se": 0.0097,
             "seed_sd_of_task_mean": 0.0018875363781403606,
             "percell_denominator_diagnostic": {
@@ -1684,39 +1572,39 @@
             },
             "sd_waiv_gain": 0.0018875363781403606,
             "seed_sd_pct_points": 13.482402701002522,
-            "empirical_ci": 26.648050427611807,
+            "empirical_ci": 25.875750849749622,
             "floor_ci": 19.066996753133413,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=26.6, measured seed floor=19.1) [floor = 2 * seed_SD_12ds(0.001888) / |waiv_gain|(0.0140) * 100 / sqrt(2)]",
-            "status": "NOT RESOLVED",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=25.9, measured seed floor=19.1) [floor = 2 * seed_SD_12ds(0.001888) / |waiv_gain|(0.0140) * 100 / sqrt(2)]",
+            "status": "PASS",
             "n": 2,
-            "raw_mean": 0.8107978040658287,
+            "raw_mean": 0.7851365602984219,
             "per_seed_pct": [
-              109.39774270437326,
-              82.74969227676145
+              153.81710675253657,
+              127.94135590278695
             ],
             "per_seed_pct_uncapped": [
-              109.39774270437326,
-              82.74969227676145
+              153.81710675253657,
+              127.94135590278695
             ],
             "per_seed_pct_capped": [
               100.0,
-              82.74969227676145
+              100.0
             ],
-            "coverage": "16/16",
-            "our_delta": 0.013450320448679443,
+            "coverage": "12/12",
+            "our_delta": 0.019723092385872665,
             "se_our_delta": 0.0013346897727193443
           },
           "simple_shot": {
             "waiv_gain": 0.015,
             "floor": 0.0087,
-            "our_base": 0.7119477783536595,
-            "our_base_coverage": "16/16",
-            "pct": 56.84280170115792,
-            "pct_capped": 56.84280170115792,
-            "pct_uncapped": 56.84280170115792,
-            "ci": 31.10281775932604,
-            "lower_uncapped": 25.739983941831877,
-            "upper_uncapped": 87.94561946048395,
+            "our_base": 0.693297639657079,
+            "our_base_coverage": "12/12",
+            "pct": 41.23209732097747,
+            "pct_capped": 41.23209732097747,
+            "pct_uncapped": 41.23209732097747,
+            "ci": 37.018649110459194,
+            "lower_uncapped": 4.21344821051828,
+            "upper_uncapped": 78.25074643143667,
             "was_capped": false,
             "resolvability_floor_offset_2se": 0.0087,
             "seed_sd_of_task_mean": 0.0026369291166963645,
@@ -1732,26 +1620,26 @@
             },
             "sd_waiv_gain": 0.0026369291166963645,
             "seed_sd_pct_points": 17.57952744464243,
-            "empirical_ci": 31.10281775932604,
+            "empirical_ci": 37.018649110459194,
             "floor_ci": 24.86120613232336,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=31.1, measured seed floor=24.9) [floor = 2 * seed_SD_12ds(0.002637) / |waiv_gain|(0.0150) * 100 / sqrt(2)]",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=37.0, measured seed floor=24.9) [floor = 2 * seed_SD_12ds(0.002637) / |waiv_gain|(0.0150) * 100 / sqrt(2)]",
             "status": "NOT RESOLVED",
             "n": 2,
-            "raw_mean": 0.7204741986088332,
+            "raw_mean": 0.6994824542552256,
             "per_seed_pct": [
-              72.39421058082094,
-              41.291392821494895
+              59.74142187620707,
+              22.722772765747873
             ],
             "per_seed_pct_uncapped": [
-              72.39421058082094,
-              41.291392821494895
+              59.74142187620707,
+              22.722772765747873
             ],
             "per_seed_pct_capped": [
-              72.39421058082094,
-              41.291392821494895
+              59.74142187620707,
+              22.722772765747873
             ],
-            "coverage": "16/16",
-            "our_delta": 0.008526420255173695,
+            "coverage": "12/12",
+            "our_delta": 0.006184814598146571,
             "se_our_delta": 0.001864590459924252
           }
         },
@@ -1762,25 +1650,25 @@
           "cells": [
             {
               "key": "knn",
-              "delta": 0.029661765536390217,
+              "delta": 0.04313945403516406,
               "gain": 0.037000000000000026,
               "se_delta": 0.004518763726998459,
               "sd_gain": 0.006390496947880815,
               "complete": true,
-              "note": "NOT RESOLVED"
+              "note": "PASS"
             },
             {
               "key": "linear_probing",
-              "delta": 0.013450320448679443,
+              "delta": 0.019723092385872665,
               "gain": 0.014000000000000058,
               "se_delta": 0.0013346897727193443,
               "sd_gain": 0.0018875363781403606,
               "complete": true,
-              "note": "NOT RESOLVED"
+              "note": "PASS"
             },
             {
               "key": "simple_shot",
-              "delta": 0.008526420255173695,
+              "delta": 0.006184814598146571,
               "gain": 0.015,
               "se_delta": 0.001864590459924252,
               "sd_gain": 0.0026369291166963645,
@@ -1788,7 +1676,7 @@
               "note": "NOT RESOLVED"
             }
           ],
-          "our_avg_delta": 0.01721283541341445,
+          "our_avg_delta": 0.023015787006394433,
           "waiv_avg_gain": 0.02200000000000003,
           "se_our_avg_delta": 0.0016890931160793276,
           "sd_waiv_avg_gain": 0.0023887383928704177,
@@ -1797,28 +1685,28 @@
           "independence_caveat": "SE_agg = sqrt(sum SE_i^2)/k assumes independent cell noise; for the 3 THUNDER tasks of one backbone (same checkpoints, same 12 datasets) the true SE is up to sqrt(3) = 1.73x larger, i.e. up to 0.002926",
           "shares": {
             "knn": {
-              "delta": 0.029661765536390217,
+              "delta": 0.04313945403516406,
               "gain": 0.037000000000000026,
-              "numerator_share": 0.5744117654835251,
+              "numerator_share": 0.6247806346020771,
               "denominator_share": 0.5606060606060602,
               "flag_numerator": true,
               "flag_denominator": true
             },
             "linear_probing": {
-              "delta": 0.013450320448679443,
+              "delta": 0.019723092385872665,
               "gain": 0.014000000000000058,
-              "numerator_share": 0.26047074998845,
+              "numerator_share": 0.2856458537263001,
               "denominator_share": 0.2121212121212127
             },
             "simple_shot": {
-              "delta": 0.008526420255173695,
+              "delta": 0.006184814598146571,
               "gain": 0.015,
-              "numerator_share": 0.1651174845280248,
+              "numerator_share": 0.08957351167162284,
               "denominator_share": 0.22727272727272696
             }
           },
           "concentration_flags": [
-            "knn carries 57% of the pooled numerator",
+            "knn carries 62% of the pooled numerator",
             "knn carries 56% of the pooled denominator"
           ],
           "concentrated": true,
@@ -1831,23 +1719,23 @@
             "reason": null
           },
           "status": "POOLED",
-          "pct": 78.24016097006557,
-          "ci": 22.901189091545586,
-          "lower": 55.338971878519985,
-          "upper": 101.14135006161116,
-          "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 15.36 pts, denominator term 16.99 pts"
+          "pct": 104.61721366542909,
+          "ci": 27.421102802226034,
+          "lower": 77.19611086320306,
+          "upper": 132.03831646765514,
+          "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 15.36 pts, denominator term 22.72 pts"
         },
-        "our_avg_delta": 0.01721283541341445,
+        "our_avg_delta": 0.023015787006394433,
         "waiv_avg_gain": 0.02200000000000003,
-        "our_delta": 0.01721283541341445,
+        "our_delta": 0.023015787006394433,
         "waiv_gain": 0.02200000000000003,
         "se_our_delta": 0.0016890931160793276,
         "sd_waiv_gain": 0.0023887383928704177,
         "concentration_flags": [
-          "knn carries 57% of the pooled numerator",
+          "knn carries 62% of the pooled numerator",
           "knn carries 56% of the pooled denominator"
         ],
-        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 15.36 pts, denominator term 16.99 pts",
+        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 15.36 pts, denominator term 22.72 pts",
         "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100"
       }
     },
@@ -1948,12 +1836,12 @@
         }
       },
       "THUNDER": {
-        "pct": 154.13778450987726,
+        "pct": 165.42761993263073,
         "pct_capped": 100.0,
-        "pct_uncapped": 154.13778450987726,
-        "ci": 24.92547954636491,
-        "lower_uncapped": 129.21230496351234,
-        "upper_uncapped": 179.0632640562422,
+        "pct_uncapped": 165.42761993263073,
+        "ci": 26.442788142787904,
+        "lower_uncapped": 138.98483178984281,
+        "upper_uncapped": 191.87040807541865,
         "was_capped": true,
         "status": "PASS",
         "n": 2,
@@ -1961,14 +1849,14 @@
           "knn": {
             "waiv_gain": 0.01700000000000003,
             "floor": 0.01,
-            "our_base": 0.8000290132488554,
-            "our_base_coverage": "16/16",
-            "pct": 110.15030834493646,
+            "our_base": 0.7825353757244123,
+            "our_base_coverage": "12/12",
+            "pct": 131.61005160865676,
             "pct_capped": 100.0,
-            "pct_uncapped": 110.15030834493646,
+            "pct_uncapped": 131.61005160865676,
             "ci": 20.309611405032463,
-            "lower_uncapped": 89.840696939904,
-            "upper_uncapped": 130.45991974996892,
+            "lower_uncapped": 111.3004402036243,
+            "upper_uncapped": 151.91966301368922,
             "was_capped": true,
             "resolvability_floor_offset_2se": 0.01,
             "seed_sd_of_task_mean": 0.0024413808711195614,
@@ -1984,39 +1872,39 @@
             },
             "sd_waiv_gain": 0.0024413808711195614,
             "seed_sd_pct_points": 14.361063947762101,
-            "empirical_ci": 5.4332702991854225,
+            "empirical_ci": 0.3469771579677001,
             "floor_ci": 20.309611405032463,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=5.4, measured seed floor=20.3) [floor = 2 * seed_SD_12ds(0.002441) / |waiv_gain|(0.0170) * 100 / sqrt(2)]",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=0.3, measured seed floor=20.3) [floor = 2 * seed_SD_12ds(0.002441) / |waiv_gain|(0.0170) * 100 / sqrt(2)]",
             "status": "PASS",
             "n": 2,
-            "raw_mean": 0.8187545656674946,
+            "raw_mean": 0.804909084497884,
             "per_seed_pct": [
-              107.43367319534374,
-              112.86694349452917
+              131.4365630296729,
+              131.7835401876406
             ],
             "per_seed_pct_uncapped": [
-              107.43367319534374,
-              112.86694349452917
+              131.4365630296729,
+              131.7835401876406
             ],
             "per_seed_pct_capped": [
               100.0,
               100.0
             ],
-            "coverage": "16/16",
-            "our_delta": 0.018725552418639158,
+            "coverage": "12/12",
+            "our_delta": 0.022373708773471668,
             "se_our_delta": 0.0017263169694277623
           },
           "linear_probing": {
             "waiv_gain": 0.0019999999999998864,
             "floor": 0.0087,
-            "our_base": 0.8472720337790962,
-            "our_base_coverage": "16/16",
-            "pct": 522.0498734222098,
+            "our_base": 0.8287964739477837,
+            "our_base_coverage": "12/12",
+            "pct": 741.0411767352759,
             "pct_capped": 100.0,
-            "pct_uncapped": 522.0498734222098,
-            "ci": 174.04400165327132,
-            "lower_uncapped": 348.00587176893845,
-            "upper_uncapped": 696.093875075481,
+            "pct_uncapped": 741.0411767352759,
+            "ci": 237.4518943946043,
+            "lower_uncapped": 503.5892823406716,
+            "upper_uncapped": 978.4930711298803,
             "was_capped": true,
             "resolvability_floor_offset_2se": 0.0087,
             "seed_sd_of_task_mean": 0.0021262957519919998,
@@ -2032,39 +1920,39 @@
             },
             "sd_waiv_gain": 0.0021262957519919998,
             "seed_sd_pct_points": 106.31478759960602,
-            "empirical_ci": 174.04400165327132,
+            "empirical_ci": 237.4518943946043,
             "floor_ci": 150.35181450417778,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=174.0, measured seed floor=150.4) [floor = 2 * seed_SD_12ds(0.002126) / |waiv_gain|(0.0020) * 100 / sqrt(2)]",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=237.5, measured seed floor=150.4) [floor = 2 * seed_SD_12ds(0.002126) / |waiv_gain|(0.0020) * 100 / sqrt(2)]",
             "status": "PASS",
             "n": 2,
-            "raw_mean": 0.8577130312475398,
+            "raw_mean": 0.8436172974824884,
             "per_seed_pct": [
-              609.0718742488455,
-              435.02787259557414
+              859.7671239325781,
+              622.3152295379738
             ],
             "per_seed_pct_uncapped": [
-              609.0718742488455,
-              435.02787259557414
+              859.7671239325781,
+              622.3152295379738
             ],
             "per_seed_pct_capped": [
               100.0,
               100.0
             ],
-            "coverage": "16/16",
-            "our_delta": 0.010440997468443625,
+            "coverage": "12/12",
+            "our_delta": 0.014820823534704708,
             "se_our_delta": 0.0015035181450416923
           },
           "simple_shot": {
             "waiv_gain": 0.037000000000000026,
             "floor": 0.0104,
-            "our_base": 0.7151129110477319,
-            "our_base_coverage": "16/16",
-            "pct": 154.46110659040113,
+            "our_base": 0.7063877457552551,
+            "our_base_coverage": "12/12",
+            "pct": 149.85117528134256,
             "pct_capped": 100.0,
-            "pct_uncapped": 154.46110659040113,
+            "pct_uncapped": 149.85117528134256,
             "ci": 9.71136899892523,
-            "lower_uncapped": 144.7497375914759,
-            "upper_uncapped": 164.17247558932635,
+            "lower_uncapped": 140.13980628241734,
+            "upper_uncapped": 159.5625442802678,
             "was_capped": true,
             "resolvability_floor_offset_2se": 0.0104,
             "seed_sd_of_task_mean": 0.0025407807032855946,
@@ -2080,26 +1968,26 @@
             },
             "sd_waiv_gain": 0.0025407807032855946,
             "seed_sd_pct_points": 6.866974873744845,
-            "empirical_ci": 9.074243437967283,
+            "empirical_ci": 9.225690557566166,
             "floor_ci": 9.71136899892523,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=9.1, measured seed floor=9.7) [floor = 2 * seed_SD_12ds(0.002541) / |waiv_gain|(0.0370) * 100 / sqrt(2)]",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=9.2, measured seed floor=9.7) [floor = 2 * seed_SD_12ds(0.002541) / |waiv_gain|(0.0370) * 100 / sqrt(2)]",
             "status": "PASS",
             "n": 2,
-            "raw_mean": 0.7722635204861803,
+            "raw_mean": 0.7618326806093518,
             "per_seed_pct": [
-              149.92398487141747,
-              158.99822830938476
+              145.23833000255948,
+              154.46402056012565
             ],
             "per_seed_pct_uncapped": [
-              149.92398487141747,
-              158.99822830938476
+              145.23833000255948,
+              154.46402056012565
             ],
             "per_seed_pct_capped": [
               100.0,
               100.0
             ],
-            "coverage": "16/16",
-            "our_delta": 0.05715060943844841,
+            "coverage": "12/12",
+            "our_delta": 0.05544493485409674,
             "se_our_delta": 0.0017966032648011692
           }
         },
@@ -2110,7 +1998,7 @@
           "cells": [
             {
               "key": "knn",
-              "delta": 0.018725552418639158,
+              "delta": 0.022373708773471668,
               "gain": 0.01700000000000003,
               "se_delta": 0.0017263169694277623,
               "sd_gain": 0.0024413808711195614,
@@ -2119,7 +2007,7 @@
             },
             {
               "key": "linear_probing",
-              "delta": 0.010440997468443625,
+              "delta": 0.014820823534704708,
               "gain": 0.0019999999999998864,
               "se_delta": 0.0015035181450416923,
               "sd_gain": 0.0021262957519919998,
@@ -2128,7 +2016,7 @@
             },
             {
               "key": "simple_shot",
-              "delta": 0.05715060943844841,
+              "delta": 0.05544493485409674,
               "gain": 0.037000000000000026,
               "se_delta": 0.0017966032648011692,
               "sd_gain": 0.0025407807032855946,
@@ -2136,7 +2024,7 @@
               "note": "PASS"
             }
           ],
-          "our_avg_delta": 0.02877238644184373,
+          "our_avg_delta": 0.03087982238742437,
           "waiv_avg_gain": 0.018666666666666647,
           "se_our_avg_delta": 0.0009700240765911195,
           "sd_waiv_avg_gain": 0.001371821204943599,
@@ -2145,28 +2033,28 @@
           "independence_caveat": "SE_agg = sqrt(sum SE_i^2)/k assumes independent cell noise; for the 3 THUNDER tasks of one backbone (same checkpoints, same 12 datasets) the true SE is up to sqrt(3) = 1.73x larger, i.e. up to 0.001680",
           "shares": {
             "knn": {
-              "delta": 0.018725552418639158,
+              "delta": 0.022373708773471668,
               "gain": 0.01700000000000003,
-              "numerator_share": 0.216938932709993,
+              "numerator_share": 0.24151378951997288,
               "denominator_share": 0.30357142857142944
             },
             "linear_probing": {
-              "delta": 0.010440997468443625,
+              "delta": 0.014820823534704708,
               "gain": 0.0019999999999998864,
-              "numerator_share": 0.12096085587185618,
+              "numerator_share": 0.15998390306740023,
               "denominator_share": 0.03571428571428373
             },
             "simple_shot": {
-              "delta": 0.05715060943844841,
+              "delta": 0.05544493485409674,
               "gain": 0.037000000000000026,
-              "numerator_share": 0.6621002114181508,
+              "numerator_share": 0.5985023074126269,
               "denominator_share": 0.6607142857142869,
               "flag_numerator": true,
               "flag_denominator": true
             }
           },
           "concentration_flags": [
-            "simple_shot carries 66% of the pooled numerator",
+            "simple_shot carries 60% of the pooled numerator",
             "simple_shot carries 66% of the pooled denominator"
           ],
           "concentrated": true,
@@ -2179,23 +2067,23 @@
             "reason": null
           },
           "status": "POOLED",
-          "pct": 154.13778450987726,
-          "ci": 24.92547954636491,
-          "lower": 129.21230496351234,
-          "upper": 179.0632640562422,
-          "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 10.39 pts, denominator term 22.66 pts"
+          "pct": 165.42761993263073,
+          "ci": 26.442788142787904,
+          "lower": 138.98483178984281,
+          "upper": 191.87040807541865,
+          "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 10.39 pts, denominator term 24.31 pts"
         },
-        "our_avg_delta": 0.02877238644184373,
+        "our_avg_delta": 0.03087982238742437,
         "waiv_avg_gain": 0.018666666666666647,
-        "our_delta": 0.02877238644184373,
+        "our_delta": 0.03087982238742437,
         "waiv_gain": 0.018666666666666647,
         "se_our_delta": 0.0009700240765911195,
         "sd_waiv_gain": 0.001371821204943599,
         "concentration_flags": [
-          "simple_shot carries 66% of the pooled numerator",
+          "simple_shot carries 60% of the pooled numerator",
           "simple_shot carries 66% of the pooled denominator"
         ],
-        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 10.39 pts, denominator term 22.66 pts",
+        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 10.39 pts, denominator term 24.31 pts",
         "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100"
       }
     },
@@ -2314,12 +2202,12 @@
         }
       },
       "THUNDER": {
-        "pct": 176.76254311429375,
+        "pct": 170.95849473910857,
         "pct_capped": 100.0,
-        "pct_uncapped": 176.76254311429375,
-        "ci": 52.81387960960283,
-        "lower_uncapped": 123.94866350469093,
-        "upper_uncapped": 229.57642272389657,
+        "pct_uncapped": 170.95849473910857,
+        "ci": 51.32243243467788,
+        "lower_uncapped": 119.6360623044307,
+        "upper_uncapped": 222.28092717378644,
         "was_capped": true,
         "status": "PASS",
         "n": 2,
@@ -2327,14 +2215,14 @@
           "knn": {
             "waiv_gain": -0.0030000000000001137,
             "floor": 0.0083,
-            "our_base": 0.8265541610965926,
-            "our_base_coverage": "16/16",
-            "pct": -95.4760086437505,
-            "pct_capped": -95.4760086437505,
-            "pct_uncapped": -95.4760086437505,
+            "our_base": 0.8087398563453861,
+            "our_base_coverage": "12/12",
+            "pct": -168.15507044300006,
+            "pct_capped": -168.15507044300006,
+            "pct_uncapped": -168.15507044300006,
             "ci": 99.38369450439006,
-            "lower_uncapped": -194.85970314814057,
-            "upper_uncapped": 3.9076858606395604,
+            "lower_uncapped": -267.5387649473901,
+            "upper_uncapped": -68.77137593860999,
             "was_capped": false,
             "resolvability_floor_offset_2se": 0.0083,
             "seed_sd_of_task_mean": 0.002108246529702873,
@@ -2350,39 +2238,39 @@
             },
             "sd_waiv_gain": 0.002108246529702873,
             "seed_sd_pct_points": 70.27488432342643,
-            "empirical_ci": 52.694052762971054,
+            "empirical_ci": 34.17180026959508,
             "floor_ci": 99.38369450439006,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=52.7, measured seed floor=99.4) [floor = 2 * seed_SD_12ds(0.002108) / |waiv_gain|(0.0030) * 100 / sqrt(2)]",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=34.2, measured seed floor=99.4) [floor = 2 * seed_SD_12ds(0.002108) / |waiv_gain|(0.0030) * 100 / sqrt(2)]",
             "status": "FAIL",
             "n": 2,
-            "raw_mean": 0.8294184413559053,
+            "raw_mean": 0.8137845084586763,
             "per_seed_pct": [
-              -69.12898226226498,
-              -121.82303502523604
+              -151.06917030820253,
+              -185.2409705777976
             ],
             "per_seed_pct_uncapped": [
-              -69.12898226226498,
-              -121.82303502523604
+              -151.06917030820253,
+              -185.2409705777976
             ],
             "per_seed_pct_capped": [
-              -69.12898226226498,
-              -121.82303502523604
+              -151.06917030820253,
+              -185.2409705777976
             ],
-            "coverage": "16/16",
-            "our_delta": 0.0028642802593126238,
+            "coverage": "12/12",
+            "our_delta": 0.005044652113290193,
             "se_our_delta": 0.0014907554175659075
           },
           "linear_probing": {
             "waiv_gain": 0.0029999999999999714,
             "floor": 0.0088,
-            "our_base": 0.8518170492885834,
-            "our_base_coverage": "16/16",
-            "pct": 150.34822355816829,
+            "our_base": 0.8325287216061019,
+            "our_base_coverage": "12/12",
+            "pct": 229.92286270239174,
             "pct_capped": 100.0,
-            "pct_uncapped": 150.34822355816829,
+            "pct_uncapped": 229.92286270239174,
             "ci": 112.21864849891928,
-            "lower_uncapped": 38.12957505924901,
-            "upper_uncapped": 262.56687205708755,
+            "lower_uncapped": 117.70421420347246,
+            "upper_uncapped": 342.141511201311,
             "was_capped": true,
             "resolvability_floor_offset_2se": 0.0088,
             "seed_sd_of_task_mean": 0.0023805170198752394,
@@ -2398,39 +2286,39 @@
             },
             "sd_waiv_gain": 0.0023805170198752394,
             "seed_sd_pct_points": 79.3505673291754,
-            "empirical_ci": 17.99311188949528,
+            "empirical_ci": 46.101762975133255,
             "floor_ci": 112.21864849891928,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=18.0, measured seed floor=112.2) [floor = 2 * seed_SD_12ds(0.002381) / |waiv_gain|(0.0030) * 100 / sqrt(2)]",
-            "status": "NOT RESOLVED",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=46.1, measured seed floor=112.2) [floor = 2 * seed_SD_12ds(0.002381) / |waiv_gain|(0.0030) * 100 / sqrt(2)]",
+            "status": "PASS",
             "n": 2,
-            "raw_mean": 0.8563274959953284,
+            "raw_mean": 0.8394264074871737,
             "per_seed_pct": [
-              141.35166761342063,
-              159.3447795029159
+              206.8719812148251,
+              252.97374418995835
             ],
             "per_seed_pct_uncapped": [
-              141.35166761342063,
-              159.3447795029159
+              206.8719812148251,
+              252.97374418995835
             ],
             "per_seed_pct_capped": [
               100.0,
               100.0
             ],
-            "coverage": "16/16",
-            "our_delta": 0.004510446706745053,
+            "coverage": "12/12",
+            "our_delta": 0.006897685881071758,
             "se_our_delta": 0.001683279727483773
           },
           "simple_shot": {
             "waiv_gain": 0.026999999999999885,
             "floor": 0.0066,
-            "our_base": 0.7405246642685483,
-            "our_base_coverage": "16/16",
-            "pct": 149.44873953630116,
+            "our_base": 0.727492572828019,
+            "our_base_coverage": "12/12",
+            "pct": 126.72761327850755,
             "pct_capped": 100.0,
-            "pct_uncapped": 149.44873953630116,
+            "pct_uncapped": 126.72761327850755,
             "ci": 10.36222814037854,
-            "lower_uncapped": 139.08651139592263,
-            "upper_uncapped": 159.8109676766797,
+            "lower_uncapped": 116.365385138129,
+            "upper_uncapped": 137.0898414188861,
             "was_capped": true,
             "resolvability_floor_offset_2se": 0.0066,
             "seed_sd_of_task_mean": 0.0019783444822912,
@@ -2446,26 +2334,26 @@
             },
             "sd_waiv_gain": 0.0019783444822912,
             "seed_sd_pct_points": 7.327201786263735,
-            "empirical_ci": 5.485738209063981,
+            "empirical_ci": 5.675338417457481,
             "floor_ci": 10.36222814037854,
-            "ci_source": "max(empirical 2*SD/sqrt(n)=5.5, measured seed floor=10.4) [floor = 2 * seed_SD_12ds(0.001978) / |waiv_gain|(0.0270) * 100 / sqrt(2)]",
+            "ci_source": "max(empirical 2*SD/sqrt(n)=5.7, measured seed floor=10.4) [floor = 2 * seed_SD_12ds(0.001978) / |waiv_gain|(0.0270) * 100 / sqrt(2)]",
             "status": "PASS",
             "n": 2,
-            "raw_mean": 0.7808758239433495,
+            "raw_mean": 0.761709028413216,
             "per_seed_pct": [
-              146.70587043176917,
-              152.19160864083315
+              123.8899440697788,
+              129.5652824872363
             ],
             "per_seed_pct_uncapped": [
-              146.70587043176917,
-              152.19160864083315
+              123.8899440697788,
+              129.5652824872363
             ],
             "per_seed_pct_capped": [
               100.0,
               100.0
             ],
-            "coverage": "16/16",
-            "our_delta": 0.040351159674801185,
+            "coverage": "12/12",
+            "our_delta": 0.034216455585196925,
             "se_our_delta": 0.0013989007989510971
           }
         },
@@ -2476,7 +2364,7 @@
           "cells": [
             {
               "key": "knn",
-              "delta": 0.0028642802593126238,
+              "delta": 0.005044652113290193,
               "gain": -0.0030000000000001137,
               "se_delta": 0.0014907554175659075,
               "sd_gain": 0.002108246529702873,
@@ -2485,16 +2373,16 @@
             },
             {
               "key": "linear_probing",
-              "delta": 0.004510446706745053,
+              "delta": 0.006897685881071758,
               "gain": 0.0029999999999999714,
               "se_delta": 0.001683279727483773,
               "sd_gain": 0.0023805170198752394,
               "complete": true,
-              "note": "NOT RESOLVED"
+              "note": "PASS"
             },
             {
               "key": "simple_shot",
-              "delta": 0.040351159674801185,
+              "delta": 0.034216455585196925,
               "gain": 0.026999999999999885,
               "se_delta": 0.0013989007989510971,
               "sd_gain": 0.0019783444822912,
@@ -2502,7 +2390,7 @@
               "note": "PASS"
             }
           ],
-          "our_avg_delta": 0.015908628880286286,
+          "our_avg_delta": 0.015386264526519625,
           "waiv_avg_gain": 0.008999999999999914,
           "se_our_avg_delta": 0.0008827171310640778,
           "sd_waiv_avg_gain": 0.0012483505384898877,
@@ -2511,28 +2399,28 @@
           "independence_caveat": "SE_agg = sqrt(sum SE_i^2)/k assumes independent cell noise; for the 3 THUNDER tasks of one backbone (same checkpoints, same 12 datasets) the true SE is up to sqrt(3) = 1.73x larger, i.e. up to 0.001529",
           "shares": {
             "knn": {
-              "delta": 0.0028642802593126238,
+              "delta": 0.005044652113290193,
               "gain": -0.0030000000000001137,
-              "numerator_share": 0.06001523409856297,
+              "numerator_share": 0.10928908062978893,
               "denominator_share": -0.11111111111111638
             },
             "linear_probing": {
-              "delta": 0.004510446706745053,
+              "delta": 0.006897685881071758,
               "gain": 0.0029999999999999714,
-              "numerator_share": 0.09450734232946843,
+              "numerator_share": 0.14943384231182233,
               "denominator_share": 0.1111111111111111
             },
             "simple_shot": {
-              "delta": 0.040351159674801185,
+              "delta": 0.034216455585196925,
               "gain": 0.026999999999999885,
-              "numerator_share": 0.8454774235719686,
+              "numerator_share": 0.7412770770583887,
               "denominator_share": 1.0000000000000053,
               "flag_numerator": true,
               "flag_denominator": true
             }
           },
           "concentration_flags": [
-            "simple_shot carries 85% of the pooled numerator",
+            "simple_shot carries 74% of the pooled numerator",
             "simple_shot carries 100% of the pooled denominator"
           ],
           "concentrated": true,
@@ -2545,23 +2433,23 @@
             "reason": null
           },
           "status": "POOLED",
-          "pct": 176.76254311429375,
-          "ci": 52.81387960960283,
-          "lower": 123.94866350469093,
-          "upper": 229.57642272389657,
-          "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 19.62 pts, denominator term 49.04 pts"
+          "pct": 170.95849473910857,
+          "ci": 51.32243243467788,
+          "lower": 119.6360623044307,
+          "upper": 222.28092717378644,
+          "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 19.62 pts, denominator term 47.43 pts"
         },
-        "our_avg_delta": 0.015908628880286286,
+        "our_avg_delta": 0.015386264526519625,
         "waiv_avg_gain": 0.008999999999999914,
-        "our_delta": 0.015908628880286286,
+        "our_delta": 0.015386264526519625,
         "waiv_gain": 0.008999999999999914,
         "se_our_delta": 0.0008827171310640778,
         "sd_waiv_gain": 0.0012483505384898877,
         "concentration_flags": [
-          "simple_shot carries 85% of the pooled numerator",
+          "simple_shot carries 74% of the pooled numerator",
           "simple_shot carries 100% of the pooled denominator"
         ],
-        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 19.62 pts, denominator term 49.04 pts",
+        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 19.62 pts, denominator term 47.43 pts",
         "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100"
       }
     }
@@ -2774,12 +2662,12 @@
       "legacy_mean_of_ratios": 83.461820595129
     },
     "THUNDER": {
-      "mean": 124.6184914138481,
-      "our_avg_delta": 0.020631283578514823,
+      "mean": 139.49370587987622,
+      "our_avg_delta": 0.02309395797344614,
       "waiv_avg_gain": 0.01655555555555553,
-      "ci": 17.449410641256716,
-      "lower": 107.16908077259139,
-      "upper": 142.0679020551048,
+      "ci": 19.045991847808775,
+      "lower": 120.44771403206744,
+      "upper": 158.539697727685,
       "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
       "pooled": {
         "group": "THUNDER (3 backbones)",
@@ -2788,16 +2676,16 @@
         "cells": [
           {
             "key": "phikon",
-            "delta": 0.01721283541341445,
+            "delta": 0.023015787006394433,
             "gain": 0.02200000000000003,
             "se_delta": 0.0016890931160793276,
             "sd_gain": 0.0023887383928704177,
             "complete": true,
-            "note": "NOT RESOLVED"
+            "note": "PASS"
           },
           {
             "key": "midnight",
-            "delta": 0.02877238644184373,
+            "delta": 0.03087982238742437,
             "gain": 0.018666666666666647,
             "se_delta": 0.0009700240765911195,
             "sd_gain": 0.001371821204943599,
@@ -2806,7 +2694,7 @@
           },
           {
             "key": "virchow2",
-            "delta": 0.015908628880286286,
+            "delta": 0.015386264526519625,
             "gain": 0.008999999999999914,
             "se_delta": 0.0008827171310640778,
             "sd_gain": 0.0012483505384898877,
@@ -2814,7 +2702,7 @@
             "note": "PASS"
           }
         ],
-        "our_avg_delta": 0.020631283578514823,
+        "our_avg_delta": 0.02309395797344614,
         "waiv_avg_gain": 0.01655555555555553,
         "se_our_avg_delta": 0.0007128325186985465,
         "sd_waiv_avg_gain": 0.0010080974156440575,
@@ -2823,21 +2711,21 @@
         "independence_caveat": "SE_agg = sqrt(sum SE_i^2)/k assumes independent cell noise; for the 3 THUNDER tasks of one backbone (same checkpoints, same 12 datasets) the true SE is up to sqrt(3) = 1.73x larger, i.e. up to 0.001235",
         "shares": {
           "phikon": {
-            "delta": 0.01721283541341445,
+            "delta": 0.023015787006394433,
             "gain": 0.02200000000000003,
-            "numerator_share": 0.2781025127513911,
+            "numerator_share": 0.33220503003221896,
             "denominator_share": 0.44295302013422944
           },
           "midnight": {
-            "delta": 0.02877238644184373,
+            "delta": 0.03087982238742437,
             "gain": 0.018666666666666647,
-            "numerator_share": 0.4648666402221488,
+            "numerator_share": 0.44571286312103164,
             "denominator_share": 0.3758389261744968
           },
           "virchow2": {
-            "delta": 0.015908628880286286,
+            "delta": 0.015386264526519625,
             "gain": 0.008999999999999914,
-            "numerator_share": 0.2570308470264601,
+            "numerator_share": 0.22208210684674948,
             "denominator_share": 0.1812080536912737
           }
         },
@@ -2852,23 +2740,23 @@
           "reason": null
         },
         "status": "POOLED",
-        "pct": 124.6184914138481,
-        "ci": 17.449410641256716,
-        "lower": 107.16908077259139,
-        "upper": 142.0679020551048,
-        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 8.61 pts, denominator term 15.18 pts"
+        "pct": 139.49370587987622,
+        "ci": 19.045991847808775,
+        "lower": 120.44771403206744,
+        "upper": 158.539697727685,
+        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 8.61 pts, denominator term 16.99 pts"
       },
       "concentration_flags": [],
       "n_backbones": 3,
       "coverage_ok": true,
       "eligible_for_overall": true,
       "withheld_reason": null,
-      "legacy_mean_of_ratios": 136.38016286474553
+      "legacy_mean_of_ratios": 147.0011094457228
     }
   },
-  "overall_average": 104.25571125540303,
+  "overall_average": 109.21411607741238,
   "overall_average_note": "mean of three full-coverage benchmark means",
-  "overall_average_partial_NOT_THE_CRITERION": 104.25571125540303,
+  "overall_average_partial_NOT_THE_CRITERION": 109.21411607741238,
   "worst_cell": {
     "backbone": "virchow2",
     "benchmark": "HEST",
@@ -2880,54 +2768,23 @@
   },
   "ungraded_cells": [],
   "verdict": "INDETERMINATE",
-  "verdict_reason": "error bar straddles the 70 bar for phikon/THUNDER (78.2+/-22.9), virchow2/HEST (67.8+/-15.7)",
+  "verdict_reason": "error bar straddles the 70 bar for virchow2/HEST (67.8+/-15.7)",
   "per_model": {
     "phikon": {
       "pct": {
         "RI": 108.92129667410043,
         "HEST": 90.48046487456917,
-        "THUNDER": 78.24016097006557
+        "THUNDER": 104.61721366542909
       },
       "ci": {
         "RI": 1.8988150129791121,
         "HEST": 13.275381490054968,
-        "THUNDER": 22.901189091545586
+        "THUNDER": 27.421102802226034
       },
       "lower_uncapped": {
         "RI": 107.02248166112132,
         "HEST": 77.2050833845142,
-        "THUNDER": 55.338971878519985
-      },
-      "status": {
-        "RI": "PASS",
-        "HEST": "PASS",
-        "THUNDER": "NOT RESOLVED"
-      },
-      "n": {
-        "RI": 2,
-        "HEST": 2,
-        "THUNDER": 2
-      },
-      "average": 92.54730750624505,
-      "average_note": "mean of this model's three benchmark percentages",
-      "verdict": "INDETERMINATE",
-      "verdict_reason": "error bar straddles the 70 bar for THUNDER (78.2+/-22.9)"
-    },
-    "midnight": {
-      "pct": {
-        "RI": 92.48182351521803,
-        "HEST": 92.13667111896251,
-        "THUNDER": 154.13778450987726
-      },
-      "ci": {
-        "RI": 4.127731920161058,
-        "HEST": 0.10340816062725366,
-        "THUNDER": 24.92547954636491
-      },
-      "lower_uncapped": {
-        "RI": 88.35409159505697,
-        "HEST": 92.03326295833526,
-        "THUNDER": 129.21230496351234
+        "THUNDER": 77.19611086320306
       },
       "status": {
         "RI": "PASS",
@@ -2939,26 +2796,57 @@
         "HEST": 2,
         "THUNDER": 2
       },
-      "average": 112.91875971468592,
+      "average": 101.33965840469956,
       "average_note": "mean of this model's three benchmark percentages",
       "verdict": "PASS",
-      "verdict_reason": "worst benchmark HEST = 92.1 (lower bound 92.0) >= 70; model average 112.9 > 80"
+      "verdict_reason": "worst benchmark HEST = 90.5 (lower bound 77.2) >= 70; model average 101.3 > 80"
+    },
+    "midnight": {
+      "pct": {
+        "RI": 92.48182351521803,
+        "HEST": 92.13667111896251,
+        "THUNDER": 165.42761993263073
+      },
+      "ci": {
+        "RI": 4.127731920161058,
+        "HEST": 0.10340816062725366,
+        "THUNDER": 26.442788142787904
+      },
+      "lower_uncapped": {
+        "RI": 88.35409159505697,
+        "HEST": 92.03326295833526,
+        "THUNDER": 138.98483178984281
+      },
+      "status": {
+        "RI": "PASS",
+        "HEST": "PASS",
+        "THUNDER": "PASS"
+      },
+      "n": {
+        "RI": 2,
+        "HEST": 2,
+        "THUNDER": 2
+      },
+      "average": 116.6820381889371,
+      "average_note": "mean of this model's three benchmark percentages",
+      "verdict": "PASS",
+      "verdict_reason": "worst benchmark HEST = 92.1 (lower bound 92.0) >= 70; model average 116.7 > 80"
     },
     "virchow2": {
       "pct": {
         "RI": 84.54705735061529,
         "HEST": 67.76832579185535,
-        "THUNDER": 176.76254311429375
+        "THUNDER": 170.95849473910857
       },
       "ci": {
         "RI": 7.109317749236118,
         "HEST": 15.712561730618283,
-        "THUNDER": 52.81387960960283
+        "THUNDER": 51.32243243467788
       },
       "lower_uncapped": {
         "RI": 77.43773960137918,
         "HEST": 52.05576406123706,
-        "THUNDER": 123.94866350469093
+        "THUNDER": 119.6360623044307
       },
       "status": {
         "RI": "PASS",
@@ -2970,7 +2858,7 @@
         "HEST": 5,
         "THUNDER": 2
       },
-      "average": 109.69264208558813,
+      "average": 107.75795929385974,
       "average_note": "mean of this model's three benchmark percentages",
       "verdict": "INDETERMINATE",
       "verdict_reason": "error bar straddles the 70 bar for HEST (67.8+/-15.7)"

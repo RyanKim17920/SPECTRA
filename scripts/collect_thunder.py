@@ -37,13 +37,7 @@ import os
 import sys
 from pathlib import Path
 
-# The paper's 16. thunder/utils/results.py ships a *different* 16 (it swapped the two
-# segpath sets for the four SPIDER sets, which postdate the paper), so aggregating with
-# their helper does not reproduce the published table. Kept explicit here for that reason.
-PAPER_CLS = [
-    "bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
-    "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds",
-]
+# CLASSIFICATION + SEGMENTATION ROSTERS -- IMPORTED, NOT REDEFINED (2026-08-26).
 # SEGMENTATION ROSTER -- IMPORTED, NOT REDEFINED (2026-08-26).
 # Renaming alone (the earlier F7 fix) left two independent literal lists in two files,
 # which can still drift apart silently.  collect_final5.py is now the single owner; see
@@ -52,9 +46,23 @@ PAPER_CLS = [
 # until the final segpath run.  A mean over the 2 we run is NOT comparable to Waiv's 4.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from collect_final5 import (  # noqa: E402 -- intentional, after the sys.path insert
+    PAPER_CLS,
+    PAPER_CLS_SPIDER,
+    PAPER_CLS_THUNDER12,
+    PAPER_CLS_WAIV16,
     PAPER_SEG_PUBLISHED,
     PAPER_SEG_SUBMITTED,
 )
+
+# NOTE on the two "16"s, which are NOT the same 16 and must never be conflated:
+#   PAPER_CLS_WAIV16 = the 12 THUNDER-paper classification sets + the 4 SPIDER sets.
+#     This is what Waiv average over in arXiv:2607.22861 Table 2, and it is the only
+#     roster on which our base numbers are comparable to their published bases.
+#   thunder/utils/results.py's own 16 = the 12 + the 4 SPIDER sets for classification,
+#     but it also swaps the two segpath sets out of the segmentation panel, so using
+#     their helper wholesale does not reproduce the published segmentation table.
+# We therefore keep the classification and segmentation panels as separate explicit
+# constants owned by collect_final5.
 
 TASKS = ["knn", "linear_probing", "simple_shot", "segmentation"]
 
