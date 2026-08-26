@@ -156,24 +156,150 @@ def load_ri_base():
 
 
 # ---------------------------------------------------------------------------
-# Published Waiv targets -- ONE transcription each
+# Published Waiv targets -- READ FROM docs/waiv_published.json, ONE loader  (F-J)
 # ---------------------------------------------------------------------------
-# RI: owned by src/waivphaet/eval/pathorob_adapter.TARGETS (already the repo's single
-# transcription of Waiv Table 1); re-keyed here from backbone -> value so callers stop
-# re-typing the numbers.
+# docs/waiv_published.json is the full, line-by-line transcription of Waiv Tables 1/2/3
+# for all twenty models they rank.  Before this section existed, THREE of its numbers had
+# been copied back out into Python literals keyed by our three published arms -- the RI
+# target (via pathorob_adapter.TARGETS), the HEST target (HEST_WAIV), and scoreboard's own
+# copy of the THUNDER rows -- so adding a fourth or fifth backbone meant hand-typing six
+# more numbers into three more places.  All of them now come from the JSON, through the
+# loader below, for EVERY arm.  Adding a backbone is a row in WAIV_ROWS and nothing else.
+#
+# The retired literals survive ONLY as an assertion target (see the *_RETIRED_LITERALS
+# dicts and check_retired_literals()): a disagreement between what was published and what
+# is on disk is itself a bug and must be measured, not absorbed.
+WAIV_PUBLISHED_JSON = REPO / "docs" / "waiv_published.json"
+
+#: arm -> (base row, fine-tuned row) in the published table.  Waiv RENAME the fine-tuned
+#: models (Phikon-v2 -> Phaet, Midnight-12k -> Mascaret) while leaving Virchow2, UNI2-h
+#: and H-Optimus-0 under their own names, so the correspondence has to be stated; it is
+#: stated ONCE, here.
+#:
+#: TRAP: "H0-mini" is a separate row and a DIFFERENT model -- a distillation of
+#: H-Optimus-0, with its own numbers and its own (clsmean) THUNDER protocol.  It is not
+#: an alias for `hoptimus`.
+WAIV_ROWS: dict[str, tuple[tuple[str, str], tuple[str, str]]] = {
+    "phikon":   (("Phikon-v2", "base"),   ("Phaet", "fine-tuned")),
+    "midnight": (("Midnight-12k", "base"), ("Mascaret", "fine-tuned")),
+    "virchow2": (("Virchow2", "base"),    ("Virchow2", "fine-tuned")),
+    "hoptimus": (("H-Optimus-0", "base"), ("H-Optimus-0", "fine-tuned")),
+    "uni2":     (("UNI2-h", "base"),      ("UNI2-h", "fine-tuned")),
+}
+
+#: Waiv's THUNDER task names -> ours.  Their two extra tasks (calibration, adversarial)
+#: are not computed by this repo and are dropped on purpose -- any mean over the four
+#: below is NOT their six-task rank sum.
+WAIV_THUNDER_TASKS = {
+    "knn": "knn",
+    "linear": "linear_probing",
+    "few_shot": "simple_shot",
+    "segmentation": "segmentation",
+}
+
+#: Their RI per-dataset key -> ours.
+WAIV_RI_DS = {"tcga": "tcga", "camelyon": "camelyon", "tolkach": "tolkach_esca"}
+
+WAIV_SOURCE = "docs/waiv_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24)"
+
+
+def load_waiv_published():
+    """(WAIV, WAIV_THUNDER) read from docs/waiv_published.json.  ONE formula, all arms.
+
+    WAIV[arm]         = {"ri": ft avg RI, "hest": ft HEST avg, "ri_ds": {ds: ft RI}}
+    WAIV_THUNDER[arm] = {"base": {our_task: pct}, "ft": {our_task: pct}}
+
+    Raises rather than falling back: every pct_of_waiv denominator comes from this file
+    and there is no literal left to fall back to.
+    """
+    try:
+        blob = json.loads(WAIV_PUBLISHED_JSON.read_text())
+    except Exception as exc:  # noqa: BLE001 -- any read/parse failure is fatal here
+        raise RuntimeError(
+            "cannot read the Waiv published-numbers transcription at %s: %s.  Every "
+            "pct_of_waiv denominator comes from that file; there is no fallback literal."
+            % (WAIV_PUBLISHED_JSON, exc)) from exc
+    index = {(m["name"], m["variant"]): m for m in blob["models"]}
+    waiv, waiv_thunder = {}, {}
+    for arm, (base_row, ft_row) in WAIV_ROWS.items():
+        absent = [r for r in (base_row, ft_row) if r not in index]
+        if absent:
+            raise RuntimeError(
+                "arm %r maps to rows %s which are not in %s; fix WAIV_ROWS or the "
+                "transcription." % (arm, absent, WAIV_PUBLISHED_JSON.name))
+        base, ft = index[base_row], index[ft_row]
+        waiv[arm] = {
+            "ri": ft["ri"]["avg"],
+            "ri_base": base["ri"]["avg"],
+            "hest": ft["hest_avg"],
+            "hest_base": base["hest_avg"],
+            "ri_ds": {ours: ft["ri"].get(theirs) for theirs, ours in WAIV_RI_DS.items()},
+        }
+        waiv_thunder[arm] = {
+            "base": {ours: base["thunder"][theirs] for theirs, ours in WAIV_THUNDER_TASKS.items()},
+            "ft": {ours: ft["thunder"][theirs] for theirs, ours in WAIV_THUNDER_TASKS.items()},
+        }
+    return waiv, waiv_thunder
+
+
+WAIV, WAIV_THUNDER = load_waiv_published()
+
+
 def load_ri_waiv():
-    from waivphaet.eval.pathorob_adapter import TARGETS  # noqa: PLC0415
-    keys = {"phikon": "phaet_target", "midnight": "mascaret_target", "virchow2": "virchow2_target"}
-    return ({a: float(TARGETS[k]["avg"]) for a, k in keys.items()},
-            "src/waivphaet/eval/pathorob_adapter.TARGETS[%s].avg (Waiv arXiv:2607.22861 Table 1)"
-            % "/".join(keys.values()))
+    """{arm: Waiv's fine-tuned Avg RI} for EVERY arm in WAIV_ROWS, from the JSON.
+
+    Was: re-keyed out of src/waivphaet/eval/pathorob_adapter.TARGETS, which is a second
+    transcription of the same Table-1 column and covers only the published trio.  That
+    module keeps its per-DATASET targets (the gate script indexes them by dataset); this
+    average is now read from the one file that has the whole table.
+    """
+    return ({a: float(v["ri"]) for a, v in WAIV.items()},
+            "%s -> models[<ft row>].ri.avg (Waiv Table 1)" % WAIV_SOURCE)
 
 
-#: HEST: Waiv arXiv:2607.22861 Table 1, "HEST" column, fine-tuned rows.  There is no
-#: recomputable artifact for these -- they are a paper transcription and this is their
-#: only home in the repo.
-HEST_WAIV = {"phikon": 0.3943, "midnight": 0.4167, "virchow2": 0.4135}
-HEST_WAIV_SOURCE = "Waiv arXiv:2607.22861 Table 1 HEST column (Phaet / Mascaret / Virchow2-FT)"
+#: HEST: Waiv arXiv:2607.22861 Table 1, "HEST" column, fine-tuned rows -- for every arm.
+HEST_WAIV = {a: float(v["hest"]) for a, v in WAIV.items()}
+HEST_WAIV_SOURCE = "%s -> models[<ft row>].hest_avg (Waiv Table 1 HEST column)" % WAIV_SOURCE
+
+
+# --- retired literals, kept ONLY as assertion targets -------------------------------
+#: What the three Waiv targets were hand-typed as before they were read from the JSON.
+#: Nothing consumes these; check_retired_literals() compares them to what is now loaded
+#: so that a transcription drift shows up as a reported number rather than as silence.
+RI_WAIV_RETIRED_LITERALS = {"phikon": 0.806, "midnight": 0.924, "virchow2": 0.918}
+HEST_WAIV_RETIRED_LITERALS = {"phikon": 0.3943, "midnight": 0.4167, "virchow2": 0.4135}
+
+
+def check_retired_literals():
+    """{name: {retired, from_disk, delta, agrees}} for every retired Waiv literal.
+
+    Also re-checks pathorob_adapter.TARGETS, which remains the owner of the per-DATASET
+    Table-1 targets: its averages must equal the JSON's or the two transcriptions have
+    drifted apart.
+    """
+    out = {}
+
+    def _cmp(tag, retired, live, tol=5e-5):
+        for a, v in retired.items():
+            got = live.get(a)
+            d = None if got is None else got - v
+            out["%s/%s" % (tag, a)] = {
+                "retired_literal": v, "from_disk": got, "delta": d,
+                "agrees_to_4dp": d is not None and abs(d) < tol,
+            }
+
+    _cmp("RI_WAIV", RI_WAIV_RETIRED_LITERALS, {a: v["ri"] for a, v in WAIV.items()})
+    _cmp("HEST_WAIV", HEST_WAIV_RETIRED_LITERALS, HEST_WAIV)
+    try:
+        from waivphaet.eval.pathorob_adapter import TARGETS  # noqa: PLC0415
+    except Exception:  # noqa: BLE001 -- the cross-check is a bonus, not a requirement
+        return out
+    ft_keys = {"phikon": "phaet_target", "midnight": "mascaret_target",
+               "virchow2": "virchow2_target"}
+    _cmp("pathorob_adapter.TARGETS",
+         {a: float(TARGETS[k]["avg"]) for a, k in ft_keys.items() if k in TARGETS},
+         {a: v["ri"] for a, v in WAIV.items()})
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -444,3 +570,41 @@ def load_thunder_seed_sd():
         if v is not None:
             out.setdefault(bb, {})[task] = float(v)
     return out, "%s -> %s" % (THUNDER_SEED_SD_JSON.relative_to(REPO), THUNDER_SEED_SD_FIELD)
+
+
+#: The OTHER column of the same file: the RESOLVABILITY floor.
+#: offset_2se = |mean(d)| + 2*SD(d)/sqrt(12) over the 12 per-dataset F1 deltas of a seed
+#: pair, averaged over all 10 unordered pairs.  Its job is the denominator gate ("is
+#: Waiv's own gain even bigger than seed noise"), NOT the error bar on our task mean --
+#: its SD is taken over DATASETS, which is the wrong variance component for that.  Both
+#: quantities live in the same JSON and swapping them inflates a noise estimate 2-4x, so
+#: each has its own loader and its own docstring saying which is which.
+THUNDER_FLOOR_FIELD = "cells[<backbone>/<task>].12ds.offset_2se_mean"
+
+
+def load_thunder_floor():
+    """{backbone: {task: offset_2se_mean}} from docs/thunder_seed_floor_12ds.json.
+
+    Was three hand-typed 4-decimal literals in final_recipe_report.py, keyed by the
+    published trio only -- which is why a fourth backbone read as "no THUNDER floor
+    measured" even when one had been.  Now every backbone the file has a cell for is
+    present, and a backbone it does NOT have a cell for is absent (the correct answer:
+    its floor has not been measured, so its THUNDER cell is ungradeable).
+
+    VALID ONLY for a full 12/12 PAPER_CLS task mean; a mean over fewer datasets averages
+    away less per-dataset noise and is NOISIER, so applying this floor to it would
+    manufacture resolvability.
+    """
+    if not THUNDER_SEED_SD_JSON.exists():
+        raise FileNotFoundError(
+            "%s missing -- run `python3 scripts/thunder_seed_floor_12ds.py` first.  "
+            "There is deliberately no hardcoded fallback." % THUNDER_SEED_SD_JSON)
+    blob = json.loads(THUNDER_SEED_SD_JSON.read_text())
+    out: dict = {}
+    for key, cell in (blob.get("cells") or {}).items():
+        bb, _, task = key.partition("/")
+        v = (cell.get("12ds") or {}).get("offset_2se_mean")
+        if v is not None:
+            out.setdefault(bb, {})[task] = float(v)
+    return out, "%s -> %s (n=5 training seeds, offset-2SE, 12/12 coverage)" % (
+        THUNDER_SEED_SD_JSON.relative_to(REPO), THUNDER_FLOOR_FIELD)
