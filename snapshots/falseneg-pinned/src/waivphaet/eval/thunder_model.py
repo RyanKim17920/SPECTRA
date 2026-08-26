@@ -1,0 +1,258 @@
+"""THUNDER custom-model entry point -- our second RETENTION detector (PLAN.md §3 risk 1).
+
+Used as::
+
+    export THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder
+    export WAIV_BACKBONE=kaiko-ai/midnight        # omit for owkin/phikon-v2
+    export WAIV_POOLING=cls                       # omit: defaults PER BACKBONE, see below
+    export WAIV_ADAPTER=/path/to/checkpoint_dir   # omit for the base model
+    thunder benchmark custom:src/waivphaet/eval/thunder_model.py break_his knn
+
+**Do not hardcode ``WAIV_POOLING`` in a sweep script.** The correct THUNDER pooling
+depends on the backbone (see ``THUNDER_CLSMEAN_BACKBONES`` below): cls for phikon-v2,
+clsmean for midnight and Virchow2. Leaving it unset picks the right one. For any backbone not in
+those tables there is no right one to pick, so an unset ``WAIV_POOLING`` is a hard error
+rather than a silent ``cls``.
+
+Why a module of its own rather than a function in ``thunder_adapter``
+----------------------------------------------------------------------
+THUNDER loads custom models by *file path* (``thunder/models/utils.py:32``,
+``load_custom_model_from_file``): it execs the file, walks it with
+``inspect.getmembers``, and instantiates **every** ``PretrainedModel`` subclass it finds,
+raising if there is more than one. So this file must contain exactly one subclass and
+nothing else that could drag a second one in -- which rules out putting it next to helper
+classes. It also calls ``obj()`` with no arguments, so every knob has to arrive by
+environment variable; there is nowhere to pass a checkpoint path.
+
+Pooling: THUNDER, like HEST, publishes a CLS-only number
+---------------------------------------------------------
+``thunder/models/pretrained_models.py:303`` -- for ``phikon2`` their linear-probing
+embedding is ``out.last_hidden_state[:, 0, :]`` (CLS, 1024-d; ``emb_dim: 1024`` in
+``config/pretrained_model/phikon2.yaml``) and their segmentation embedding is
+``out.last_hidden_state[:, 1:]`` (patch tokens). Same split as TRIDENT's HEST baseline.
+So ``WAIV_POOLING=cls`` is the setting that is comparable to their published phikon2 row,
+and ``clsmean`` is ours alone -- see ``hest_adapter`` for the same argument at length.
+
+Segmentation consumes patch tokens either way, so the two pooling modes differ only on the
+five tile-level tasks *numerically* -- but they are NOT interchangeable there. clsmean
+advertises ``emb_dim = 2 * hidden`` and THUNDER sizes its segmentation decoder from
+``emb_dim``, so on a backbone whose CLS dim differs from its patch dim (Midnight: 3072 vs
+1536; Virchow2: 2560 vs 1280) a clsmean segmentation run crashes in
+``task_specific_models.py:121``. ``auto`` is
+therefore resolved to ``cls`` for segmentation runs; see ``resolve_pooling`` below.
+
+Their transform for phikon2 comes from ``AutoImageProcessor`` (resize 224, rescale,
+ImageNet normalise), which is what ``build_transform`` reproduces -- the same transform
+already used for PathoROB and HEST, so a retention delta cannot be a preprocessing
+artefact.
+
+Normalisation, unlike resize/crop, is **per backbone**: ``build_transform`` takes the
+backbone id and looks the stats up in ``BACKBONE_NORMALIZATION``. kaiko-ai/midnight's
+card requires (0.5,0.5,0.5)/(0.5,0.5,0.5), not ImageNet.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+import torch
+
+_REPO = Path(__file__).resolve().parents[3]
+if str(_REPO / "src") not in sys.path:
+    sys.path.insert(0, str(_REPO / "src"))
+
+from thunder.models import PretrainedModel  # noqa: E402
+
+
+#: THUNDER pooling is **per backbone**, and it is not our choice -- it is Waiv's.
+#: arXiv:2607.22861 3, line 106: CLS+mean-pool concatenation was used for ALL models in
+#: PathoROB, but in THUNDER only for Virchow2, AquaViT, H0-mini and **Midnight-12k**.
+#: So phikon-v2 must be scored CLS-only here (which is also THUNDER's own published
+#: phikon2 protocol, ``pretrained_models.py:303``) while midnight must be clsmean. Get
+#: this backwards and the base-vs-fine-tuned rank sums are not comparable to their table.
+#: ``paige-ai/Virchow2`` is in that same clsmean list, named explicitly on line 106, so it
+#: is a transcription and not an inference. Its clsmean width is 2560 (2 x 1280), not
+#: Midnight's 3072 -- but the *reason* the segmentation branch has to fall back to cls is
+#: not the number 3072, it is that clsmean advertises ``emb_dim = 2 * hidden`` while
+#: ``get_segmentation_embeddings`` returns raw hidden-d patch tokens. That inequality holds
+#: for every backbone with clsmean pooling, Virchow2 included (2560 != 1280), so the
+#: ``resolve_pooling`` correction below applies to it unchanged. See ``resolve_pooling``.
+THUNDER_CLSMEAN_BACKBONES = frozenset({"kaiko-ai/midnight", "paige-ai/Virchow2"})
+
+#: The other half of the same published table: backbones Waiv scored CLS-only.
+#: Both sets are transcriptions of a paper, so membership cannot be inferred for a
+#: backbone that is not in the paper -- which is why an unlisted backbone is an error
+#: below rather than a default. Silently taking "cls" would produce a number that looks
+#: like a THUNDER result and is not comparable to their table.
+THUNDER_CLS_BACKBONES = frozenset({"owkin/phikon-v2"})
+
+
+def _default_pooling(backbone: str | None) -> str:
+    from waivphaet.models.encoder import DEFAULT_BACKBONE
+
+    backbone = backbone or DEFAULT_BACKBONE
+    if backbone in THUNDER_CLSMEAN_BACKBONES:
+        return "clsmean"
+    if backbone in THUNDER_CLS_BACKBONES:
+        return "cls"
+    raise RuntimeError(
+        f"no published THUNDER pooling protocol for backbone {backbone!r}. "
+        "Set WAIV_POOLING=cls|mean|clsmean explicitly for this run, and if the choice is "
+        "a protocol decision (i.e. it comes from arXiv:2607.22861 3), record it by adding "
+        "the backbone to THUNDER_CLSMEAN_BACKBONES or THUNDER_CLS_BACKBONES in "
+        "src/waivphaet/eval/thunder_model.py."
+    )
+
+
+def _is_segmentation_run(argv: list[str] | None = None) -> bool:
+    """True iff this process was launched as a THUNDER *segmentation* benchmark.
+
+    THUNDER instantiates the custom model with ``obj()`` and no arguments, from inside
+    ``benchmark()`` *before* the config is built (``thunder/benchmark.py:62``), so the task
+    is not reachable from ``__init__`` by any supported channel. The one thing that is
+    visible is the CLI we were invoked with::
+
+        thunder benchmark custom:<file> <dataset> <task> --loading-mode <mode>
+
+    so we match the task name as an EXACT argv token. Exact-token matching is what makes
+    this safe: no THUNDER dataset name, task name, loading mode, or our model path
+    contains the bare token ``segmentation``, so a classification run can never trip it.
+    Anything we cannot see (e.g. ``thunder.benchmark(...)`` called from Python) simply
+    reads False and keeps the previous behaviour.
+    """
+    return "segmentation" in (sys.argv[1:] if argv is None else argv)
+
+
+def resolve_pooling(backbone: str | None, explicit: str | None, segmentation: bool) -> str:
+    """The single place ``WAIV_POOLING`` / ``auto`` is turned into a pooling mode.
+
+    An explicit value always wins -- unchanged, including for segmentation, so an operator
+    who deliberately passes a pooling mode still gets exactly it.
+
+    Otherwise the backbone default applies, with one narrow correction: ``clsmean`` is
+    never used for a segmentation run. clsmean advertises ``emb_dim = 2 * hidden``, and
+    THUNDER sizes its segmentation decoder from ``emb_dim``, while
+    ``get_segmentation_embeddings`` hands back raw per-patch tokens, which are hidden-d.
+    On Midnight (ViT-g, hidden 1536) that is 3072 vs 1536 and the job dies in
+    ``task_specific_models.py:121``::
+
+        RuntimeError: mat1 and mat2 shapes cannot be multiplied (16384x1536 and 3072x768)
+
+    On Virchow2 (ViT-H, hidden 1280) it is 2560 vs 1280 -- a different pair of numbers,
+    the same inequality, so the correction applies there unchanged and its two segmentation
+    datasets must run cls just like Midnight's.
+
+    phikon-v2 never hit this only because its CLS dim equals its patch dim. Pooling is not
+    applied to patch tokens at all, so cls is not a protocol compromise here -- it is the
+    only self-consistent reading of "no pooling on the segmentation branch".
+    """
+    if explicit:
+        return explicit
+    pooling = _default_pooling(backbone)
+    if segmentation and pooling == "clsmean":
+        return "cls"
+    return pooling
+
+
+class WaivPhikonEncoder(PretrainedModel):
+    """Our ``PhikonEncoder`` behind THUNDER's three-method interface.
+
+    THUNDER validates ``self.name`` and ``self.emb_dim`` after construction and uses
+    ``self.name`` as the results directory, so ``WAIV_RUN_NAME`` is what keeps one
+    checkpoint's numbers from overwriting another's.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        from waivphaet.eval.hest_adapter import build_transform, load_encoder
+
+        backbone = os.environ.get("WAIV_BACKBONE") or None
+        pooling = resolve_pooling(
+            backbone, os.environ.get("WAIV_POOLING") or None, _is_segmentation_run()
+        )
+        adapter = os.environ.get("WAIV_ADAPTER") or None
+        checkpoint = os.environ.get("WAIV_CHECKPOINT") or None
+
+        self.encoder = load_encoder(
+            checkpoint,
+            Path(adapter) if adapter else None,
+            pooling,
+            lora_rank=int(os.environ.get("WAIV_LORA_RANK", 16)),
+            lora_alpha=int(os.environ.get("WAIV_LORA_ALPHA", 32)),
+            proj_out_dim=int(os.environ.get("WAIV_PROJ_OUT_DIM", 512)),
+            backbone=backbone,
+        )
+        self.t = build_transform(self.encoder.cfg.backbone)
+
+        slug = self.encoder.cfg.backbone.split("/")[-1].replace("-", "").replace(".", "")
+        default_name = f"waiv_{slug}_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")
+        self.name = os.environ.get("WAIV_RUN_NAME", default_name)
+        # Derived from the backbone: phikon-v2 1024/2048, midnight 1536/3072,
+        # Virchow2 1280/2560 (cls/clsmean).
+        self.emb_dim = int(self.encoder.embed_dim)
+        self.vlm = False
+
+    def forward(self, x):
+        """Not abstract, but ``adversarial_attack`` backprops through it -- so it has to
+        be the differentiable path, not a ``no_grad`` wrapper."""
+        return self.encoder.embed(x)
+
+    def get_transform(self):
+        return self.t
+
+    def get_linear_probing_embeddings(self, x):
+        """``(B, emb_dim)``. Feeds knn / linear_probing / simple_shot / calibration /
+        adversarial_attack -- five of the six tasks in their rank sum."""
+        return self.encoder.embed(x)
+
+    def _backbone_tokens(self, x):
+        """Raw ``(B, T, hidden)`` token sequence, dispatched the way ``WaivEncoder.embed``
+        dispatches it.
+
+        ``embed`` is not reusable here because it returns the *pooled* vector and there is
+        no token-returning method on the encoder to call instead, so the branch is
+        mirrored -- but it is mirrored off ``self.encoder.is_timm``, the same flag
+        ``embed`` reads, rather than off a backbone-name list, so a fourth backbone cannot
+        land on the wrong arm. ``self.encoder.backbone(pixel_values=x)`` unconditionally
+        was a plain bug: a timm ``VisionTransformer.forward`` takes the batch
+        POSITIONALLY and raises ``TypeError: forward() got an unexpected keyword argument
+        'pixel_values'`` on Virchow2.
+        """
+        if self.encoder.is_timm:
+            # Built with global_pool="" / num_classes=0, so forward() already returns the
+            # token sequence; going through forward() (not forward_features) keeps any
+            # PEFT wrapper in the path, exactly as embed() does.
+            return self.encoder.backbone(x)
+        return self.encoder.backbone(pixel_values=x).last_hidden_state
+
+    def get_segmentation_embeddings(self, x):
+        """``(B, patch tokens, hidden)``, matching their phikon2 branch. Pooling does not
+        apply here, so this is identical under cls and clsmean.
+
+        The prefix slice is ``num_prefix_tokens``, not the literal 1 it used to be.
+        On every HF backbone that value IS 1 (phikon-v2, midnight), so this is bitwise
+        the old ``[:, 1:]``. On Virchow2 it is 5, and the literal would have handed the 4
+        register tokens to THUNDER's segmentation decoder as if they were image patches --
+        right shape, right dtype, no warning, worse Dice.
+        """
+        return self._backbone_tokens(x)[:, self.encoder.num_prefix_tokens :]
+
+
+def _selftest() -> None:
+    """``python -m waivphaet.eval.thunder_model`` -- shape check without any dataset."""
+    m = WaivPhikonEncoder().eval()
+    x = torch.randn(2, 3, 224, 224)
+    with torch.no_grad():
+        lp, seg = m.get_linear_probing_embeddings(x), m.get_segmentation_embeddings(x)
+    print(f"name={m.name} emb_dim={m.emb_dim} linear_probing={tuple(lp.shape)} "
+          f"segmentation={tuple(seg.shape)}")
+    assert lp.shape == (2, m.emb_dim), lp.shape
+    assert seg.ndim == 3 and seg.shape[0] == 2, seg.shape
+    print("thunder_model selftest OK")
+
+
+if __name__ == "__main__":
+    _selftest()
