@@ -85,7 +85,7 @@ grep -q 'delegate rather than refuse' "$PIN/src/waivphaet/train/contrastive.py" 
   || { echo "PIN LACKS pool-head delegation -- GEM+grid cannot run: $PIN" >&2; exit 3; }
 
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
-ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow2}"
+ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow2|hoptimus|uni2}"
 SEED="${WAIV_SEED:?set WAIV_SEED}"
 GRID_TILES="${WAIV_T:?set WAIV_T (common across backbones -- that is the point)}"
 
@@ -93,6 +93,11 @@ case "$ARM" in
   phikon)   BACKBONE="" ;;                        # unset => train_lora.py default owkin/phikon-v2
   midnight) BACKBONE="kaiko-ai/midnight" ;;
   virchow2) BACKBONE="paige-ai/Virchow2" ;;
+  # Both hub repos are GATED (403).  encoder.BACKBONE_LOCAL_DIRS binds these ids to the
+  # local checkpoints under /data; nothing here needs a path.  Override with
+  # WAIV_BACKBONE_LOCAL_DIRS if /data is swept again.
+  hoptimus) BACKBONE="bioptimus/H-optimus-0" ;;
+  uni2)     BACKBONE="MahmoodLab/UNI2-h" ;;
   *) echo "bad WAIV_ARM=$ARM" >&2; exit 2 ;;
 esac
 BACKBONE_ARGS=()

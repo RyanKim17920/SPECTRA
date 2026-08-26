@@ -29,6 +29,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+import eval_common as _ec  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # BASE HEST SCORES (unfinetuned backbone, per-backbone pooling protocol)
 # All values measured by us under our own protocol; source files noted below.
@@ -43,18 +49,22 @@ from pathlib import Path
 # that _hest_score() reads for fine-tuned runs.  Previously these literals were the
 # rounded `results.avg` field while fine-tuned scores came from `custom_encoder`,
 # so base and FT came from DIFFERENT fields (virchow2 base was low by 2.4e-5).
-HEST_BASE_FALLBACK = {
-    # phikon-v2: cls pooling
-    # source: results_backup/hest_work_results/base_cls_summary.json
-    "phikon":   0.37470,
-    # midnight: cls pooling  (NOT clsmean — our HEST protocol for midnight is cls)
-    # source: /data/ryan.kim/hest_work/results/midnight_base_cls_9task_v1_summary.json
-    "midnight": 0.39521,
-    # virchow2: clsmean pooling
-    # source: results_backup/hest_work_results/vbase_clsmean_summary.json
-    # Note: the file stores 0.40324; docs/FINAL_RESULTS.md quotes 0.40327.
-    # We use the value in the file (0.40324) as ground truth.
-    "virchow2": 0.40324,
+# F-E fix (2026-08-26): THE FALLBACK LITERALS ARE GONE.
+#
+# `HEST_BASE_FALLBACK` used to silently substitute a hardcoded base whenever the summary
+# JSON was unreadable.  Those literals were the ROUNDED `results.avg` field while every
+# fine-tuned score is read from `hest_perf_per_encoder.custom_encoder`, so the fallback
+# path quietly mixed two different fields into one ratio (virchow2's base was low by
+# 2.4e-5, and three other scripts hardcoded the rounded 0.40324 as though it were the
+# base).  A base that cannot be read is UNAVAILABLE; a pct_of_waiv that divides by a
+# substituted number is worse than no number at all.  _load_hest_base() now raises.
+#
+# The retired literals are kept ONLY as an assertion target, so that a disagreement
+# between what was published and what is on disk is measured rather than absorbed.
+HEST_BASE_RETIRED_LITERALS = {
+    "phikon":   0.37470,   # was: results_backup/hest_work_results/base_cls_summary.json
+    "midnight": 0.39521,   # was: hest_work/results/midnight_base_cls_9task_v1_summary.json
+    "virchow2": 0.40324,   # was: results_backup/hest_work_results/vbase_clsmean_summary.json
 }
 # WRONG-PROTOCOL VALUES — MUST NEVER BE USED AS A BASE:
 #   phikon-v2 clsmean 0.39144  (base_clsmean_summary.json) — wrong pooling for phikon HEST
@@ -64,16 +74,53 @@ HEST_BASE_FALLBACK = {
 #     field the fine-tuned collector reads; mixing the two biases pct_of_waiv.
 
 # ---------------------------------------------------------------------------
+# ARM <-> BACKBONE.  The single mapping between the short arm token that appears
+# in run names / result dirs / sbatch WAIV_ARM and the HF repo id the encoder is
+# built from.  Every other table in this file, in scoreboard.py and in
+# final_recipe_report.py is keyed by ARM; anything that needs the repo id (e.g.
+# the THUNDER pooling protocol, which is published per model) must come through
+# here rather than re-deriving the correspondence with a second `if`.
+#
+# ORDER MATTERS: `ARMS` is the iteration order of every report table, and the
+# first three are the published trio -- appended, never reordered, so an existing
+# report's column order does not move.
+# ---------------------------------------------------------------------------
+ARM_BACKBONE: dict[str, str] = {
+    "phikon":   "owkin/phikon-v2",
+    "midnight": "kaiko-ai/midnight",
+    "virchow2": "paige-ai/Virchow2",
+    "hoptimus": "bioptimus/H-optimus-0",
+    "uni2":     "MahmoodLab/UNI2-h",
+}
+ARMS: tuple[str, ...] = tuple(ARM_BACKBONE)
+
+# ---------------------------------------------------------------------------
 # RI BASE (avg_ri for the untuned backbone, checkpoint=None adapter=None)
 # Computed over cross_scanner and cross_stain separation; this is NOT the
 # mean top1 from the same probe_before.json (~0.75/0.64/0.78), which is a
 # different aggregation. Values from the finalgem probe_before.json runs.
 # ---------------------------------------------------------------------------
-RI_BASE = {
-    "phikon":   0.4686,
-    "midnight": 0.7589,
-    "virchow2": 0.8582,
-}
+# F-F fix (2026-08-26): FALSE PROVENANCE RETIRED.
+#
+# The comment above used to cite probe_before.json as the source of these numbers.  That
+# file is the PLISM cross-scanner / cross-stain probe and contains NO robustness_index
+# field of any kind -- the attribution was simply wrong, and the same four literals had
+# been copied into five scripts on the strength of it.  The real measurement is
+# PathoROB's own results_summary.json for the untuned feature dirs; eval_common reads it.
+#
+# They are also NOT ri_curve.json["targets"]["*_base"], which is WAIV'S PUBLISHED Table-1
+# base row at 3 decimals -- a different quantity that happens to agree to 3 dp.
+RI_BASE, RI_BASE_SOURCE = _ec.load_ri_base()
+RI_WAIV, RI_WAIV_SOURCE = _ec.load_ri_waiv()
+
+RI_BASE_RETIRED_LITERALS = {"phikon": 0.4686, "midnight": 0.7589, "virchow2": 0.8582}
+
+
+def ri_base_literal_agreement() -> dict:
+    return {a: {"retired_literal": v, "from_disk": RI_BASE[a],
+                "delta": RI_BASE[a] - v, "agrees_to_4dp": abs(RI_BASE[a] - v) < 5e-5}
+            for a, v in RI_BASE_RETIRED_LITERALS.items()}
+
 
 # ---------------------------------------------------------------------------
 # THUNDER: base model directory names, per backbone and per task kind.
@@ -99,6 +146,12 @@ THUNDER_BASE_DIRS: dict[str, dict[str, str]] = {
     "phikon":   {"cls": "base_cls",      "seg": "base_cls"},
     "midnight": {"cls": "mbase_clsmean", "seg": "mbase_cls"},
     "virchow2": {"cls": "vbase_clsmean", "seg": "vbase_cls"},
+    # hoptimus / uni2: no base THUNDER run exists yet.  `_thunder_base_per_ds` already
+    # returns empty dicts for an arm that is absent here, so every THUNDER delta for them
+    # is None ("no base") through the existing generic path.  When the base runs land,
+    # add {"cls": "<dir>", "seg": "<dir>"} -- and note that BOTH are cls-pooled for these
+    # two backbones (waivphaet.eval.thunder_protocol.THUNDER_CLS_BACKBONES), unlike
+    # midnight/virchow2 whose classification dir is clsmean.
 }
 
 # HEST work dir (run_hest.py default = H.DEFAULT_WORK_DIR)
@@ -116,17 +169,46 @@ HEST_BASE_FILES = {
     "phikon":   "base_cls_summary.json",
     "midnight": "midnight_base_cls_9task_v1_summary.json",
     "virchow2": "vbase_clsmean_summary.json",
+    # hoptimus / uni2: no base HEST summary exists yet.  Absent, not zero: `_load_hest_base`
+    # only iterates this dict, so HEST_BASE simply has no key for them and every consumer's
+    # `.get(arm)` is None.
+}
+
+
+# ---------------------------------------------------------------------------
+# HEST pooling protocol, per backbone arm.  The ONLY definition in the repo.
+#
+# NOT the same as the THUNDER pooling rule -- that one lives in
+# waivphaet.eval.thunder_protocol and is read by scoreboard._thunder_pooling.
+# midnight is `cls` on HEST but `clsmean` on THUNDER classification, so the two
+# rules must never be shared.
+#
+# Table, not an expression: the old form was `"clsmean" if arm == "virchow2" else "cls"`,
+# which quietly answers "cls" for an arm nobody has decided about yet.  A missing entry
+# must be a question, not a default.
+# ---------------------------------------------------------------------------
+HEST_POOLING: dict[str, str] = {
+    "phikon":   "cls",
+    "midnight": "cls",
+    "virchow2": "clsmean",
+    # H-Optimus-0 and UNI2-h: cls.  arXiv:2607.22861 3 line 106 lists the clsmean models
+    # (Virchow2, AquaViT, H0-mini, Midnight-12k) and neither is in it.  H0-mini is a
+    # DISTILLATION of H-Optimus-0 and a separate row of their tables -- not the same model.
+    "hoptimus": "cls",
+    "uni2":     "cls",
 }
 
 
 def hest_pooling(arm: str) -> str:
-    """HEST pooling protocol per backbone.  The ONLY definition in the repo.
-
-    NOT the same as the THUNDER pooling rule -- see _thunder_pooling in scoreboard.py
-    and THUNDER_BASE_DIRS below.  midnight is `cls` on HEST but `clsmean` on THUNDER
-    classification, so the two rules must never be shared.
-    """
-    return "clsmean" if arm == "virchow2" else "cls"
+    """HEST pooling protocol per backbone arm.  Raises for an unregistered arm."""
+    try:
+        return HEST_POOLING[arm]
+    except KeyError:
+        raise KeyError(
+            f"no HEST pooling protocol registered for arm {arm!r}; add it to "
+            "HEST_POOLING in scripts/collect_final5.py (it is a protocol decision, "
+            "not a default)"
+        ) from None
 
 
 def _hest_summary_paths(fname: str):
@@ -157,9 +239,19 @@ def _load_hest_base():
                     vals[arm], src[arm] = v, str(cand)
                     break
         if arm not in vals:
-            vals[arm] = HEST_BASE_FALLBACK[arm]
-            src[arm] = "FALLBACK LITERAL (summary JSON absent or unreadable)"
+            raise FileNotFoundError(
+                "HEST base for %s: none of %s is readable, and there is deliberately no "
+                "literal fallback any more (F-E).  Every consumer must read the SAME "
+                "field (%s) for base and for fine-tuned, or pct_of_waiv is biased."
+                % (arm, [str(c) for c in _hest_summary_paths(fname)], HEST_METRIC_FIELD))
     return vals, src
+
+
+def hest_base_literal_agreement() -> dict:
+    """Retired HEST base literals vs the values now read from disk (F-E)."""
+    return {a: {"retired_literal": v, "from_disk": HEST_BASE[a],
+                "delta": HEST_BASE[a] - v, "agrees_to_4dp": abs(HEST_BASE[a] - v) < 5e-5}
+            for a, v in HEST_BASE_RETIRED_LITERALS.items()}
 
 
 HEST_BASE, HEST_BASE_SOURCE = _load_hest_base()
@@ -691,15 +783,33 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Step 3: Exclude NOT COMPARABLE runs from aggregates
     # ------------------------------------------------------------------
-    comparable = [r for r in run_records if r.get("config_ok") is not False]
+    # F-G fix (2026-08-26).  This used to read `config_ok is not False`, and
+    # `None is not False` is True -- so a run whose config.json was MISSING or UNREADABLE
+    # (config_ok stays None, because the diff loop only runs when flat_cfg is truthy) was
+    # silently INCLUDED in every aggregate, unchecked.  This module's own docstring calls
+    # the comparability check "the single most important function of this script"; a
+    # check that admits everything it could not read is not a check.  Unverifiable is now
+    # treated as not comparable, and it is logged as loudly as a real mismatch.
+    comparable = [r for r in run_records if r.get("config_ok") is True]
     excluded = [r["run_name"] for r in run_records if r.get("config_ok") is False]
+    unverifiable = [r["run_name"] for r in run_records if r.get("config_ok") is None]
     if excluded:
         print(f"\n[EXCLUDED from aggregates - config mismatch]: {excluded}")
+    if unverifiable:
+        print()
+        print("=" * 70)
+        print("  !!! EXCLUDED from aggregates - CONFIG NOT VERIFIABLE !!!")
+        print("  These runs have no readable config.json, so the comparability check")
+        print("  -- the single most important function of this script -- could not be")
+        print("  applied to them.  They were SILENTLY INCLUDED before 2026-08-26 (F-G).")
+        for nm in unverifiable:
+            print(f"    {nm}")
+        print("=" * 70)
 
     # ------------------------------------------------------------------
     # Step 4: Aggregate per arm
     # ------------------------------------------------------------------
-    arms = ["phikon", "midnight", "virchow2"]
+    arms = list(ARMS)
     aggregates: dict[str, dict] = {}
 
     for arm in arms:

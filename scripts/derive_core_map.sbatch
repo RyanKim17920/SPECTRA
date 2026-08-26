@@ -20,5 +20,5 @@ PY="$REPO/.venv/bin/python"
 "$PY" scripts/derive_core_map.py \
   --packed-dir /data/plism/repacked \
   --out-labels runs/.plism_core_labels.npy \
-  --batch-size 512
+  --batch-size 256
 echo "=== done $? ==="

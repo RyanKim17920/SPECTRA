@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-aux
+#SBATCH --job-name=waiv-smoke-ph2
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -75,19 +75,13 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/auxstain-pinned}"
+PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ]     || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
 # The pin MUST carry the pool-head delegation, or GEM+grid dies at step 0.
 grep -q 'delegate rather than refuse' "$PIN/src/waivphaet/train/contrastive.py" \
   || { echo "PIN LACKS pool-head delegation -- GEM+grid cannot run: $PIN" >&2; exit 3; }
-# This script exists ONLY to run the factored-invariance aux heads. A pin without them
-# would run the plain mask recipe under an "aux" run name -- a silent cache poisoning.
-grep -q 'aux_stain_weight' "$PIN/src/waivphaet/train/contrastive.py" \
-  || { echo "PIN LACKS aux_stain_weight -- wrong pin for this script: $PIN" >&2; exit 3; }
-[ -f "$REPO/runs/.plism_core_labels.npy" ] \
-  || { echo "MISSING core labels: $REPO/runs/.plism_core_labels.npy" >&2; exit 3; }
 
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
 ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow2|hoptimus|uni2}"
@@ -108,45 +102,21 @@ esac
 BACKBONE_ARGS=()
 [ -n "$BACKBONE" ] && BACKBONE_ARGS=(--backbone "$BACKBONE")
 
-# WAIV_TAG: free-form discriminator folded into RUN_NAME. REQUIRED whenever an arm differs
-# from another only by a parameter that RUN_NAME does not otherwise encode -- above all
-# WAIV_BCLS / WAIV_BMEAN, which are invisible here. HEST and PathoROB caches are keyed on
-# run name / exp_code ALONE, so two arms that collide in this string silently share results.
-# ----------------------------------------------------------------------------------------
-# FACTORED INVARIANCE (aux stain/scanner heads on the pooled BACKBONE embedding).
-# At least one weight must be > 0 -- with both at 0 this script is byte-identical to
-# gentle.sbatch and the "aux" in the run name would be a lie.
-AUXS="${WAIV_AUXS:?set WAIV_AUXS (--aux-stain-weight)}"
-AUXSC="${WAIV_AUXSC:?set WAIV_AUXSC (--aux-scanner-weight)}"
-AUX_ARGS=(--aux-stain-weight "$AUXS" --aux-scanner-weight "$AUXSC")
-DETTAG=""
-if [ "${WAIV_AUXDET:-0}" = "1" ]; then
-  AUX_ARGS+=(--aux-detach-backbone)
-  DETTAG="det"
-fi
-"$PY" -c "import sys; sys.exit(0 if (float(sys.argv[1])>0 or float(sys.argv[2])>0) else 1)" \
-  "$AUXS" "$AUXSC" \
-  || { echo "both aux weights are 0 -- use gentle.sbatch, not this script" >&2; exit 2; }
-# AUXTAG is DERIVED from the values actually passed to train_lora.py, never hand-typed, so
-# the run name cannot drift from the config. HEST/PathoROB/THUNDER caches key on run name
-# ALONE, so two aux arms that collide here would silently share results.
-AUXTAG="aux${AUXS}-${AUXSC}${DETTAG}"
-
-RUN_NAME="${AUXTAG}${WAIV_MASK:+MASK}${WAIV_TAG:+-${WAIV_TAG}}${WAIV_MINTF:+-mtf${WAIV_MINTF}}-lr${WAIV_LR:-1e-4}-r${WAIV_RANK:-32}-kl${WAIV_KL:-0}-t${WAIV_TEMP:-0.07}-wd${WAIV_WD:-0.05}-ms${WAIV_MAX_STEPS:-1500}-pd${WAIV_PROJDIM:-512}-${ARM}-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
+RUN_NAME="smoke-ph2-${ARM}-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 
-MAX_STEPS="${WAIV_MAX_STEPS:-1500}"
+MAX_STEPS=20
 CKPT_EVERY="${WAIV_CKPT_EVERY:-250}"
 WORKERS="${WAIV_WORKERS:-10}"
-LORA_RANK="${WAIV_RANK:-32}"
-LORA_ALPHA="${WAIV_ALPHA:-$((LORA_RANK * 2))}"
-LR="${WAIV_LR:-1e-4}"
-TEMPERATURE="${WAIV_TEMP:-0.07}"
+LORA_RANK=32
+LORA_ALPHA=64
+LR=1e-4
+TEMPERATURE=0.07
 GRID_COND=2
 GRID_CHUNK=0          # NOT tunable: GEM requires unchunked. See header.
 EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-72000}"
-HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem --retention-kl-weight "${WAIV_KL:-0}")
+HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem)
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} restart ${SLURM_RESTART_COUNT:-0} ==="
 echo "run       $RUN_NAME"
@@ -154,7 +124,6 @@ echo "arm       $ARM  backbone=${BACKBONE:-<default owkin/phikon-v2>}  seed=$SEE
 echo "geometry  C=$GRID_COND T=$GRID_TILES B=$((GRID_COND * GRID_TILES)) chunk=$GRID_CHUNK neg/row=$((GRID_TILES - 1))"
 echo "head      ${HEAD_ARGS[*]}"
 echo "steps     $MAX_STEPS  ckpt/eval $CKPT_EVERY"
-echo "aux       ${AUX_ARGS[*]}"
 echo "pin       $PIN"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv || true
 free -g | head -2 || true
@@ -218,42 +187,30 @@ CUDA_VISIBLE_DEVICES=0 "$PY" "$PIN"/scripts/train_lora.py \
   --heldout-scanners GT450 S210 \
   --heldout-stains HRH KR MY \
   --pooling clsmean \
-  --proj-out-dim "${WAIV_PROJDIM:-512}" \
+  --proj-out-dim 512 \
   "${BACKBONE_ARGS[@]}" \
   --lora-rank "$LORA_RANK" --lora-alpha "$LORA_ALPHA" \
   --temperature "$TEMPERATURE" \
   --lr "$LR" \
-  --weight-decay "${WAIV_WD:-0.05}" \
-  ${WAIV_MINTF:+--min-tissue-frac ${WAIV_MINTF}} \
-  ${WAIV_MASK:+--mask-same-core} \
-  ${WAIV_MASK:+--same-core-logit-bias-cls=${WAIV_BCLS:--inf}} \
-  ${WAIV_MASK:+--same-core-logit-bias-mean=${WAIV_BMEAN:--inf}} \
   --max-steps "$MAX_STEPS" \
-  --warmup-steps "${WAIV_WARMUP:-200}" \
+  --warmup-steps 200 \
   --grid --grid-conditions "$GRID_COND" --grid-tiles "$GRID_TILES" \
   --grid-forward-chunk "$GRID_CHUNK" \
   "${HEAD_ARGS[@]}" \
   --grad-checkpointing \
   --activation-offload \
-  --workers "$WORKERS" --amp bfloat16 --log-every 10 \
+  --workers "$WORKERS" --amp bfloat16 --log-every 20 \
   --ckpt-every "$CKPT_EVERY" --eval-every "$CKPT_EVERY" \
   --seed "$SEED" \
-  "${AUX_ARGS[@]}"
+  --mask-same-core \
+  --same-core-logit-bias-cls="${WAIV_BCLS:-2.0}" \
+  --same-core-logit-bias-mean="${WAIV_BMEAN:--inf}"
 TRAIN_RC=$?
 set -e
 
 echo "rc=$TRAIN_RC" > "$OUT_DIR/TRAIN_DONE"
 [ -n "$FOLLOWER" ] && wait $FOLLOWER 2>/dev/null || true
 kill $SAMPLER 2>/dev/null || true
-
-echo "=== AUX HEAD LEARNING VERDICT ==="
-# Delegated to scripts/aux_verdict.py, which is the SINGLE authoritative implementation.
-# Do NOT re-inline a statistic here. The first version of this block compared a
-# first-quarter mean to a last-quarter mean and called any fall "TRAINED"; at C=2 that
-# statistic is noise-dominated and it also compared accuracy against uniform 1/n_classes
-# instead of the trivial 1/n_cond constant-predictor bar, which is the only bar that
-# means anything when just C conditions are present per step. See that file's header.
-"$PY" "$REPO/scripts/aux_verdict.py" "$OUT_DIR" || true
 
 echo "=== RI curve ==="
 "$PY" - "$OUT_DIR" <<'EOF'

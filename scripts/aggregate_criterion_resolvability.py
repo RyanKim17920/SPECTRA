@@ -13,7 +13,10 @@ from pathlib import Path
 from itertools import combinations
 from itertools import combinations
 
-REPO = Path('/admin/home/ryan.kim/waiv')
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / 'scripts'))
+import collect_final5 as _c5   # noqa: E402
+import eval_common as _ec      # noqa: E402
 BB = ['phikon','midnight','virchow2']
 TASKS = ['knn','linear_probing','simple_shot']
 SEEDS = [0,1,2,3,4]
@@ -49,23 +52,30 @@ def pct_t(b,t,s,cap=True):
     return min(v,100.0) if cap else v
 
 # ---------------- HEST ----------------
-HEST_BASE={'phikon':0.37470,'midnight':0.39521,'virchow2':0.40324}
-WAIV_HEST={'phikon':0.3943,'midnight':0.4167,'virchow2':0.4135}
-HRES=Path('/data/ryan.kim/hest_work/results')
-POOL={'phikon':'cls','midnight':'cls','virchow2':'clsmean'}
+# F-E fix (2026-08-26): one loader, one field.  virchow2's base was the ROUNDED
+# `results.avg` 0.40324 while the numerator below read `results.avg` too -- self-
+# consistent but inconsistent with collect_final5 / scoreboard / final_recipe_report,
+# which all read `hest_perf_per_encoder.custom_encoder` (0.4032685).  Both ends now come
+# off the same field through the same loader.
+HEST_BASE=_c5.HEST_BASE
+WAIV_HEST=_ec.HEST_WAIV
+HRES=_c5.HEST_WORK_DIR/'results'
+POOL={a:_c5.hest_pooling(a) for a in BB}
 H_ours={}
 for b in BB:
     for s in SEEDS:
         g=sorted(HRES.glob(f'f5_final5-{b}-s{s}-t900-*_s0000500_{POOL[b]}_summary.json'))
         assert len(g)==1,(b,s,g)
-        H_ours[(b,s)]=json.load(open(g[0]))['results']['avg']
+        H_ours[(b,s)]=_c5._hest_read_metric(g[0])          # F-E: custom_encoder, not results.avg
 def pct_h(b,s,cap=True):
     v=(H_ours[(b,s)]-HEST_BASE[b])/(WAIV_HEST[b]-HEST_BASE[b])*100.0
     return min(v,100.0) if cap else v
 
 # ---------------- RI ----------------
-RI_BASE={'phikon':0.4686,'midnight':0.7589,'virchow2':0.8582}
-WAIV_RI={'phikon':0.806,'midnight':0.924,'virchow2':0.918}
+# F-F fix: read from PathoROB results on disk; the literals' cited provenance
+# (probe_before.json) had no such field.
+RI_BASE=_c5.RI_BASE
+WAIV_RI=_c5.RI_WAIV
 R_ours={}
 for b in BB:
     for s in SEEDS:

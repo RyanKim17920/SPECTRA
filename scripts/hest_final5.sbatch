@@ -42,6 +42,12 @@ case "$RUN" in
   *phikon*)   ARM=phikon;   BACKBONE="owkin/phikon-v2";  POOLING="cls" ;;
   *midnight*) ARM=midnight; BACKBONE="kaiko-ai/midnight"; POOLING="cls" ;;
   *virchow2*) ARM=virchow2; BACKBONE="paige-ai/Virchow2"; POOLING="clsmean" ;;
+  # cls, not clsmean: arXiv:2607.22861 3 line 106 names the clsmean models (Virchow2,
+  # AquaViT, H0-mini, Midnight-12k) and neither of these is in it.  H0-mini IS in it but
+  # is a DISTILLATION of H-Optimus-0 and a separate row of their tables -- not this model.
+  # Must agree with collect_final5.HEST_POOLING; tests/test_invariants.py asserts it does.
+  *hoptimus*) ARM=hoptimus; BACKBONE="bioptimus/H-optimus-0"; POOLING="cls" ;;
+  *uni2*)     ARM=uni2;     BACKBONE="MahmoodLab/UNI2-h";     POOLING="cls" ;;
   *) echo "FATAL: cannot infer backbone from run name '$RUN'" >&2; exit 2 ;;
 esac
 

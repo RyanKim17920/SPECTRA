@@ -51,6 +51,13 @@ def main() -> int:
     ap.add_argument("--lora-rank", type=int, default=16)
     ap.add_argument("--lora-alpha", type=int, default=32)
     ap.add_argument("--proj-out-dim", type=int, default=512)
+    ap.add_argument("--lora-scale", type=float, default=1.0,
+                    help="WiSE-FT interpolation between the base backbone and this "
+                         "adapter: the LoRA delta is multiplied by s, which is exactly "
+                         "W = (1-s)*W_base + s*W_ft, no retraining. s=1 (default) is the "
+                         "trained checkpoint, s=0 reproduces the base backbone. Requires "
+                         "--adapter. Any s != 1 MUST appear in --exp-code as e.g. "
+                         "'ls075' -- the embedding cache keys on exp_code alone")
     ap.add_argument("--pool-head", default=None,
                     choices=("gem", "gem_clamp", "attn", "lse"),
                     help="apply this run's TRAINED pooling head inside the exported "
@@ -89,11 +96,37 @@ def main() -> int:
         raise SystemExit("--pool-head needs --adapter: pool_head.pt lives in the "
                          "checkpoint dir alongside adapter/")
 
+    if args.lora_scale != 1.0 and not args.adapter:
+        raise SystemExit(f"--lora-scale {args.lora_scale} needs --adapter: there is no "
+                         "LoRA delta to interpolate on a base backbone or a full-FT "
+                         "--checkpoint")
+
+    # CACHE TRAP, closed for --lora-scale. See the long comment at the benchmark call:
+    # the embedding cache key is exp_code and NOTHING else, so a WiSE-FT sweep that
+    # reuses one exp_code across s would score s=1's cached embeddings five times and
+    # report a perfectly flat interpolation curve -- a manufactured null, not a result.
+    # The required token is derived from the value, so a stale or hand-typed token
+    # (ls050 while passing 0.75) fails too. Nothing is required at s=1, which leaves
+    # every exp_code already on disk under /data/ryan.kim/hest_work/embeddings/ valid.
+    # Hard-fail rather than auto-suffix: exp_code is also the results filename that the
+    # collectors key on, and silently renaming it would orphan those.
+    if args.lora_scale != 1.0:
+        from waivphaet.models.encoder import lora_scale_tag
+        tag = lora_scale_tag(args.lora_scale)
+        if tag not in (args.exp_code or ""):
+            raise SystemExit(
+                f"--lora-scale {args.lora_scale} requires {tag!r} in --exp-code (got "
+                f"{args.exp_code!r}). The HEST embedding cache key is exp_code ALONE: "
+                "reusing one exp_code across scales reads back the first scale's "
+                f"embeddings for all of them. Use e.g. --exp-code <run>_{tag}."
+            )
+
     encoder = H.load_encoder(args.checkpoint, args.adapter, args.pooling,
                              lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
                              proj_out_dim=args.proj_out_dim, backbone=args.backbone,
                              pool_head=args.pool_head,
-                             infer_pool_head=bool(args.pool_head))
+                             infer_pool_head=bool(args.pool_head),
+                             lora_scale=args.lora_scale)
     wrapped = H.HestEncoderWrapper(encoder)
     # Derived from the backbone's own hidden size, not a literal: 1024/2048 on phikon-v2,
     # 1536/3072 on midnight. Still asserted -- a pooling/embed_dim desync would write
@@ -113,7 +146,8 @@ def main() -> int:
     # ------------------------------------------------------------------------------
     # CACHE KEY WARNING. The embedding cache key is exactly `embed_dir / exp_code`.
     # It does NOT include the backbone, the checkpoint/adapter, the precision, or
-    # --pool-head. Embeddings are cached per (task, encoder) under embed_dataroot and
+    # --pool-head, nor --lora-scale (that one is guarded up front, see the token check
+    # above). Embeddings are cached per (task, encoder) under embed_dataroot and
     # only extracted on fold 0, so a re-run of the regression half is cheap -- but a
     # *different* checkpoint, or the SAME checkpoint read with a different --pool-head,
     # under the same exp_code will silently reuse whatever is already on disk. HEST

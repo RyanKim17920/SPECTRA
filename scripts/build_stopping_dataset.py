@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
 """Join per-checkpoint RI-curve internals with HEST summaries.
 Emits docs/stopping_criterion_rows.json  (one row per (run, step) with both signals)."""
-import json, os, re, glob, statistics as st
+import json, os, re, glob, statistics as st, sys
 
-RUNS = "/admin/home/ryan.kim/waiv/runs"
-HEST = "/data/ryan.kim/hest_work/results"
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "scripts"))
+import collect_final5 as _c5   # noqa: E402
+import eval_common as _ec      # noqa: E402
 
-HEST_BASE = {"phikon": 0.37470, "midnight": 0.39521, "virchow2": 0.40324}
-HEST_WAIV = {"phikon": 0.3943,  "midnight": 0.4167,  "virchow2": 0.4135}
-RI_BASE   = {"phikon": 0.4686,  "midnight": 0.7589,  "virchow2": 0.8582}
-RI_WAIV   = {"phikon": 0.806,   "midnight": 0.924,   "virchow2": 0.918}
-POOL      = {"phikon": "cls",   "midnight": "cls",   "virchow2": "clsmean"}
+RUNS = os.path.join(REPO, "runs")
+HEST = str(_c5.HEST_WORK_DIR / "results")
+
+# F-E/F-F fix (2026-08-26): every one of these used to be a literal copied from
+# collect_final5, and two of them were the WRONG number -- virchow2's HEST base was the
+# rounded `results.avg` 0.40324 rather than the `custom_encoder` 0.4032685 that the
+# numerator below is now read from, and the RI base carried collect_final5's false
+# probe_before.json provenance.  There is one loader for each of these now.
+HEST_BASE = _c5.HEST_BASE
+HEST_WAIV = _ec.HEST_WAIV
+RI_BASE   = _c5.RI_BASE
+RI_WAIV   = _c5.RI_WAIV
+POOL      = {a: _c5.hest_pooling(a) for a in ("phikon", "midnight", "virchow2")}
 
 def backbone_of(run, cfg):
     bb = (cfg or {}).get("encoder", {}).get("backbone", "")
@@ -59,7 +69,8 @@ for run in sorted(os.listdir(RUNS)):
             continue
         try: hs = json.load(open(hp))
         except Exception: continue
-        havg = hs.get("results", {}).get("avg")
+        # F-E: the SAME field the base is read from -- custom_encoder, not results.avg.
+        havg = (hs.get("hest_perf_per_encoder") or {}).get("custom_encoder")
         if havg is None: continue
         found_any = True
         l2 = pt.get("adapter_rel_l2_delta")

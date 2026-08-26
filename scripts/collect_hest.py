@@ -131,7 +131,18 @@ def main() -> int:
     rows = list(LEADERBOARD_TASKS) + ["avg"]
 
     def val(blob: dict, task: str) -> float | None:
-        v = blob.get("results", {}).get(task)
+        # F-E fix (2026-08-26): the "avg" ROW is the repo's headline HEST scalar, and it
+        # must be THE headline scalar -- hest_perf_per_encoder.custom_encoder -- not
+        # `results.avg`, which is a ROUNDED copy of it.  Reading the rounded field here
+        # while collect_final5 / scoreboard / final_recipe_report read custom_encoder is
+        # why this script and collect_final5 printed different HEST numbers for the SAME
+        # run.  One field, repo-wide; collect_final5 owns the reader.
+        if task == "avg":
+            v = (blob.get("hest_perf_per_encoder") or {}).get("custom_encoder")
+            if v is None:
+                v = blob.get("results", {}).get(task)   # pre-custom_encoder summaries
+        else:
+            v = blob.get("results", {}).get(task)
         return None if v is None else float(v)
 
     # BOTH halves gate the published column. Pooling alone is not enough: 0.3747 is

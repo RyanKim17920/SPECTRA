@@ -60,6 +60,47 @@ def _parse_prefixes(spec: str | None) -> tuple[str, ...]:
 
 PREFIXES = _parse_prefixes(os.environ.get("THUNDER_PREFIXES"))
 
+#: Historical MEAN elapsed hours per THUNDER dataset, recomputed from `sacct` over every
+#: COMPLETED sweep job since 2026-08-01 (n=20-21 per dataset). Used to order releases
+#: SHORTEST-first.
+#:
+#: ORDERING RATIONALE (changed 2026-08-24; was longest-first). Longest-first minimises
+#: MAKESPAN, which is the right objective only when every cell is equally valuable and the
+#: only thing that matters is when the LAST one lands. That is not this sweep. The bar being
+#: chased is few-shot/simple_shot over the 12 CLASSIFICATION datasets, and a cell is worth
+#: nothing until its job COMPLETES. Longest-first put esca/wilds/ocelot (8-12 h each) into
+#: all three slots and produced ZERO finished cells in the first hour; shortest-first lands
+#: bach/mhist/break_his/bracs/ccrcc (0.17-0.70 h) almost immediately, so the roster fills
+#: monotonically and even a truncated sweep is a readable result.
+#: An unknown dataset gets +inf and sorts LAST, so a new dataset can never jump the queue on
+#: a missing entry -- it only loses the optimisation.
+DATASET_HOURS = {
+    "bach": 0.17, "break_his": 0.21, "mhist": 0.21, "bracs": 0.42,
+    "ccrcc": 0.70, "tcga_crc_msi": 1.72, "crc": 2.00,
+    "pannuke": 4.25, "patch_camelyon": 4.80, "tcga_tils": 5.24,
+    "wilds": 8.27, "ocelot": 9.47, "tcga_uniform": 9.68, "esca": 11.96,
+    "segpath_epithelial": 27.58, "segpath_lymphocytes": 29.70,
+}
+
+#: Datasets the pilot must never touch, even when they sit held with a matching prefix.
+#: Segmentation is out of scope for this round: our segmentation mean covers 2 of Waiv's 4
+#: datasets so it is non-comparable regardless (support_2v4), and the few-shot bar does not
+#: read it at all -- so a 9 h ocelot job is pure opportunity cost against classification.
+#: Excluded jobs are dropped from the job list ENTIRELY rather than merely sorted last, so
+#: they can neither be released nor keep the pilot from reaching DONE.
+DEFAULT_EXCLUDE: tuple[str, ...] = ()
+EXCLUDE: tuple[str, ...] = DEFAULT_EXCLUDE
+
+
+def dataset_of(name: str) -> str:
+    """`mask-mid-tcga_uniform` -> `tcga_uniform`. Strips the longest matching prefix rather
+    than splitting on '-', because dataset names themselves contain no '-' but the prefixes
+    do (mask-mid-, thdft1k-)."""
+    for pre in sorted(PREFIXES, key=len, reverse=True):
+        if name.startswith(pre):
+            return name[len(pre):]
+    return name
+
 
 def emit(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -85,7 +126,7 @@ def squeue() -> list[dict]:
         if len(parts) != 4:
             continue
         jid, name, state, reason = (p.strip() for p in parts)
-        if name.startswith(PREFIXES):
+        if name.startswith(PREFIXES) and dataset_of(name) not in EXCLUDE:
             jobs.append({"id": jid, "name": name, "state": state, "reason": reason})
     return jobs
 
@@ -123,7 +164,7 @@ def fast_failures(since: str = "today", max_seconds: int = 150) -> list[str]:
 
 
 def main() -> int:
-    global PREFIXES
+    global PREFIXES, EXCLUDE
     ap = argparse.ArgumentParser()
     ap.add_argument("--cap", type=int, default=4,
                     help="max concurrent THUNDER jobs (running + runnable-pending)")
@@ -135,13 +176,19 @@ def main() -> int:
     ap.add_argument("--prefixes", default=None,
                     help="comma-separated job-name prefixes to pilot; overrides "
                          "THUNDER_PREFIXES. Default: " + ",".join(DEFAULT_PREFIXES))
+    ap.add_argument("--exclude-datasets", default=None,
+                    help="comma-separated dataset names dropped from the pilot entirely: "
+                         "never released, never counted as active, never block DONE")
     args = ap.parse_args()
+    _ex = (args.exclude_datasets or "").replace(",", " ").split()
+    EXCLUDE = tuple(d.strip() for d in _ex if d.strip()) or DEFAULT_EXCLUDE
     if args.prefixes:
         PREFIXES = _parse_prefixes(args.prefixes)
 
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
     seen_bad: set[str] = set()
     emit(f"START pilot user={USER} prefixes={','.join(PREFIXES)} "
+         f"exclude={','.join(EXCLUDE) or '<none>'} "
          f"cap={args.cap} interval={args.interval}s "
          f"breaker={args.max_fast_failures} since={started_at}")
     last_beat = 0.0
@@ -184,7 +231,12 @@ def main() -> int:
             # (mthdft- never matched), and a third backbone would inherit the same
             # no-op. Convention: a fine-tuned prefix contains "ft".
             ft_prefixes = tuple(p for p in PREFIXES if "ft" in p)
-            held.sort(key=lambda j: 0 if j["name"].startswith(ft_prefixes) else 1)
+            # Primary key: fine-tuned first (irreplaceable if the sweep is cut short).
+            # Secondary: SHORTEST dataset first, to fill the roster fastest -- see DATASET_HOURS.
+            held.sort(key=lambda j: (
+                0 if j["name"].startswith(ft_prefixes) else 1,
+                DATASET_HOURS.get(dataset_of(j["name"]), float("inf")),
+            ))
             batch = [j["id"] for j in held[:slots]]
             names = ", ".join(j["name"] for j in held[:slots])
             r = subprocess.run(["scontrol", "release", ",".join(batch)],

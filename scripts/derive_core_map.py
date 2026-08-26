@@ -15,10 +15,12 @@ def parse_args():
     ap.add_argument("--packed-dir", type=Path, default=Path("/data/plism/repacked"))
     ap.add_argument("--out-labels", type=Path, default=Path("/admin/home/ryan.kim/waiv/runs/.plism_core_labels.npy"))
     ap.add_argument("--batch-size", type=int, default=256)
+    ap.add_argument("--backbone", default="owkin/phikon-v2")
+    ap.add_argument("--out-meta", type=Path, default=None)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     return ap.parse_args()
 
-def embed_all(packed_dir, device, batch_size):
+def embed_all(packed_dir, device, batch_size, backbone="owkin/phikon-v2"):
     import os
     os.environ.setdefault("HF_HOME", "/data/huggingface")
     # Add waiv source to path
@@ -26,31 +28,32 @@ def embed_all(packed_dir, device, batch_size):
     from waivphaet.models.encoder import build_encoder
     import torchvision.transforms.functional as TF
 
-    print("[embed] loading phikon-v2 base model (no LoRA)...", flush=True)
-    model = build_encoder(backbone="owkin/phikon-v2", use_lora=False, proj_out_dim=512, pooling="clsmean")
+    print("[embed] loading {backbone} base model (no LoRA)...", flush=True)
+    model = build_encoder(backbone=backbone, use_lora=False, proj_out_dim=512, pooling="clsmean")
     model.eval().to(device)
-    print("[embed] model loaded", flush=True)
+    print(f"[embed] model loaded; norm_mean={model.norm_mean}, norm_std={model.norm_std}", flush=True)
 
     ref = np.load(str(packed_dir / "GMH_S60_to_GMH_S60.npy"), mmap_mode='r')
     N = ref.shape[0]
-    print(f"[embed] embedding {N} tiles...", flush=True)
+    print(f"[embed] embedding {N} tiles (shape {ref.shape}, dtype {ref.dtype})...", flush=True)
 
-    # normalize per phikon-v2 convention (ImageNet mean/std)
-    mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1,3,1,1)
-    std  = torch.tensor([0.229, 0.224, 0.225], device=device).view(1,3,1,1)
-
-    embeddings = np.empty((N, 1024), dtype=np.float32)  # phikon-v2 CLS is 1024-d
+    # NOTE: hand-rolled ImageNet normalisation was WRONG -- WaivEncoder.tokens() applies
+    # normalization_for(backbone) itself when handed uint8 NHWC. Feed it uint8 NHWC so the
+    # tiles are normalised with exactly the constants training/eval uses.
+    embeddings = None
     t0 = time.time()
     with torch.no_grad():
         for start in range(0, N, batch_size):
             end = min(start + batch_size, N)
-            imgs = torch.from_numpy(ref[start:end].copy()).float().permute(0,3,1,2).to(device) / 255.0
-            imgs = (imgs - mean) / std
-            emb = model.embed(imgs)  # uses model.pool() = clsmean; we want CLS only but clsmean is fine
+            imgs = torch.from_numpy(np.ascontiguousarray(ref[start:end])).to(device)  # uint8 NHWC
+            emb = model.embed(imgs).float()  # (B, embed_dim); clsmean => 2*hidden
+            if embeddings is None:
+                D = int(emb.shape[1])
+                print(f"[embed] embed_dim={D}", flush=True)
+                embeddings = np.empty((N, D), dtype=np.float32)
             embeddings[start:end] = emb.cpu().numpy()
-            if start % 2000 == 0:
-                elapsed = time.time() - t0
-                print(f"[embed] {end}/{N}  {elapsed:.0f}s", flush=True)
+            if (start // batch_size) % 10 == 0:
+                print(f"[embed] {end}/{N}  {time.time()-t0:.0f}s", flush=True)
     print(f"[embed] done in {time.time()-t0:.0f}s", flush=True)
     return embeddings
 
@@ -85,6 +88,31 @@ def spatial_compactness(labels, rows, cols, k):
 
     frac_same = neighbour_same / max(neighbour_total, 1)
 
+    # RANDOM-LABEL NULL for the same 8-neighbour statistic: shuffle the labels over the
+    # SAME lattice (preserves cluster sizes exactly) and recompute. Without this the raw
+    # frac_same is uninterpretable -- with k clusters chance alone gives ~sum(p_i^2).
+    _rng_nb = np.random.default_rng(1234)
+    null_fracs = []
+    for _ in range(5):
+        perm = _rng_nb.permutation(labels)
+        c2l = {}
+        for i, (r, c) in enumerate(zip(rows.tolist(), cols.tolist())):
+            c2l[(r, c)] = int(perm[i])
+        ns = nt = 0
+        for i, (r, c) in enumerate(zip(rows.tolist(), cols.tolist())):
+            lbl = int(perm[i])
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if dr == 0 and dc == 0:
+                        continue
+                    nb = c2l.get((r + dr, c + dc))
+                    if nb is not None:
+                        nt += 1
+                        if nb == lbl:
+                            ns += 1
+        null_fracs.append(ns / max(nt, 1))
+    null_frac_same = float(np.mean(null_fracs))
+
     # spatial variance per cluster vs random null
     per_cluster_var = []
     for ki in range(k):
@@ -111,6 +139,8 @@ def spatial_compactness(labels, rows, cols, k):
 
     return {
         "frac_neighbour_same_label": round(frac_same, 4),
+        "frac_neighbour_same_label_NULL": round(null_frac_same, 4),
+        "neighbour_lift_over_null": round(frac_same / max(null_frac_same, 1e-9), 2),
         "mean_cluster_spatial_var": round(mean_cluster_var, 2),
         "mean_random_spatial_var": round(mean_rand_var, 2),
         "compactness_ratio": round(compactness_ratio, 4),  # <1 = spatially contiguous
@@ -122,7 +152,7 @@ def main():
     rows, cols = parse_coords(keys)
     print(f"[map] grid: rows {rows.min()}-{rows.max()}, cols {cols.min()}-{cols.max()}", flush=True)
 
-    embeddings = embed_all(args.packed_dir, args.device, args.batch_size)
+    embeddings = embed_all(args.packed_dir, args.device, args.batch_size, args.backbone)
 
     # Normalize embeddings
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)

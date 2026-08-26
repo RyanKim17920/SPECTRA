@@ -245,7 +245,7 @@ def _restore_pool_head(model, ckpt_dir: Path) -> dict:
 def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = None,
                 lora_rank: int = 16, lora_alpha: int = 32, proj_out_dim: int = 512,
                 backbone: str | None = None, pool_head: str | None = None,
-                infer_pool_head: bool = False):
+                infer_pool_head: bool = False, lora_scale: float = 1.0):
     """Single loader shared by PathoROB, HEST and THUNDER (see ``hest_adapter``).
 
     ``backbone`` defaults to ``DEFAULT_BACKBONE`` (owkin/phikon-v2) so every existing
@@ -257,6 +257,15 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
     from waivphaet.models.encoder import DEFAULT_BACKBONE, EncoderConfig, WaivEncoder
 
     backbone = backbone or os.environ.get("WAIV_BACKBONE") or None
+
+    # --lora-scale is a LoRA-only knob: it rescales the low-rank delta. A full-FT
+    # checkpoint has no separable delta and the base backbone has none at all, so an
+    # interpolation request there is a mistake, not a no-op to be swallowed.
+    if lora_scale != 1.0 and adapter is None:
+        raise SystemExit(
+            f"lora_scale={lora_scale} needs --adapter: there is no LoRA delta to "
+            "interpolate on a base backbone or a full-FT --checkpoint"
+        )
 
     if adapter is not None:
         # The saved adapter_config.json is the source of truth for rank/alpha. Passing the
@@ -316,7 +325,15 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
             )
         # Cheap CPU-side proof before the caller ever sees the model. Callers that have real
         # tiles on hand (this script's main()) re-run it on those for a sharper number.
+        # Deliberately run at full strength, BEFORE any --lora-scale is applied: at
+        # lora_scale=0 the adapter is *supposed* to reproduce the base model, so the check
+        # would fire on a correctly-loaded adapter and we would lose the loading proof.
         assert_adapter_applied(model.eval())
+        if lora_scale != 1.0:
+            n = model.set_lora_scale(lora_scale)
+            print(f"[build_model] lora_scale={lora_scale} applied to {n} LoRA layers "
+                  f"(WiSE-FT: W = (1-s)*W_base + s*W_ft; s=0 IS the base backbone)",
+                  flush=True)
     elif checkpoint is None:
         # Base backbone: no LoRA, no adapter deltas -- this is the Phase-2 gate model.
         cfg = EncoderConfig(backbone=backbone or DEFAULT_BACKBONE,
@@ -456,6 +473,13 @@ def main() -> int:
     ap.add_argument("--lora-rank", type=int, default=16)
     ap.add_argument("--lora-alpha", type=int, default=32)
     ap.add_argument("--proj-out-dim", type=int, default=512)
+    ap.add_argument("--lora-scale", type=float, default=1.0,
+                    help="WiSE-FT interpolation between the base backbone and this "
+                         "adapter: the LoRA delta is multiplied by s, which is exactly "
+                         "W = (1-s)*W_base + s*W_ft. s=1 (default) is the trained "
+                         "checkpoint, s=0 reproduces the base backbone. Requires "
+                         "--adapter. Any s != 1 must appear in --model-name as e.g. "
+                         "'ls075' -- the features dir keys on that name alone.")
     ap.add_argument("--pooling", default="clsmean", choices=("cls", "mean", "clsmean"))
     ap.add_argument("--features-dir", default=str(PATHOROB_ROOT / "data" / "features"))
     ap.add_argument("--batch-size", type=int, default=256)
@@ -469,6 +493,22 @@ def main() -> int:
         raise SystemExit("--checkpoint and --adapter are mutually exclusive")
 
     sys.path.insert(0, str(REPO / "src"))
+    from waivphaet.models.encoder import lora_scale_tag
+
+    # Cache trap, same shape as run_hest.py's: extracted features live under
+    # <features-dir>/<model-name>/<dataset> and nothing else. Two scales under one
+    # model-name is a collision; out_dir.exists() below already refuses to overwrite, so
+    # the failure mode is a confusing SystemExit hours in rather than a silent wrong
+    # number -- but require the token up front so the sweep is legible on disk.
+    if args.lora_scale != 1.0:
+        tag = lora_scale_tag(args.lora_scale)
+        if tag not in args.model_name:
+            raise SystemExit(
+                f"--lora-scale {args.lora_scale} requires {tag!r} in --model-name "
+                f"(got {args.model_name!r}); the features dir keys on --model-name alone, "
+                "so two scales under one name collide"
+            )
+
     sys.path.insert(0, str(PATHOROB_ROOT))
     from pathorob.features.data_manager import FeatureDataManager
 
@@ -481,6 +521,7 @@ def main() -> int:
     model = build_model(
         args.checkpoint, args.pooling, args.adapter, args.lora_rank,
         args.lora_alpha, args.proj_out_dim, args.backbone,
+        lora_scale=args.lora_scale,
     ).to(args.device)
     print(f"[extract] normalization mean={model.norm_mean} std={model.norm_std}")
     ds = PathoRobParquet(args.dataset, build_preprocess(model.cfg.backbone))
@@ -498,8 +539,11 @@ def main() -> int:
             f"got {model.embed_dim}"
         )
 
-    # Adapter-applied check on REAL tiles (build_model already ran it on synthetic input).
-    if args.adapter is not None:
+    # Adapter-applied check on REAL tiles (build_model already ran it on synthetic input,
+    # at full strength before --lora-scale). At lora_scale=0 the deltas are zeroed on
+    # purpose and this check would (correctly) see no difference from the base model, so
+    # it is skipped there: build_model's pre-scale assertion is the loading proof.
+    if args.adapter is not None and args.lora_scale != 0.0:
         check_sz = min(8, len(ds))
         assert_adapter_applied(model, torch.stack([ds[i][0] for i in range(check_sz)]))
 

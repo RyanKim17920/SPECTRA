@@ -25,10 +25,24 @@ for b in BB:
 print()
 
 # ---------- rules ----------
+# F-H fix (2026-08-26).  THIS FUNCTION USED TO `return v[-1]` WHEN THE PREDICATE NEVER
+# FIRED.  Every threshold rule below therefore silently degraded into "stop at the LAST
+# checkpoint" on exactly the runs where its threshold was never crossed -- so a threshold
+# that is too high scored not as "never fired" but as R0b (stop-at-last), and inherited
+# R0b's numbers.  scripts/full_grid_rules.py:42 does the same search correctly (it yields
+# None), which is how the discrepancy was found.  This is the script that selected
+# CI_TARGET = 0.75, so the bug sat directly under a published decision.
+#
+# A stopping rule that does not fire has not selected anything.  It returns NEVER, and
+# report() below counts those runs separately instead of scoring a checkpoint the rule
+# did not choose.
+NEVER = None
+
+
 def first_where(v, pred):
     for r in v:
         if pred(r): return r
-    return v[-1]
+    return NEVER
 
 def mk_thresh(sig, c):
     return lambda v: first_where(v, lambda r: r.get(sig) is not None and r[sig] >= c)
@@ -63,25 +77,46 @@ def rule_ci_over_pp(v):
     return max(v, key=lambda r: r['ci']*r['pp'])
 
 def report(name, fn, note=""):
-    per={}
+    """Score a rule.  Runs where the rule NEVER fires are counted, never substituted.
+
+    A rule that fails to select a checkpoint on some runs is not a usable stopping rule
+    for those runs, and its mean over the rest is a mean over a SUBSET it happened to
+    like.  Such a rule is marked INCOMPLETE and is never eligible to win.
+    """
+    per={}; misses={}
     for b in BB:
-        sel=[]; orc=[]; early=[]
+        sel=[]; orc=[]; miss=0
         for k,v in runs.items():
             if v[0]['backbone']!=b: continue
-            s=fn(v); sel.append(s); orc.append(max(x['hest_pct'] for x in v))
+            s=fn(v)
+            if s is NEVER:
+                miss+=1; continue
+            sel.append(s); orc.append(max(x['hest_pct'] for x in v))
+        misses[b]=miss
         if not sel: per[b]=None; continue
-        per[b]=dict(n=len(sel), hest=st.mean(x['hest_pct'] for x in sel),
+        per[b]=dict(n=len(sel), never=miss,
+                    hest=st.mean(x['hest_pct'] for x in sel),
                     minhest=min(x['hest_pct'] for x in sel),
                     ri=st.mean(x['ri_pct'] for x in sel),
                     regret=st.mean(o-x['hest_pct'] for o,x in zip(orc,sel)),
                     steps=sorted({x['step'] for x in sel}))
-    worst=min(p['hest'] for p in per.values() if p)
-    line=f"{name:<40} worstBB_meanHEST%={worst:6.1f} | "
+    total_never=sum(misses.values())
+    complete = total_never==0 and all(per[b] for b in BB)
+    worst=min((p['hest'] for p in per.values() if p), default=None)
+    flag = "" if complete else f"  [INCOMPLETE: never fired on {total_never} run(s)]"
+    ws = f"{worst:6.1f}" if worst is not None else "  n/a "
+    line=f"{name:<40} worstBB_meanHEST%={ws} | "
     for b in BB:
         p=per[b]
-        line+=f"{b[:4]}: H={p['hest']:5.1f} RI={p['ri']:5.1f} reg={p['regret']:4.1f} n={p['n']} | " if p else f"{b[:4]}: -- | "
-    print(line)
+        line+=(f"{b[:4]}: H={p['hest']:5.1f} RI={p['ri']:5.1f} reg={p['regret']:4.1f} "
+               f"n={p['n']}{('/-%d' % p['never']) if p['never'] else ''} | ") if p else f"{b[:4]}: -- | "
+    print(line+flag)
+    ALL_RULES.append(dict(name=name, worst=worst, complete=complete,
+                          never=total_never, per=per))
     return worst, per
+
+
+ALL_RULES = []
 
 print("RULE EVALUATION on the 27 runs with >=2 HEST'd checkpoints")
 print("(H = mean HEST pct_of_waiv at selected step; RI = mean RI pct_of_waiv; reg = mean regret vs per-run oracle)")
@@ -111,20 +146,39 @@ for c in (0.90,0.94,0.96,0.98,1.00,1.02):
 print("-"*150); print("COMPOSITE rules:")
 def comp_min(v):
     a=mk_thresh('ci',0.75)(v); b=rule_pp_drop(v,0.0)
+    if a is NEVER: return NEVER
     return a if a['step']<=b['step'] else b
 def comp_ci_guard(v):
     """first CI>=0.75; but if CI ever >=0.93 stop no later than the last ckpt below 0.93"""
     a=mk_thresh('ci',0.75)(v)
+    if a is NEVER: return NEVER
     below=[r for r in v if r['ci']<0.93]
     if below and a['step']>below[-1]['step']: return below[-1]
     return a
 def comp_ci_ppguard(v):
     a=mk_thresh('ci',0.75)(v); b=rule_pp_drop(v,0.005)
+    if a is NEVER: return NEVER
     return a if a['step']<=b['step'] else b
 report("C1  min(CI>=0.75, PP-drop d=0)", comp_min)
 report("C2  CI>=0.75 with CI<0.93 ceiling", comp_ci_guard)
 report("C3  min(CI>=0.75, PP-drop d=0.005)", comp_ci_ppguard)
 report("C4  first CI>=0.75 (repeat, best single)", mk_thresh('ci',0.75))
+print()
+print("="*150)
+print("RULE SELECTION -- eligible rules only (a rule that fails to fire on any run is")
+print("not a stopping rule; F-H).  Ranked by worst-backbone mean HEST pct_of_waiv.")
+print("="*150)
+_elig=[r for r in ALL_RULES if r["complete"] and r["worst"] is not None
+       and not r["name"].startswith("ORACLE")]
+for r in sorted(_elig, key=lambda r: -r["worst"])[:12]:
+    print(f"  {r['worst']:6.1f}  {r['name']}")
+_incomplete=[r for r in ALL_RULES if not r["complete"]]
+if _incomplete:
+    print()
+    print("  DISQUALIFIED (rule never fired on at least one run -- before the F-H fix")
+    print("  these silently scored as 'stop at the last checkpoint' instead):")
+    for r in _incomplete:
+        print(f"    never fired on {r['never']:>2} run(s): {r['name']}")
 print()
 print("Per-run detail for C4 (first CI>=0.75) vs oracle:")
 for b in BB:
@@ -132,4 +186,7 @@ for b in BB:
     for k,v in sorted(runs.items()):
         if v[0]['backbone']!=b: continue
         s=mk_thresh('ci',0.75)(v); o=max(v,key=lambda r:r['hest_pct'])
+        if s is NEVER:
+            print(f"    {k[:52]:<52} pick  NEVER FIRED           | oracle step {o['step']:>5} HEST={o['hest_pct']:6.1f}")
+            continue
         print(f"    {k[:52]:<52} pick step {s['step']:>5} HEST={s['hest_pct']:6.1f} | oracle step {o['step']:>5} HEST={o['hest_pct']:6.1f} | regret {o['hest_pct']-s['hest_pct']:5.1f}")

@@ -1,0 +1,1017 @@
+#!/usr/bin/env python3
+"""Scoreboard v3 — mechanically enforces one-checkpoint-per-row and raw-scores rules.
+
+RULE 1 (ENFORCED): Every row is ONE (run_name, step).  Never pair best-RI from one
+  arm with best-HEST from another.  If a metric is missing for THAT checkpoint,
+  print MISSING — never substitute another arm's number.
+
+RULE 2 (ENFORCED): Raw scores are reported as  ours | Waiv | diff.  Gain-vs-base
+  may appear as an extra column but never as the headline.
+
+PRIMARY METRIC: pct_of_waiv = (ours - base) / (Waiv - base) * 100  for every
+  metric and dataset.  HEST/THUNDER target = 100%.  RI target = >= 80%.
+  The per-checkpoint AVERAGE of pct_of_waiv across all available metrics is
+  the default sort key.
+
+NOISE: Every diff is annotated with how many seed-SD it spans.  Differences below
+  2 SD are marked [~noise].  Seed-SD is ALSO expressed as a % of Waiv's gain,
+  so we can see whether 80% vs 100% is even resolvable.  Metrics where 2SD >
+  20% of Waiv's gain are flagged UNRESOLVABLE.
+
+THUNDER PARTIAL GUARD: If a protocol does not have ALL required datasets (12 cls,
+  2 seg), the per-protocol mean is printed as PARTIAL(n/total) and the overall
+  THUNDER task-mean is suppressed.
+
+RI FLOOR (replaces absolute floors): base + 0.80 * (Waiv - base).  PASS/FAIL
+  against this per-checkpoint.
+
+HEST BASE FIX: virchow2 base_hest = 0.40324 (correct; old scoreboard had 0.4034).
+
+Usage:
+    python scripts/scoreboard.py                          # all runs @ step 500
+    python scripts/scoreboard.py --step 250               # step 250
+    python scripts/scoreboard.py --runs final5-midnight-s0-t900-386799
+    python scripts/scoreboard.py --only-arm midnight
+    python scripts/scoreboard.py --sort-by hest_pct       # sort by pct_of_waiv on HEST
+    python scripts/scoreboard.py --only-complete
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Optional
+
+# Import shared logic from collect_final5 (do not re-implement)
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE))
+import collect_final5 as _c5
+
+HEST_BASE = _c5.HEST_BASE          # virchow2 = 0.40324 (correct)
+RI_BASE   = _c5.RI_BASE
+THUNDER_BASE_DIRS = _c5.THUNDER_BASE_DIRS
+PAPER_CLS = _c5.PAPER_CLS           # 12 classification datasets
+PAPER_SEG = _c5.PAPER_SEG           # 2 segmentation datasets
+THUNDER_TASKS = _c5.THUNDER_TASKS   # knn, linear_probing, simple_shot, segmentation
+
+# Waiv published targets (arXiv:2607.22861 Tables 1+3)
+WAIV = {
+    "phikon": {
+        "ri": 0.806,  "hest": 0.3943,
+        "ri_ds": {"tcga": 0.785, "camelyon": 0.702, "tolkach_esca": 0.932},
+    },
+    "midnight": {
+        "ri": 0.924,  "hest": 0.4167,
+        "ri_ds": {"tcga": 0.893, "camelyon": 0.907, "tolkach_esca": 0.972},
+    },
+    "virchow2": {
+        "ri": 0.918,  "hest": 0.4135,
+        "ri_ds": {"tcga": 0.849, "camelyon": 0.935, "tolkach_esca": 0.969},
+    },
+}
+
+# ── Waiv published THUNDER targets ──────────────────────────────────────────
+# Source: Filiot, Thaeter, Schmauch, Guillou, "Robustifying pathology foundation
+# models via fine-tuning", arXiv:2607.22861v1 (24 Jul 2026), TABLE 2
+# ("THUNDER benchmark. Per-task scores with leaderboard rank in parentheses").
+# Verified 2026-08-24 against https://arxiv.org/html/2607.22861v1 Table 2; the
+# values below are byte-identical to the full transcription in
+# docs/waiv_published.json and to PUBLISHED_TASKMEAN in scripts/collect_thunder.py.
+#
+# Values are PERCENT as printed; divided by 100 at use so they match our
+# fractional means.  Waiv's task keys are renamed to ours:
+#     knn -> knn | linear -> linear_probing | few_shot -> simple_shot | segmentation -> segmentation
+# Waiv's two extra tasks (calibration, adversarial) are NOT computed by this repo
+# and are deliberately absent -- any mean here is over 4 tasks, not their 6, and is
+# therefore NOT comparable to their rank sum.
+#
+# READ THIS BEFORE TRUSTING A THUNDER pct_of_waiv:
+#
+#  (a) TWO-BASE FORMULA.  Unlike RI and HEST -- where our measured base reproduces
+#      Waiv's published base to 4 decimals (RI 0.4686/0.7589/0.8582 vs their
+#      0.469/0.759/0.858; HEST 0.37470/0.39521/0.40324 vs their 0.3747/0.3952/0.4034)
+#      -- our measured THUNDER base does NOT reproduce theirs.  Classification sits
+#      ~2-4 points BELOW their base on every backbone (e.g. phikon-v2 kNN: ours
+#      0.7028 vs their 74.0), while our 2-dataset segmentation sits ~4 points ABOVE
+#      their 4-dataset one.  Our base instead reproduces THUNDER's OWN paper
+#      (arXiv:2507.07860v3 Tables S37/S39/S50: kNN 70.14, lin-probe 76.46 vs our
+#      70.28 / 76.54).  So Waiv's THUNDER absolutes are on a different scale from
+#      both us and the THUNDER authors, and a LEVEL comparison is invalid.
+#      Consequently THUNDER pct_of_waiv is computed as a GAIN RATIO with two bases:
+#          (ours - OUR_base) / (Waiv_ft - Waiv_base)
+#      RI and HEST keep the single-base formula because their bases agree.
+#
+#  (b) SEGMENTATION SUPPORT MISMATCH.  Waiv's segmentation mean is over FOUR datasets
+#      (ocelot, pannuke, segpath_epithelial, segpath_lymphocytes); ours is over TWO
+#      (see PAPER_SEG in collect_final5.py).  Every segmentation cell -- and any
+#      task-mean containing it -- is flagged support_2v4 and must not be read as a
+#      matched comparison.
+#
+#  (c) NO PER-DATASET BREAKDOWN.  Waiv publish task-level means only; §3.3 states
+#      "Each model is evaluated on frozen features following the default protocol"
+#      and never names the metric.  Alignment with our F1 (classification) / Dice
+#      (segmentation, binary Dice == F1) is INHERITED from THUNDER's defaults, not
+#      asserted by Waiv.  There is no appendix per-dataset table to check it against.
+#
+#  (d) WAIV REGRESS ON SOME TASKS.  Where Waiv_ft < Waiv_base the denominator is
+#      negative and pct_of_waiv is meaningless (matching a regression would score
+#      100%).  Those cells are guarded to N/A with reason "waiv_regressed".
+WAIV_THUNDER = {
+    "phikon": {   # Table 2 rows "Phikon-v2" (Base) and "Phaet" (Fine-tuned)
+        "base": {"knn": 74.0, "linear_probing": 79.3, "simple_shot": 71.8, "segmentation": 66.5},
+        "ft":   {"knn": 77.7, "linear_probing": 80.7, "simple_shot": 73.3, "segmentation": 65.3},
+    },
+    "midnight": {  # Table 2 rows "Midnight-12k" (Base) and "Mascaret" (Fine-tuned)
+        "base": {"knn": 80.0, "linear_probing": 84.4, "simple_shot": 71.5, "segmentation": 66.0},
+        "ft":   {"knn": 81.7, "linear_probing": 84.6, "simple_shot": 75.2, "segmentation": 67.6},
+    },
+    "virchow2": {  # Table 2 rows "Virchow2" (Base) and "Virchow2" (Fine-tuned)
+        "base": {"knn": 82.9, "linear_probing": 84.8, "simple_shot": 73.9, "segmentation": 68.2},
+        "ft":   {"knn": 82.6, "linear_probing": 85.1, "simple_shot": 76.6, "segmentation": 68.0},
+    },
+}
+WAIV_THUNDER_SOURCE = "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24"
+
+# Tasks whose dataset support differs between us (2 seg datasets) and Waiv (4).
+THUNDER_SUPPORT_MISMATCH = {"segmentation"}
+
+
+# Noise floors (seed 1-SD, per backbone per step), in RAW metric units.
+#
+# HEST values are POOLED WITHIN-RECIPE seed SDs measured 2026-08-24, not borrowed from a
+# single family.  Pooling formula: sqrt( sum_f (n_f - 1) * sd_f^2 / sum_f (n_f - 1) ) over
+# every recipe family with n>=2 seeds at that (backbone, step), same HEST pooling protocol.
+# Using ONE family systematically mis-states the floor -- the per-family spread is large:
+#   virchow2@250: final5 n=3 -> 0.00153 | ph2 n=2 -> 0.00039 | ret0.01 n=2 -> 0.00263
+#   midnight@250: final5 n=3 -> 0.00227 | lr3e-5 n=3 -> 0.00123 | ph2 n=2 -> 0.00004
+# so the pooled value is the defensible one.  df is the pooled degrees of freedom.
+NOISE_SD = {
+    "midnight": {
+        250: {"ri": 0.00482, "hest": 0.00163},   # hest pooled df=4 (final5 n=3, lr3e-5 n=2, ph2 n=2)
+        500: {"ri": 0.00211, "hest": 0.00185},   # hest pooled df=5 (final5 n=5, ph2 n=2)
+    },
+    "virchow2": {
+        250: {"ri": 0.00475, "hest": 0.00171},   # hest pooled df=4 (final5 n=3, ph2 n=2, ret0.01 n=2)
+        500: {"ri": 0.00196, "hest": 0.00154},   # hest pooled df=6 (final5 n=5, ph2 n=3)
+    },
+    "phikon": {
+        500: {"ri": 0.00453, "hest": 0.00167},   # unchanged: no n>=2 HEST family available
+    },
+}
+
+# UNRESOLVABLE-BY-CONSTRUCTION limit.  A (backbone, metric) cell is refused a printed
+# pct_of_waiv when one seed-SD, expressed in pct_of_waiv points, exceeds this.
+# NOTE this is ALGEBRAICALLY THE SAME TEST the module already applied as
+# "2*seed_SD > 20% of Waiv's gain" -- 2*sd/gain > 0.20  <=>  sd/gain*100 > 10.
+# What changes here is the CONSEQUENCE: the cell used to be annotated and printed anyway;
+# now the number is withheld and a raw delta + CI is printed in its place.
+UNRESOLVABLE_SD_PCT_LIMIT = 10.0
+THUNDER_TASK_2SE = 0.0025
+
+ARMS = ("phikon", "midnight", "virchow2")
+
+_REPO = Path(__file__).resolve().parents[1]
+_DEFAULT_RUNS = _REPO / "runs"
+
+
+# ── pct_of_waiv helpers ─────────────────────────────────────────────────────
+
+def _waiv_gain(base, waiv):
+    """Return Waiv - base, or None if either is missing."""
+    if base is None or waiv is None:
+        return None
+    return waiv - base
+
+
+def _pct_of_waiv(ours, base, waiv):
+    """
+    Compute (ours - base) / (Waiv - base) * 100.
+    Returns (pct, guard_reason).  pct is None when uncomputable.
+    """
+    if ours is None:
+        return None, "no_ours"
+    gain = _waiv_gain(base, waiv)
+    if gain is None:
+        if base is None:
+            return None, "no_base"
+        if waiv is None:
+            return None, "no_waiv"
+        return None, "unknown"
+    if abs(gain) < 1e-10:
+        return None, "base>=Waiv"
+    return ((ours - base) / gain * 100.0, None)
+
+
+def _pct_of_waiv_two_base(ours, our_base, waiv_base, waiv_ft):
+    """
+    GAIN-RATIO form of pct_of_waiv for metrics where our base does not reproduce
+    Waiv's base (THUNDER).  Numerator uses OUR base, denominator uses THEIRS:
+
+        (ours - our_base) / (waiv_ft - waiv_base) * 100
+
+    Returns (pct, guard_reason).  pct is None when uncomputable.
+    """
+    if ours is None:
+        return None, "no_ours"
+    if our_base is None:
+        return None, "no_base"
+    if waiv_base is None or waiv_ft is None:
+        return None, "no_waiv"
+    gain = waiv_ft - waiv_base
+    if abs(gain) < 1e-10:
+        return None, "waiv_gain_zero"
+    if gain < 0:
+        # Waiv REGRESSED on this task.  A ratio against a negative gain rewards
+        # getting worse; refuse to print one.
+        return None, "waiv_regressed"
+    return ((ours - our_base) / gain * 100.0, None)
+
+
+def _thunder_unresolvable(waiv_gain_frac):
+    """2*seed_SE > 20% of Waiv's gain  ->  80% vs 100% is not distinguishable."""
+    if waiv_gain_frac is None or abs(waiv_gain_frac) < 1e-10:
+        return True, None
+    noise_pct = THUNDER_TASK_2SE / abs(waiv_gain_frac) * 100.0
+    return (noise_pct > 20.0), noise_pct
+
+
+# ── Run-name parsing ────────────────────────────────────────────────────────
+
+def _infer_backbone(name):
+    for a in ARMS:
+        if a in name:
+            return a
+    return None
+
+
+def _parse_trail(name):
+    m = re.search(r"-s(\d+)-t(\d+)-(\d+)$", name)
+    if m:
+        return {"seed": int(m.group(1)), "T": int(m.group(2)), "jobid": m.group(3)}
+    return {}
+
+
+def _parse_arm_desc(name, arm):
+    s = name
+    s = re.sub(r"-s\d+-t\d+-\d+$", "", s)
+    if arm:
+        s = re.sub(r"[-_]?%s[-_]?" % re.escape(arm), "-", s).strip("-")
+    parts = []
+    if s == "final5" or s.startswith("final5"):
+        parts.append("final5-plain-recipe")
+    else:
+        if "genMASK" in name or re.search(r"\bMASK\b", name, re.IGNORECASE):
+            parts.append("mask=ON")
+        elif re.search(r"\bgen\b", name):
+            parts.append("mask=OFF")
+        if re.match(r"^ph2[-]", name) or re.search(r"[-_]ph2[-_]", name):
+            parts.append("ph2(per-head)")
+        m = re.search(r"ret([\d.]+)", s)
+        if m: parts.append("retention=%s" % m.group(1))
+        m = re.search(r"lr([\de\-.]+)", s)
+        if m: parts.append("lr=%s" % m.group(1))
+        m = re.search(r"(?<![a-z])-r(\d+)(?![\d])", s)
+        if m: parts.append("r=%s" % m.group(1))
+        m = re.search(r"kl([\d.]+)", s)
+        if m: parts.append("kl=%s" % m.group(1))
+        m = re.search(r"(?<![a-z])-t([\d.]+)(?![\d])", s)
+        if m: parts.append("temp=%s" % m.group(1))
+        m = re.search(r"wd([\d.]+)", s)
+        if m: parts.append("wd=%s" % m.group(1))
+        m = re.search(r"ms(\d+)", s)
+        if m: parts.append("ms=%s" % m.group(1))
+    return " ".join(parts) if parts else s
+
+
+def parse_run_meta(run_dir):
+    name = run_dir.name
+    arm = _infer_backbone(name)
+    trail = _parse_trail(name)
+    desc = _parse_arm_desc(name, arm)
+    return {"run_name": name, "run_dir": run_dir, "arm": arm, "desc": desc, **trail}
+
+
+# ── Metric reading (reuse collect_final5 internals) ─────────────────────────
+
+def _ri_point_at(run_dir, step):
+    points, _ = _c5._union_ri_curves(run_dir)
+    for pt in points:
+        if pt.get("step") == step:
+            return pt
+    return None
+
+
+def _available_steps_in(run_dir):
+    points, _ = _c5._union_ri_curves(run_dir)
+    return sorted(pt["step"] for pt in points if pt.get("step") is not None)
+
+
+def _thunder_for(run_name, step):
+    step_str = "%07d" % step
+    model = "f5_%s_s%s" % (run_name, step_str)
+    per_ds_all = _c5._thunder_per_ds_by_model(model)
+    result = {}
+    for task in THUNDER_TASKS:
+        total = len(PAPER_SEG if task == "segmentation" else PAPER_CLS)
+        ds_vals = per_ds_all.get(task, {})
+        n = len(ds_vals)
+        partial = n < total
+        mean = (sum(ds_vals.values()) / n) if (n > 0 and not partial) else None
+        result[task] = {"mean": mean, "per_ds": ds_vals, "n": n, "total": total, "partial": partial}
+    return result
+
+
+def _sd_for(arm, step, metric):
+    if arm is None:
+        return None
+    return NOISE_SD.get(arm, {}).get(step, {}).get(metric)
+
+
+def _noise_tag(diff_abs, sd):
+    if sd is None or sd == 0:
+        return ""
+    n = diff_abs / sd
+    return "[~noise]" if n < 2.0 else "[%.1fxSD]" % n
+
+
+def score_run(meta, step):
+    """Score ALL metrics at EXACTLY step for one run.  RULE 1 enforced."""
+    run_dir = meta["run_dir"]
+    name = meta["run_name"]
+    arm = meta.get("arm")
+
+    r = dict(meta)
+    r["step"] = step
+
+    # RI
+    ri_pt = _ri_point_at(run_dir, step)
+    if ri_pt is not None:
+        r["ri"] = ri_pt.get("avg_robustness_index")
+        ds = ri_pt.get("datasets", {})
+        r["ri_ds"] = {
+            "tcga":         ds.get("tcga",         {}).get("robustness_index"),
+            "camelyon":     ds.get("camelyon",      {}).get("robustness_index"),
+            "tolkach_esca": ds.get("tolkach_esca",  {}).get("robustness_index"),
+        }
+    else:
+        r["ri"] = None
+        r["ri_ds"] = {}
+        r["step_missing_note"] = "step %d not in ri_curve; available: %s" % (step, _available_steps_in(run_dir))
+
+    # HEST
+    r["hest"] = _c5._hest_score(name, step, arm) if arm else None
+
+    # THUNDER
+    r["thunder"] = _thunder_for(name, step)
+
+    # pct_of_waiv computations
+    waiv_dict = WAIV.get(arm, {})
+    base_ri = RI_BASE.get(arm)
+    base_hest = HEST_BASE.get(arm)
+
+    # RI pct_of_waiv
+    r["ri_pct"], r["ri_pct_guard"] = _pct_of_waiv(r["ri"], base_ri, waiv_dict.get("ri"))
+
+    # HEST pct_of_waiv
+    r["hest_pct"], r["hest_pct_guard"] = _pct_of_waiv(r["hest"], base_hest, waiv_dict.get("hest"))
+
+    # THUNDER pct_of_waiv -- GAIN RATIO with two bases (see WAIV_THUNDER note).
+    base_thunder = _c5._thunder_base_score(arm) if arm in ARMS else {}
+    r["base_thunder"] = base_thunder
+
+    wt = WAIV_THUNDER.get(arm, {})
+    wt_base = wt.get("base", {})
+    wt_ft = wt.get("ft", {})
+    th_pct = {}
+    for task in THUNDER_TASKS:
+        td = r["thunder"].get(task, {})
+        # PARTIAL-SWEEP GUARD: no task mean unless every required dataset is present.
+        ours_t = td.get("mean") if not td.get("partial", True) else None
+        guard_partial = None
+        if td.get("partial", True):
+            guard_partial = "partial_%d/%d" % (td.get("n", 0), td.get("total", 0))
+        wb = wt_base.get(task)
+        wf = wt_ft.get(task)
+        wb_f = wb / 100.0 if wb is not None else None
+        wf_f = wf / 100.0 if wf is not None else None
+        gain = (wf_f - wb_f) if (wb_f is not None and wf_f is not None) else None
+        pct, guard = _pct_of_waiv_two_base(ours_t, base_thunder.get(task), wb_f, wf_f)
+        if guard_partial:
+            pct, guard = None, guard_partial
+        unres, noise_pct = _thunder_unresolvable(gain)
+        th_pct[task] = {
+            "pct": pct,
+            "guard": guard,
+            "waiv_base": wb_f,
+            "waiv_ft": wf_f,
+            "waiv_gain": gain,
+            "our_base": base_thunder.get(task),
+            "unresolvable": unres,
+            "noise_pct_of_gain": noise_pct,
+            "support_mismatch": task in THUNDER_SUPPORT_MISMATCH,
+        }
+    r["thunder_pct"] = th_pct
+
+    # THUNDER task-mean pct_of_waiv: only when ALL four protocols are complete.
+    complete = [t for t in THUNDER_TASKS
+                if not r["thunder"].get(t, {}).get("partial", True)
+                and r["thunder"].get(t, {}).get("mean") is not None]
+    if len(complete) == len(THUNDER_TASKS) and wt_base and wt_ft:
+        ours_m = sum(r["thunder"][t]["mean"] for t in THUNDER_TASKS) / len(THUNDER_TASKS)
+        ourb_vals = [base_thunder.get(t) for t in THUNDER_TASKS]
+        if all(v is not None for v in ourb_vals):
+            ourb_m = sum(ourb_vals) / len(ourb_vals)
+            wb_m = sum(wt_base[t] for t in THUNDER_TASKS) / len(THUNDER_TASKS) / 100.0
+            wf_m = sum(wt_ft[t] for t in THUNDER_TASKS) / len(THUNDER_TASKS) / 100.0
+            pct, guard = _pct_of_waiv_two_base(ours_m, ourb_m, wb_m, wf_m)
+            unres, noise_pct = _thunder_unresolvable(wf_m - wb_m)
+            r["thunder_mean_pct"] = pct
+            r["thunder_mean_pct_guard"] = guard
+            r["thunder_mean_unresolvable"] = unres
+            r["thunder_mean_noise_pct_of_gain"] = noise_pct
+        else:
+            r["thunder_mean_pct"], r["thunder_mean_pct_guard"] = None, "no_base"
+    else:
+        r["thunder_mean_pct"] = None
+        r["thunder_mean_pct_guard"] = "partial_%d/%d_protocols" % (len(complete), len(THUNDER_TASKS))
+
+    # RI floor: base + 0.80 * (Waiv - base)
+    ri_gain = _waiv_gain(base_ri, waiv_dict.get("ri"))
+    if ri_gain is not None:
+        r["ri_floor"] = base_ri + 0.80 * ri_gain
+        r["ri_floor_pct"] = 80.0
+    else:
+        r["ri_floor"] = None
+        r["ri_floor_pct"] = None
+
+    if r["ri"] is not None and r["ri_floor"] is not None:
+        r["ri_budget"] = "PASS" if r["ri"] >= r["ri_floor"] else "FAIL"
+    else:
+        r["ri_budget"] = "N/A"
+
+    # Average pct_of_waiv (for sorting)
+    pcts = []
+    if r["ri_pct"] is not None:
+        pcts.append(r["ri_pct"])
+    if r["hest_pct"] is not None:
+        pcts.append(r["hest_pct"])
+    if r.get("thunder_mean_pct") is not None:
+        pcts.append(r["thunder_mean_pct"])
+    r["avg_pct_of_waiv"] = (sum(pcts) / len(pcts)) if pcts else None
+
+    # Noise as % of Waiv's gain
+    sd_ri = _sd_for(arm, step, "ri")
+    sd_hest = _sd_for(arm, step, "hest")
+
+    ri_gain_abs = ri_gain if ri_gain is not None else None
+    hest_gain = _waiv_gain(base_hest, waiv_dict.get("hest"))
+    hest_gain_abs = hest_gain if hest_gain is not None else None
+
+    r["ri_noise_pct_of_gain"] = None
+    if sd_ri is not None and ri_gain_abs is not None and abs(ri_gain_abs) > 1e-10:
+        r["ri_noise_pct_of_gain"] = (2 * sd_ri) / abs(ri_gain_abs) * 100.0
+
+    r["hest_noise_pct_of_gain"] = None
+    if sd_hest is not None and hest_gain_abs is not None and abs(hest_gain_abs) > 1e-10:
+        r["hest_noise_pct_of_gain"] = (2 * sd_hest) / abs(hest_gain_abs) * 100.0
+
+    r["ri_unresolvable"] = (r["ri_noise_pct_of_gain"] is not None and r["ri_noise_pct_of_gain"] > 20.0)
+    r["hest_unresolvable"] = (r["hest_noise_pct_of_gain"] is not None and r["hest_noise_pct_of_gain"] > 20.0)
+
+    # 1 seed-SD expressed in pct_of_waiv points (half the stored 2SD-of-gain figure).
+    r["ri_sd_pct"] = (r["ri_noise_pct_of_gain"] / 2.0) if r["ri_noise_pct_of_gain"] is not None else None
+    r["hest_sd_pct"] = (r["hest_noise_pct_of_gain"] / 2.0) if r["hest_noise_pct_of_gain"] is not None else None
+
+    # UNRESOLVABLE-BY-CONSTRUCTION: withhold the pct, publish raw delta + CI instead.
+    # The cell is NEVER silently dropped -- it prints as UNRES and is listed in the
+    # raw-delta report -- but it is excluded from avg_pct_of_waiv, because averaging a
+    # number we just declared unmeasurable would launder it back into the headline.
+    for metric, base_v, sd_v in (("ri", base_ri, sd_ri), ("hest", base_hest, sd_hest)):
+        sd_pct = r.get("%s_sd_pct" % metric)
+        ours_v = r.get(metric)
+        r["%s_by_construction" % metric] = False
+        r["%s_raw_delta" % metric] = (ours_v - base_v) if (ours_v is not None and base_v is not None) else None
+        r["%s_raw_ci95" % metric] = (1.96 * sd_v) if sd_v is not None else None
+        if sd_pct is not None and sd_pct > UNRESOLVABLE_SD_PCT_LIMIT:
+            r["%s_by_construction" % metric] = True
+            r["%s_pct_withheld" % metric] = r.get("%s_pct" % metric)
+            r["%s_pct" % metric] = None
+            r["%s_pct_guard" % metric] = "unresolvable_by_construction"
+
+    return r
+
+
+# ── Discovery ────────────────────────────────────────────────────────────────
+
+def discover_runs(runs_dir, filter_names=None, filter_arm=None):
+    if not runs_dir.exists():
+        return []
+    runs = []
+    for d in sorted(runs_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        name = d.name
+        if re.search(r"\.r\d+$", name):
+            continue
+        if not (d / "ri_curve.json").exists():
+            continue
+        if filter_names and name not in filter_names:
+            continue
+        meta = parse_run_meta(d)
+        if filter_arm and meta.get("arm") != filter_arm:
+            continue
+        runs.append(meta)
+    return runs
+
+
+# ── Display ──────────────────────────────────────────────────────────────────
+
+_W = 132
+
+def _hr(char="-"):
+    return char * _W
+
+
+def _pct_str(pct, guard, width=7):
+    if pct is None:
+        if guard == "no_ours":
+            return ("MISSING").ljust(width)
+        if guard == "base>=Waiv":
+            return ("n/a").ljust(width)
+        if guard == "unresolvable_by_construction":
+            return ("UNRES").rjust(width)
+        return ("N/A").ljust(width)
+    return ("%.1f" % pct).rjust(width)
+
+
+def print_denominators():
+    print("\n%s" % _hr("="))
+    print("  DENOMINATORS (auditable base/Waiv values per backbone)")
+    print("%s" % _hr("="))
+    hdr = "  %-12s %8s %8s %10s %14s %9s %9s %10s" % (
+        "backbone", "base_RI", "Waiv_RI", "gain_RI", "RI_floor(80pct)",
+        "base_HEST", "Waiv_HEST", "gain_HEST")
+    print(hdr)
+    for arm in ARMS:
+        b_ri = RI_BASE.get(arm)
+        w_ri = WAIV[arm].get("ri")
+        b_h = HEST_BASE.get(arm)
+        w_h = WAIV[arm].get("hest")
+        ri_gain = _waiv_gain(b_ri, w_ri)
+        h_gain = _waiv_gain(b_h, w_h)
+        ri_floor = (b_ri + 0.80 * ri_gain) if ri_gain is not None else None
+        ri_floor_str = "%.5f" % ri_floor if ri_floor is not None else "N/A"
+        print("  %-12s %8.5f %8.3f %+10.5f %14s %9.5f %9.4f %+10.5f" % (
+            arm, b_ri, w_ri, ri_gain, ri_floor_str, b_h, w_h, h_gain))
+    print()
+    print("  THUNDER denominators -- %s" % WAIV_THUNDER_SOURCE)
+    print("  GAIN-RATIO form: (ours - OUR_base) / (Waiv_ft - Waiv_base).  Our THUNDER base does NOT")
+    print("  reproduce Waiv's base (cls ~2-4pp low, seg ~4pp high on 2 datasets vs their 4), so only")
+    print("  the GAIN is comparable -- never the level.  Our base reproduces THUNDER's own paper.")
+    print("  %-12s %-16s %9s %9s %9s %9s %8s %6s" % (
+        "backbone", "task", "our_base", "Waiv_base", "Waiv_ft", "Waiv_gain", "2SE/gain", "flag"))
+    for arm in ARMS:
+        wt = WAIV_THUNDER.get(arm, {})
+        ob = _c5._thunder_base_score(arm)
+        for task in THUNDER_TASKS:
+            wb = wt.get("base", {}).get(task)
+            wf = wt.get("ft", {}).get(task)
+            wb_f = wb / 100.0 if wb is not None else None
+            wf_f = wf / 100.0 if wf is not None else None
+            gain = (wf_f - wb_f) if (wb_f is not None and wf_f is not None) else None
+            unres, npct = _thunder_unresolvable(gain)
+            flags = []
+            if gain is not None and gain < 0:
+                flags.append("WAIV-REGRESSED")
+            if unres:
+                flags.append("UNRESOLVABLE")
+            if task in THUNDER_SUPPORT_MISMATCH:
+                flags.append("support_2v4")
+            ob_v = ob.get(task)
+            print("  %-12s %-16s %9s %9s %9s %9s %8s %s" % (
+                arm, task,
+                "%.5f" % ob_v if ob_v is not None else "MISSING",
+                "%.5f" % wb_f if wb_f is not None else "N/A",
+                "%.5f" % wf_f if wf_f is not None else "N/A",
+                "%+.5f" % gain if gain is not None else "N/A",
+                "%.0f%%" % npct if npct is not None else "inf",
+                ",".join(flags)))
+    print()
+    print("  Per-dataset RI base values not stored separately; RI pct uses backbone avg base.")
+
+
+def print_raw_delta_report(scored):
+    """Cells whose pct_of_waiv was WITHHELD as unresolvable-by-construction.
+
+    These are reported the only honest way available: as a raw delta vs base with a
+    95% CI from the measured seed-SD, alongside the denominator that makes the
+    percentage form meaningless.  Read the CI, not a point estimate.
+    """
+    print("\n%s" % _hr("="))
+    print("  UNRESOLVABLE-BY-CONSTRUCTION -- pct_of_waiv WITHHELD, raw delta shown")
+    print("%s" % _hr("="))
+    print("  Trigger: one seed-SD > %.0f pct_of_waiv points (identical to 2SD > 20%% of gain)." % UNRESOLVABLE_SD_PCT_LIMIT)
+    print("  A percentage here divides by a Waiv gain so small that ordinary seed jitter")
+    print("  swings the score by tens of points.  The raw delta is the measurement; the")
+    print("  percentage is an artefact of the denominator.  Cells are NOT dropped from the")
+    print("  scoreboard -- they print as UNRES -- but they are excluded from avg_pct_of_waiv.")
+    print()
+    hdr = "  %-34s %-9s %-6s %9s %11s %11s %8s %7s" % (
+        "run", "arm", "metric", "ours", "raw_delta", "+/-95%CI", "denom", "1SD_pct")
+    print(hdr)
+    print("  " + "-" * (len(hdr) - 2))
+    any_row = False
+    for r in scored:
+        for metric in ("ri", "hest"):
+            if not r.get("%s_by_construction" % metric):
+                continue
+            if r.get(metric) is None:
+                continue      # metric not measured for this checkpoint -- RULE 1, no substitution
+            any_row = True
+            arm = r.get("arm")
+            base_v = (RI_BASE if metric == "ri" else HEST_BASE).get(arm)
+            waiv_v = WAIV.get(arm, {}).get(metric)
+            denom = _waiv_gain(base_v, waiv_v)
+            d = r.get("%s_raw_delta" % metric)
+            ci = r.get("%s_raw_ci95" % metric)
+            sig = ""
+            if d is not None and ci is not None:
+                sig = "yes" if abs(d) > ci else "NO"
+            print("  %-34s %-9s %-6s %9s %11s %11s %8s %7s   sig>CI:%s" % (
+                (r.get("run_name") or "?")[:34], arm or "?", metric.upper(),
+                "%.5f" % r.get(metric) if r.get(metric) is not None else "MISSING",
+                "%+.5f" % d if d is not None else "N/A",
+                "%.5f" % ci if ci is not None else "N/A",
+                "%.5f" % denom if denom is not None else "N/A",
+                "%.1f" % r.get("%s_sd_pct" % metric) if r.get("%s_sd_pct" % metric) is not None else "N/A",
+                sig))
+    if not any_row:
+        print("  (none -- every cell has a denominator large enough to carry a percentage)")
+    print()
+
+
+def print_unresolvable_report(scored):
+    print("\n%s" % _hr("="))
+    print("  UNRESOLVABLE METRICS (2*seed_SD > 20% of Waiv's gain)")
+    print("%s" % _hr("="))
+    print("  A metric is UNRESOLVABLE when noise alone spans more than 20% of Waiv's gain.")
+    print("  This means 80% vs 100% CANNOT be distinguished -- any claim is within noise.")
+    print()
+
+    seen = set()
+    for r in scored:
+        arm = r.get("arm")
+        step = r.get("step")
+        key = (arm, step)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        ri_un = r.get("ri_unresolvable", False)
+        h_un = r.get("hest_unresolvable", False)
+        ri_n_pct = r.get("ri_noise_pct_of_gain")
+        h_n_pct = r.get("hest_noise_pct_of_gain")
+
+        if not ri_un and not h_un:
+            continue
+
+        issues = []
+        if ri_un:
+            if ri_n_pct:
+                issues.append("RI: 2SD=%.1f%% of gain -> UNRESOLVABLE" % ri_n_pct)
+            else:
+                issues.append("RI: UNRESOLVABLE")
+        if h_un:
+            if h_n_pct:
+                issues.append("HEST: 2SD=%.1f%% of gain -> UNRESOLVABLE" % h_n_pct)
+            else:
+                issues.append("HEST: UNRESOLVABLE")
+
+        print("  %s step=%d: %s" % (arm, step, "; ".join(issues)))
+
+    print()
+    print("  THUNDER (backbone-level, independent of run -- from Waiv's published gain):")
+    for arm in ARMS:
+        wt = WAIV_THUNDER.get(arm, {})
+        bad = []
+        for task in THUNDER_TASKS:
+            wb, wf = wt.get("base", {}).get(task), wt.get("ft", {}).get(task)
+            if wb is None or wf is None:
+                continue
+            gain = (wf - wb) / 100.0
+            unres, npct = _thunder_unresolvable(gain)
+            if gain < 0:
+                bad.append("%s: Waiv REGRESSED (%+.1fpp) -> no denominator" % (task, gain * 100))
+            elif unres:
+                bad.append("%s: 2SE=%.0f%% of gain -> UNRESOLVABLE" % (task, npct))
+        if bad:
+            print("    %-10s %s" % (arm, "; ".join(bad)))
+    print()
+    print("  GUARDED CELLS (pct_of_waiv = N/A):")
+    # Count guarded RI/HEST cells
+    ri_guards = [(r["run_name"], r.get("ri_pct_guard")) for r in scored if r.get("ri_pct_guard")]
+    hest_guards = [(r["run_name"], r.get("hest_pct_guard")) for r in scored if r.get("hest_pct_guard")]
+    if ri_guards:
+        guards = set(g for _, g in ri_guards if g)
+        print("    RI: %d runs with guards: %s" % (len(ri_guards), list(guards)[:3]))
+    if hest_guards:
+        guards = set(g for _, g in hest_guards if g)
+        print("    HEST: %d runs with guards: %s" % (len(hest_guards), list(guards)[:3]))
+
+
+def print_summary_table(scored):
+    hdr = "  %-40s %-9s %-5s %-7s %-7s %-7s %-7s %-6s %-10s %-7s %-7s %-5s" % (
+        "Run", "BB", "@", "RI", "RI_pct", "noise", "HEST", "H_pct", "THmean", "TH_pct", "avgPct", "RI-fl")
+    print("\n%s" % _hr("="))
+    print("  SCOREBOARD -- pct_of_waiv headline | Rule 1: one checkpoint/row | Rule 2: ours|Waiv|diff")
+    print("%s" % _hr("="))
+    print(hdr)
+    print("%s" % _hr("-"))
+
+    for r in scored:
+        arm = r.get("arm") or "?"
+        step = r.get("step", "?")
+        ri = r.get("ri")
+        hest = r.get("hest")
+
+        ri_s = "%.4f" % ri if ri is not None else "MISSING"
+        ri_pct_s = _pct_str(r.get("ri_pct"), r.get("ri_pct_guard"), 7)
+
+        # Noise annotation on RI vs Waiv
+        sd_ri = _sd_for(arm, step, "ri")
+        w_ri = WAIV.get(arm, {}).get("ri")
+        ri_noise = ""
+        if ri is not None and w_ri is not None:
+            ri_noise = _noise_tag(abs(ri - w_ri), sd_ri)
+
+        hest_s = "%.4f" % hest if hest is not None else "MISSING"
+        hest_pct_s = _pct_str(r.get("hest_pct"), r.get("hest_pct_guard"), 6)
+
+        # THUNDER mean
+        thunder = r.get("thunder", {})
+        t_means = [
+            thunder[t]["mean"] for t in THUNDER_TASKS
+            if not thunder.get(t, {}).get("partial", True)
+            and thunder.get(t, {}).get("mean") is not None
+        ]
+        if len(t_means) == len(THUNDER_TASKS):
+            t_s = "%.4f" % (sum(t_means) / len(t_means))
+        elif len(t_means) > 0:
+            t_s = "P%d/%d" % (len(t_means), len(THUNDER_TASKS))
+        else:
+            t_s = "MISSING"
+
+        avg_pct = r.get("avg_pct_of_waiv")
+        avg_s = "%.1f" % avg_pct if avg_pct is not None else "N/A"
+
+        bud = r.get("ri_budget", "N/A")
+
+        t_pct_s = _pct_str(r.get("thunder_mean_pct"), r.get("thunder_mean_pct_guard"), 7)
+        if r.get("thunder_mean_pct") is not None and r.get("thunder_mean_unresolvable"):
+            t_pct_s = ("%.1f!" % r["thunder_mean_pct"]).rjust(7)
+
+        print("  %-40s %-9s %-5s %-7s %-7s %-7s %-7s %-6s %-10s %-7s %-7s %-5s" % (
+            r["run_name"][:40], arm[:9], str(step), ri_s, ri_pct_s, ri_noise[:7],
+            hest_s, hest_pct_s, t_s, t_pct_s, avg_s, bud))
+
+
+def print_run_block(r):
+    arm = r.get("arm") or "?"
+    step = r.get("step")
+    waiv_dict = WAIV.get(arm, {})
+    base_ri = RI_BASE.get(arm)
+    base_hest = HEST_BASE.get(arm)
+
+    print("%s" % _hr())
+    print("  %s" % r["run_name"])
+    print("  backbone=%s  seed=%s  T=%s  jobid=%s  step=%s" % (
+        arm, r.get("seed", "?"), r.get("T", "?"), r.get("jobid", "?"), step))
+    print("  desc: %s" % r.get("desc", ""))
+
+    note = r.get("step_missing_note", "")
+    if note:
+        print("  ! %s" % note)
+
+    # RI
+    ri = r.get("ri")
+    ri_un = r.get("ri_unresolvable", False)
+    ri_pct = r.get("ri_pct")
+    ri_guard = r.get("ri_pct_guard")
+    sd_ri = _sd_for(arm, step, "ri")
+
+    if ri is not None:
+        w_ri = waiv_dict.get("ri")
+        diff_w = ri - w_ri if w_ri is not None else None
+        diff_b = ri - base_ri if base_ri is not None else None
+        noise = _noise_tag(abs(diff_w), sd_ri) if diff_w is not None else ""
+        pct_s = "%.1f%% of Waiv gain" % ri_pct if ri_pct is not None else "N/A (%s)" % (ri_guard or "")
+        unres_str = "  *** UNRESOLVABLE ***" if ri_un else ""
+        print("  RI: %.5f | Waiv %.3f | diff %+.5f %s  %sbase %+.5f  [%s]%s" % (
+            ri, w_ri, diff_w, noise, "", diff_b, pct_s, unres_str))
+        waiv_ds = waiv_dict.get("ri_ds", {})
+        for ds in ("tcga", "camelyon", "tolkach_esca"):
+            val = r.get("ri_ds", {}).get(ds)
+            wv = waiv_ds.get(ds)
+            if val is not None:
+                dws = val - wv if wv is not None else None
+                print("    RI.-%12s  %.5f | Waiv %.3f | diff %+.5f" % (ds, val, wv, dws))
+            else:
+                print("    RI.-%12s  MISSING" % ds)
+    else:
+        print("  RI: MISSING")
+
+    # HEST
+    hest = r.get("hest")
+    hest_un = r.get("hest_unresolvable", False)
+    hest_pct = r.get("hest_pct")
+    hest_guard = r.get("hest_pct_guard")
+    sd_hest = _sd_for(arm, step, "hest")
+
+    if hest is not None:
+        w_h = waiv_dict.get("hest")
+        diff_w = hest - w_h if w_h is not None else None
+        diff_b = hest - base_hest if base_hest is not None else None
+        noise = _noise_tag(abs(diff_w), sd_hest) if diff_w is not None else ""
+        pct_s = "%.1f%% of Waiv gain" % hest_pct if hest_pct is not None else "N/A (%s)" % (hest_guard or "")
+        unres_str = "  *** UNRESOLVABLE ***" if hest_un else ""
+        print("  HEST: %.5f | Waiv %.4f | diff %+.5f %s  %sbase %+.5f  [%s]%s" % (
+            hest, w_h, diff_w, noise, "", diff_b, pct_s, unres_str))
+    else:
+        print("  HEST: MISSING")
+
+    # THUNDER
+    thunder = r.get("thunder", {})
+    base_thunder = r.get("base_thunder", {})
+    th_pct = r.get("thunder_pct", {})
+    print("  THUNDER  [pct_of_waiv = (ours - OUR_base) / (Waiv_ft - Waiv_base); %s]" % WAIV_THUNDER_SOURCE)
+    task_means = []
+    all_complete = True
+    for task in THUNDER_TASKS:
+        td = thunder.get(task, {"mean": None, "n": 0, "total": 0, "partial": True, "per_ds": {}})
+        base_mean = base_thunder.get(task)
+        n, total = td["n"], td["total"]
+        if n == 0:
+            print("    %-18s  MISSING (0/%d)" % (task, total))
+            all_complete = False
+        elif td["partial"]:
+            pm = sum(td["per_ds"].values()) / n
+            print("    %-18s  PARTIAL(%d/%d) partial-mean=%.5f" % (task, n, total, pm))
+            all_complete = False
+        else:
+            mean = td["mean"]
+            delta = mean - base_mean if base_mean is not None else None
+            noise = _noise_tag(abs(delta), THUNDER_TASK_2SE) if delta is not None else ""
+            ds_str = "  %sbase %+.5f %s" % ("", delta, noise) if delta is not None else ""
+            tp = th_pct.get(task, {})
+            wf, gain = tp.get("waiv_ft"), tp.get("waiv_gain")
+            if tp.get("pct") is not None:
+                pct_s = "%.1f%% of Waiv gain" % tp["pct"]
+                if tp.get("unresolvable"):
+                    pct_s += " *** UNRESOLVABLE (2SE=%.0f%% of gain) ***" % tp["noise_pct_of_gain"]
+            else:
+                pct_s = "N/A (%s)" % (tp.get("guard") or "")
+            wv_s = " | Waiv %.5f (gain %+.5f)" % (wf, gain) if wf is not None and gain is not None else ""
+            sup = "  ^support_2v4" if tp.get("support_mismatch") else ""
+            print("    %-18s  %.5f (%d/%d)%s%s  [%s]%s" % (
+                task, mean, n, total, ds_str, wv_s, pct_s, sup))
+            task_means.append(mean)
+
+    if all_complete and len(task_means) == len(THUNDER_TASKS):
+        t_mean = sum(task_means) / len(task_means)
+        base_means = [v for v in base_thunder.values() if v is not None]
+        base_t = sum(base_means) / len(base_means) if base_means else None
+        base_str = "  %sbase %+.5f" % ("", t_mean - base_t) if base_t is not None else ""
+        tmp = r.get("thunder_mean_pct")
+        if tmp is not None:
+            pct_s = "%.1f%% of Waiv gain" % tmp
+            if r.get("thunder_mean_unresolvable"):
+                pct_s += " *** UNRESOLVABLE ***"
+        else:
+            pct_s = "N/A (%s)" % (r.get("thunder_mean_pct_guard") or "")
+        print("    %-18s  %.5f%s  [%s]  ^contains segmentation (support_2v4)" % (
+            "task-mean", t_mean, base_str, pct_s))
+    else:
+        n_comp = sum(1 for t in THUNDER_TASKS
+                     if not thunder.get(t, {}).get("partial", True)
+                     and thunder.get(t, {}).get("mean") is not None)
+        print("    %-18s  PARTIAL(%d/%d protocols)" % ("task-mean", n_comp, len(THUNDER_TASKS)))
+
+    # RI floor
+    ri_floor = r.get("ri_floor")
+    bud = r.get("ri_budget", "N/A")
+    floor_str = "%.5f" % ri_floor if ri_floor is not None else "N/A"
+    gap = ""
+    if ri is not None and ri_floor is not None:
+        g = ri - ri_floor
+        gap = "  (gap=%+.5f)" % g
+    print("  RI-floor: %s (base + 80%% of Waiv gain)  %s%s" % (floor_str, bud, gap))
+
+    # avg pct_of_waiv
+    avg = r.get("avg_pct_of_waiv")
+    avg_s = "%.1f%%" % avg if avg is not None else "N/A"
+    print("  avg_pct_of_waiv (RI + HEST + THUNDER task-mean): %s" % avg_s)
+
+
+# ── Entry point ──────────────────────────────────────────────────────────────
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument("--step", type=int, default=500,
+                    help="Checkpoint step (default 500)")
+    ap.add_argument("--runs", nargs="*", default=None,
+                    help="Explicit run dir names")
+    ap.add_argument("--only-arm", choices=ARMS, default=None,
+                    help="Restrict to one backbone")
+    ap.add_argument("--only-complete", action="store_true",
+                    help="Hide rows where RI or HEST is MISSING")
+    ap.add_argument("--sort-by",
+                    choices=["avg_pct", "ri", "ri_pct", "hest", "hest_pct", "thunder", "name"],
+                    default="avg_pct",
+                    help="Sort key (default: avg_pct = average pct_of_waiv across metrics)")
+    ap.add_argument("--runs-dir", default=None,
+                    help="Override runs directory")
+    ap.add_argument("--no-detail", action="store_true",
+                    help="Summary table only")
+    args = ap.parse_args()
+
+    runs_dir = Path(args.runs_dir) if args.runs_dir else _DEFAULT_RUNS
+    if not runs_dir.exists():
+        print("[ERROR] runs directory not found: %s" % runs_dir, file=sys.stderr)
+        sys.exit(1)
+
+    print("scoreboard v3  |  step=%d  |  runs_dir=%s" % (args.step, runs_dir))
+    print("RULE 1: single (run_name, step) per row -- MISSING if absent")
+    print("RULE 2: ours | Waiv | diff visible; pct_of_waiv headline")
+    print("FIX: virchow2 base_hest = 0.40324 (was 0.4034)")
+    print()
+
+    metas = discover_runs(runs_dir, filter_names=args.runs, filter_arm=args.only_arm)
+    print("Discovered %d run(s) with ri_curve.json" % len(metas))
+    scored = [score_run(m, args.step) for m in metas]
+
+    if args.only_complete:
+        before = len(scored)
+        scored = [r for r in scored if r.get("ri") is not None and r.get("hest") is not None]
+        print("--only-complete: kept %d/%d" % (len(scored), before))
+
+    # Sort
+    def _sort_key(r):
+        sb = args.sort_by
+        if sb == "avg_pct":
+            return -(r.get("avg_pct_of_waiv") or -999)
+        if sb == "ri":
+            return -(r.get("ri") or -9)
+        if sb == "ri_pct":
+            return -(r.get("ri_pct") or -999)
+        if sb == "hest":
+            return -(r.get("hest") or -9)
+        if sb == "hest_pct":
+            return -(r.get("hest_pct") or -999)
+        if sb == "thunder":
+            td = r.get("thunder", {})
+            ms = [td[t]["mean"] for t in THUNDER_TASKS
+                  if td.get(t, {}).get("mean") is not None and not td[t]["partial"]]
+            return -(sum(ms) / len(ms) if ms else -9)
+        return (r.get("arm") or "z", r["run_name"])
+
+    scored.sort(key=_sort_key)
+
+    print_summary_table(scored)
+    print_denominators()
+    print_unresolvable_report(scored)
+    print_raw_delta_report(scored)
+
+    if not args.no_detail:
+        for arm in ARMS:
+            arm_runs = [r for r in scored if r.get("arm") == arm]
+            if not arm_runs:
+                continue
+            print("\n%s" % _hr("="))
+            print("  DETAIL: %s  (%d runs)" % (arm, len(arm_runs)))
+            print("%s" % _hr("="))
+            for r in arm_runs:
+                print_run_block(r)
+
+        unknown = [r for r in scored if r.get("arm") not in ARMS]
+        if unknown:
+            print("\n%s" % _hr("="))
+            print("  UNKNOWN BACKBONE (%d runs)" % len(unknown))
+            print("%s" % _hr("="))
+            for r in unknown:
+                print_run_block(r)
+
+    print("\n%s" % _hr("="))
+    print("Total rows: %d" % len(scored))
+    print("pct_of_waiv = (ours - base) / (Waiv - base) * 100")
+    print("RI target >= 80%, HEST/THUNDER target 100%")
+    print("RI floor = base + 0.80 * (Waiv - base)")
+    print("UNRESOLVABLE: 2*seed_SD > 20% of Waiv's gain")
+
+
+if __name__ == "__main__":
+    main()

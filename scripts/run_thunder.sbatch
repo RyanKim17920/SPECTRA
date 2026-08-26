@@ -97,8 +97,39 @@ fi
 
 MODEL="custom:${REPO}/src/waivphaet/eval/thunder_model.py"
 
+# PROVENANCE SIDECAR. THUNDER's own config.json (outputs/res/<ds>/<run>/<task>/frozen/)
+# carries adaptation/ckpt_saving/dataset/data_loading/task/wandb/embedding_recomputing/
+# model_retraining and NOTHING about the encoder -- it only ever sees `custom:<path>.py`,
+# and thunder_model.py reads WAIV_BACKBONE/WAIV_ADAPTER from the environment at import
+# time. So without this, a finished results directory cannot be attributed to the
+# checkpoint that produced it except by timing inference against the slurm log.
+#
+# STRICTLY ADDITIVE, and in particular it does NOT touch $RUN_NAME: THUNDER's embedding
+# cache key is embeddings/<dataset>/<RUN_NAME> and nothing else (see EMB_DIR below), so
+# renaming to satisfy a collector convention would orphan every warm cache. A new file
+# next to the results changes no key and is never enumerated by THUNDER.
+#
+# Best-effort by construction (`|| true`, stdlib-only script): a provenance write must
+# never be able to fail an eval job.
+write_provenance() {
+  [ -n "$ADAPTER" ] || return 0
+  "$REPO/.venv-thunder/bin/python" "$REPO/scripts/write_thunder_provenance.py" \
+      --run-name "$RUN_NAME" \
+      --backbone "${WAIV_BACKBONE:-owkin/phikon-v2}" \
+      --adapter "$ADAPTER" \
+      --pooling "$POOLING" \
+      --jobs "${SLURM_JOB_ID:-}" >/dev/null 2>&1 || true
+}
+# Once up front, so the binding exists even if the job is preempted mid-task, and once at
+# the end, when the per-dataset results directories exist to receive a copy.
+write_provenance
+
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} ==="
-echo "dataset=$DATASET tasks='$TASKS' pooling=$POOLING run_name=$RUN_NAME epochs=${EPOCHS:-<thunder default>}"
+# WAIV_POOL_HEAD (opt-in, default unset) is inherited from the submitting environment via
+# sbatch's default --export=ALL, exactly like WAIV_BACKBONE above. Unset => the historical
+# arithmetic-mean eval pooling, which is what every THUNDER number in this repo was scored
+# with. Echoed so the log says which protocol produced the row.
+echo "dataset=$DATASET tasks='$TASKS' pooling=$POOLING run_name=$RUN_NAME pool_head=${WAIV_POOL_HEAD:-<none, arithmetic mean>} epochs=${EPOCHS:-<thunder default>}"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || true
 
 # embedding_pre_loading, not the online_loading default. Under online_loading the linear
@@ -195,4 +226,5 @@ for TASK in $TASKS; do
   fi
 done
 
+write_provenance
 echo "=== done $(date) ==="

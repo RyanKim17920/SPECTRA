@@ -31,6 +31,8 @@ case "$ARM" in
   phikon)   BB="owkin/phikon-v2" ;;
   midnight) BB="kaiko-ai/midnight" ;;
   virchow2) BB="paige-ai/Virchow2" ;;
+  hoptimus) BB="bioptimus/H-optimus-0" ;;   # gated hub repo; served from BACKBONE_LOCAL_DIRS
+  uni2)     BB="MahmoodLab/UNI2-h" ;;       # gated hub repo; served from BACKBONE_LOCAL_DIRS
   *) echo "bad WAIV_ARM=$ARM" >&2; exit 2 ;;
 esac
 GEOMS="${WAIV_GEOMS:-2x450 2x900 2x1800 2x2400}"
