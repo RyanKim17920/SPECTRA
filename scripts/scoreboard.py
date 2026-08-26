@@ -265,6 +265,19 @@ def _waiv_gain(base, waiv):
     return waiv - base
 
 
+def _fmt(v, spec="%+.5f"):
+    """Null-safe numeric formatter.  Returns 'n/a' instead of raising on None.
+
+    print_run_block formats diffs that are deliberately None when a base or a
+    Waiv reference is unavailable (e.g. UNKNOWN-BACKBONE runs, where
+    RI_BASE.get(arm) is None by design).  Formatting those with %f raised
+    TypeError and killed the trailing detail section after ~2880 good lines.
+    """
+    if v is None:
+        return "n/a"
+    return spec % v
+
+
 def _cap_pct(pct):
     """Return (capped, uncapped).  Cap is at 100 -- exceeding Waiv scores 100, not more."""
     if pct is None:
@@ -1182,15 +1195,17 @@ def print_run_block(r):
         noise = _noise_tag(abs(diff_w), sd_ri) if diff_w is not None else ""
         pct_s = "%.1f%% of Waiv gain" % ri_pct if ri_pct is not None else "N/A (%s)" % (ri_guard or "")
         unres_str = "  *** UNRESOLVABLE ***" if ri_un else ""
-        print("  RI: %.5f | Waiv %.3f | diff %+.5f %s  %sbase %+.5f  [%s]%s" % (
-            ri, w_ri, diff_w, noise, "", diff_b, pct_s, unres_str))
+        print("  RI: %s | Waiv %s | diff %s %s  %sbase %s  [%s]%s" % (
+            _fmt(ri, "%.5f"), _fmt(w_ri, "%.3f"), _fmt(diff_w), noise, "",
+            _fmt(diff_b), pct_s, unres_str))
         waiv_ds = waiv_dict.get("ri_ds", {})
         for ds in ("tcga", "camelyon", "tolkach_esca"):
             val = r.get("ri_ds", {}).get(ds)
             wv = waiv_ds.get(ds)
             if val is not None:
                 dws = val - wv if wv is not None else None
-                print("    RI.-%12s  %.5f | Waiv %.3f | diff %+.5f" % (ds, val, wv, dws))
+                print("    RI.-%12s  %s | Waiv %s | diff %s" % (
+                    ds, _fmt(val, "%.5f"), _fmt(wv, "%.3f"), _fmt(dws)))
             else:
                 print("    RI.-%12s  MISSING" % ds)
     else:
@@ -1210,8 +1225,9 @@ def print_run_block(r):
         noise = _noise_tag(abs(diff_w), sd_hest) if diff_w is not None else ""
         pct_s = "%.1f%% of Waiv gain" % hest_pct if hest_pct is not None else "N/A (%s)" % (hest_guard or "")
         unres_str = "  *** UNRESOLVABLE ***" if hest_un else ""
-        print("  HEST: %.5f | Waiv %.4f | diff %+.5f %s  %sbase %+.5f  [%s]%s" % (
-            hest, w_h, diff_w, noise, "", diff_b, pct_s, unres_str))
+        print("  HEST: %s | Waiv %s | diff %s %s  %sbase %s  [%s]%s" % (
+            _fmt(hest, "%.5f"), _fmt(w_h, "%.4f"), _fmt(diff_w), noise, "",
+            _fmt(diff_b), pct_s, unres_str))
     else:
         print("  HEST: MISSING")
 
