@@ -110,9 +110,29 @@ def build_preprocess(backbone: str | None = None):
     """
     import torchvision.transforms as T
 
-    from waivphaet.models.encoder import normalization_for
+    from waivphaet.models.encoder import (
+        DEFAULT_BACKBONE,
+        IMAGENET_MEAN,
+        IMAGENET_STD,
+        BACKBONE_NORMALIZATION,
+        normalization_for,
+    )
 
     mean, std = normalization_for(backbone)
+    # PRINT THE STATS THAT WERE ACTUALLY USED.  A wrong normalisation is the one error in
+    # this pipeline that produces a right-shaped, right-dtyped, warning-free, WRONG
+    # number -- there is no downstream check that can catch it, so the resolved values go
+    # in the log of every extraction.  `pinned` distinguishes a protocol statement from a
+    # coincidence: "ImageNet because the table says so" and "ImageNet because a config
+    # lookup returned None" are the same tuple at this call site, and only one is correct.
+    resolved = backbone or DEFAULT_BACKBONE
+    print(
+        "[extract] normalisation for %r: mean=%s std=%s  (pinned=%s, imagenet=%s)"
+        % (resolved, tuple(mean), tuple(std),
+           resolved in BACKBONE_NORMALIZATION,
+           (tuple(mean), tuple(std)) == (tuple(IMAGENET_MEAN), tuple(IMAGENET_STD))),
+        flush=True,
+    )
     return T.Compose(
         [
             T.Resize(224),

@@ -37,6 +37,14 @@ export PYTHONUNBUFFERED=1
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} ==="
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || true
 
+# Pre-flight for a backbone served from a LOCAL checkpoint (the gated ones). Wired in
+# unconditionally on purpose: the script SKIPS a hub-served backbone, so this is a no-op
+# for every backbone that produced a published number and a hard gate for the two that
+# cannot be fetched. It fails the job BEFORE 151k patches of inference on a model whose
+# normalisation fell through to ImageNet or whose blocks are partly random -- both of
+# which produce a complete, plausible, silently-wrong results_summary.json.
+"$REPO/.venv/bin/python" scripts/preflight_gated_backbone.py "${WAIV_BACKBONE:-owkin/phikon-v2}"
+
 for DS in $DATASETS; do
   echo "--- $DS ---"
   ARGS=(--dataset "$DS" --model-name "$MODEL_NAME" --batch-size "${BATCH_SIZE:-256}" --num-workers 16)

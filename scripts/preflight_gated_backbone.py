@@ -79,6 +79,15 @@ def preflight(backbone: str) -> dict:
     out: dict = {"backbone": backbone, "checks": {}}
     ck = out["checks"]
 
+    # A hub-served backbone has no local-checkpoint failure surface to check: its config,
+    # weights and normalisation all come down the ordinary path, and every published
+    # number was produced that way.  SKIP (not FAIL), so this can be wired into a job
+    # script unconditionally and stay a no-op for the backbones that do not need it.
+    if local_backbone_dir(backbone) is None:
+        out["skipped"] = "hub-served backbone: no BACKBONE_LOCAL_DIRS binding to check"
+        out["ok"] = True
+        return out
+
     # 1. dispatch + strict load -------------------------------------------------------
     ck["dispatch_is_timm"] = {"value": is_timm_backbone(backbone), "ok": is_timm_backbone(backbone)}
     ck["strict_load"] = _strict_load_counts(backbone)
@@ -171,6 +180,10 @@ def main() -> int:
         print("=" * 78)
         r = preflight(b)
         results.append(r)
+        if r.get("skipped"):
+            print("  SKIP: %s" % r["skipped"])
+            print()
+            continue
         for name, c in r["checks"].items():
             print("  [%s] %s" % ("PASS" if c.get("ok") else "FAIL", name))
             for k, v in c.items():
