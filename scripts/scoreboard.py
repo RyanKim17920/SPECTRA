@@ -421,7 +421,18 @@ def _thunder_pooling(arm):
     benchmarks use different protocols (midnight is cls on HEST, clsmean on
     THUNDER) and those two rules must never be merged.
     """
-    return _thunder_protocol.default_pooling(ARM_BACKBONE[arm])
+    #
+    # DEFENSIVE (2026-08-26): `arm` reaches here as None for a run whose name matches no
+    # registered backbone, and as an unregistered string for a backbone added to the
+    # runs dir before it was added to collect_final5.ARM_BACKBONE.  Indexing the dict
+    # directly raised `KeyError: None` and took the whole scoreboard down -- the same
+    # class of crash as the `RI_BASE.get(None)` fix in a7ff3eb.  An unknown arm has no
+    # protocol; return None and let the caller render the cell as unknown rather than
+    # inventing one.
+    backbone = ARM_BACKBONE.get(arm) if arm is not None else None
+    if backbone is None:
+        return None
+    return _thunder_protocol.default_pooling(backbone)
 
 
 def _thunder_2se(arm, task):
@@ -436,6 +447,22 @@ def _thunder_2se(arm, task):
     such cells are PARTIAL_COVERAGE and are ungradeable.
     """
     return THUNDER_TASK_2SE_12DS.get((arm, task))
+
+
+#: Per-seed SD of the 12-dataset task mean -- the noise quantity the POOLED machinery
+#: needs.  Loaded from disk by eval_common (ONE owner, shared with
+#: final_recipe_report).  DISTINCT from _thunder_2se above, which is offset_2se with the
+#: SD taken over DATASETS; see eval_common.load_thunder_seed_sd for why they must not be
+#: interchanged.
+THUNDER_SEED_SD, THUNDER_SEED_SD_SOURCE = _ec.load_thunder_seed_sd()
+
+
+def _thunder_seed_sd(arm, task):
+    """1-SD, one-run seed noise of this (backbone, task) 12-dataset mean, or None."""
+    backbone = ARM_BACKBONE.get(arm) if arm is not None else None
+    if backbone is None:
+        return None
+    return THUNDER_SEED_SD.get(backbone, {}).get(task)
 
 
 def _thunder_2se_mean(arm, tasks):
@@ -715,31 +742,59 @@ def score_run(meta, step):
         r["thunder_mean_pct_guard"] = "partial_%d/%d_protocols" % (len(complete), len(THUNDER_TASKS))
         r["thunder_mean_unmeasured_floor"] = True
 
-    # VERDICT-GRADE THUNDER number: mean of capped per-task pcts over ONLY the tasks
-    # that have a measured seed floor AND are resolvable AND are complete.  None here
-    # means the THUNDER cell is INDETERMINATE for verdict purposes.
-    elig, elig_tasks, skipped = [], [], []
-    for task in THUNDER_TASKS:
+    # VERDICT-GRADE THUNDER number: the POOLED (ratio-of-means) classification figure.
+    #
+    # F-P fix (2026-08-26).  This was a MEAN OF THE PER-TASK PERCENTAGES over whichever
+    # tasks happened to survive a per-task resolvability veto -- two wrongs at once.  It
+    # averaged ratios (so the task with the smallest Waiv gain dominated), and it did so
+    # over a task SUBSET that varied per run (so two runs' "THUNDER pct" were not the
+    # same quantity).  Both are now gone: the three classification tasks are pooled into
+    # ONE numerator and ONE denominator via the shared eval_common.pool_cells -- the same
+    # call final_recipe_report makes, so there is exactly one implementation -- and the
+    # group is all-or-nothing, withheld unless every task is complete.
+    cls_tasks = [t for t in THUNDER_TASKS if t != "segmentation"]
+    pool_in = []
+    for task in cls_tasks:
         tp = th_pct.get(task, {})
-        if tp.get("unmeasured_floor"):
-            skipped.append("%s:UNMEASURED_FLOOR" % task)
-            continue
+        ours_t = (r["thunder"].get(task) or {}).get("mean")
+        ourb_t = base_thunder.get(task)
+        wb_t = (wt_base or {}).get(task)
+        wf_t = (wt_ft or {}).get(task)
+        gain_t = ((wf_t - wb_t) / 100.0) if (wb_t is not None and wf_t is not None) else None
+        ok = (not tp.get("partial_coverage")) and ours_t is not None and ourb_t is not None
+        why = None
         if tp.get("partial_coverage"):
-            # The 12-dataset floor does not describe this cell's noise.  Refuse to
-            # grade rather than reuse a floor measured on a different denominator.
-            skipped.append("%s:PARTIAL_COVERAGE(%s)" % (task, tp.get("coverage")))
-            continue
-        if tp.get("pct") is None:
-            skipped.append("%s:%s" % (task, tp.get("guard") or "no_pct"))
-            continue
-        if tp.get("unresolvable"):
-            skipped.append("%s:unresolvable" % task)
-            continue
-        elig.append(tp["pct"])
-        elig_tasks.append(task)
-    r["thunder_verdict_pct"] = (sum(elig) / len(elig)) if elig else None
-    r["thunder_verdict_tasks"] = elig_tasks
-    r["thunder_verdict_skipped"] = skipped
+            why = "PARTIAL_COVERAGE(%s)" % tp.get("coverage")
+        elif ours_t is None:
+            why = "no_ours"
+        elif ourb_t is None:
+            why = "no_base"
+        elif gain_t is None:
+            why = "no_waiv"
+        pool_in.append({
+            "key": task,
+            "delta": (ours_t - ourb_t) if (ours_t is not None and ourb_t is not None) else None,
+            "gain": gain_t,
+            # Per-run scoreboard rows are single checkpoints: the numerator SE is the
+            # instrument's one-run seed SD, undivided.  (final_recipe_report divides by
+            # sqrt(n) because it aggregates n seeds; this row does not.)
+            "se_delta": _thunder_seed_sd(arm, task),
+            "sd_gain": _thunder_seed_sd(arm, task),
+            "complete": bool(ok and gain_t is not None),
+            "note": why,
+        })
+    pooled_cls = _ec.pool_cells(pool_in, group="%s/THUNDER-cls (%d tasks)" % (arm, len(cls_tasks)))
+    r["thunder_pooled"] = pooled_cls
+    r["thunder_verdict_pct"] = pooled_cls.get("pct")
+    r["thunder_verdict_ci"] = pooled_cls.get("ci")
+    r["thunder_verdict_our_avg_delta"] = pooled_cls.get("our_avg_delta")
+    r["thunder_verdict_waiv_avg_gain"] = pooled_cls.get("waiv_avg_gain")
+    r["thunder_verdict_tasks"] = cls_tasks if pooled_cls["status"] == "POOLED" else []
+    r["thunder_verdict_skipped"] = [
+        "%s:%s" % (c["key"], c.get("note") or "incomplete")
+        for c in pool_in if not c["complete"]]
+    r["thunder_verdict_status"] = pooled_cls["status"]
+    r["thunder_verdict_concentration"] = pooled_cls.get("concentration_flags") or []
 
     # RI floor: base + 0.80 * (Waiv - base)
     ri_gain = _waiv_gain(base_ri, waiv_dict.get("ri"))
@@ -872,8 +927,16 @@ def print_denominators():
         h_gain = _waiv_gain(b_h, w_h)
         ri_floor = (b_ri + 0.80 * ri_gain) if ri_gain is not None else None
         ri_floor_str = "%.5f" % ri_floor if ri_floor is not None else "N/A"
-        print("  %-12s %8.5f %8.3f %+10.5f %14s %9.5f %9.4f %+10.5f" % (
-            arm, b_ri, w_ri, ri_gain, ri_floor_str, b_h, w_h, h_gain))
+        # DEFENSIVE (2026-08-26), same class as the ARM_BACKBONE.get fix above: an arm
+        # registered in ARMS before its RI/HEST denominators have been measured (
+        # H-Optimus-0, UNI2-h) has None in these slots, and %f on None took the whole
+        # scoreboard down at the very last table.  An unmeasured denominator prints as
+        # N/A -- it must never be substituted with a number.
+        def _f(v, spec):
+            return (spec % v) if v is not None else "N/A"
+        print("  %-12s %8s %8s %10s %14s %9s %9s %10s" % (
+            arm, _f(b_ri, "%.5f"), _f(w_ri, "%.3f"), _f(ri_gain, "%+.5f"), ri_floor_str,
+            _f(b_h, "%.5f"), _f(w_h, "%.4f"), _f(h_gain, "%+.5f")))
     print()
     print("  THUNDER denominators -- %s" % WAIV_THUNDER_SOURCE)
     print("  GAIN-RATIO form: (ours - OUR_base) / (Waiv_ft - Waiv_base).  Our THUNDER base does NOT")

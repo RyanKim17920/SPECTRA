@@ -215,3 +215,232 @@ def seed_sd_at_step(per_step: dict, step: int):
         return None, "no measured seed SD at any step for this backbone"
     return max(avail), ("no floor measured at step %s; conservative max over measured "
                         "steps %s" % (step, sorted(per_step)))
+
+
+# ---------------------------------------------------------------------------
+# POOLED (ratio-of-means) aggregation  --  the ONE implementation  (F-P)
+# ---------------------------------------------------------------------------
+# THE GRADING RULE.  Aggregate the NUMERATOR and the DENOMINATOR first, then divide
+# ONCE:
+#
+#       pct = mean_over_cells(our raw delta) / mean_over_cells(Waiv's raw gain) * 100
+#
+# NEVER average per-cell percentages.  A mean of ratios is dominated by whichever cell
+# happens to have the smallest denominator, and it is exactly that pathology that made
+# three of the nine (backbone x benchmark) cells ungradeable: virchow2's per-task Waiv
+# THUNDER gains are +0.037 / -0.0030 / +0.0030, two of them below the seed floor and one
+# NEGATIVE, so no per-task ratio is meaningful -- yet their POOLED denominator is
+# +0.0090, which is well conditioned.
+#
+# The two ABSOLUTE averages (ours, Waiv's) are the primary quantities and must be led
+# with; the percentage is the derived, secondary one.
+#
+# ALL-OR-NOTHING.  A pooled number may only be formed from EVERY cell of its group.  A
+# mean over a subset is a different quantity that shares its name -- e.g. a THUNDER mean
+# over 2 of 3 tasks silently re-weights the benchmark -- so an incomplete group is
+# WITHHELD, never computed from what happens to be on disk.
+
+#: Groups smaller than this are not "pooled" in any meaningful sense.
+POOL_MIN_CELLS = 1
+
+#: A pooled cell's share of the numerator or denominator above which the pooled number
+#: is carried by one cell rather than by the group.  Disclosure threshold, NOT a gate:
+#: a flagged group is still reported, loudly annotated.
+CONCENTRATION_FLAG_SHARE = 0.50
+
+
+def pool_cells(cells, *, group: str = "", require_complete: bool = True,
+               denominator_gate: bool = True):
+    """Ratio-of-means over `cells`.  The ONLY pooled-aggregation implementation.
+
+    `cells` is a list of dicts, one per (backbone, task) or (backbone,) cell:
+
+        key        str   -- how the cell is named in the concentration table
+        delta      float -- OUR raw improvement over OUR base, in raw metric units
+        gain       float -- WAIV's raw gain (their FT minus their base), same units
+        se_delta   float -- 1 SE of OUR delta = per-seed SD / sqrt(n_our_seeds)
+        sd_gain    float -- 1 SD, one run, of the instrument that measured `gain`
+        complete   bool  -- False when the cell is missing or PARTIAL
+        note       str   -- optional, carried through to the output
+
+    Returns a dict.  `status` is one of:
+        POOLED               -- a number was formed; `pct`, `ci`, `lower`, `upper` set
+        WITHHELD_INCOMPLETE  -- at least one cell of the group is missing/PARTIAL
+        WITHHELD_DENOMINATOR -- the POOLED denominator is itself within seed noise
+
+    ERROR PROPAGATION.  The numerator is a mean of k cell-deltas, so
+
+        SE_agg = sqrt(sum_i SE_i^2) / k
+
+    and the same construction gives the denominator's SD_agg from each cell's one-run
+    sd_gain.  The interval on the RATIO is the delta method carried on BOTH terms:
+
+        CI = 2 * 100 * sqrt( (SE_agg/den)^2 + (num*SD_agg/den^2)^2 )
+
+    which is why no separate "the denominator is imprecise" veto is needed for a
+    denominator whose SIGN is determined -- the imprecision is IN the interval.
+
+    INDEPENDENCE CAVEAT (reported, not hidden): quadrature assumes the cells' seed noise
+    is independent.  For the three THUNDER tasks of one backbone it is not -- they are
+    three readouts of the SAME per-seed checkpoints -- so SE_agg is an UNDER-estimate
+    there by up to sqrt(k).  `independence_caveat` carries the worst case.
+    """
+    out = {
+        "group": group,
+        "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+        "n_cells": len(cells),
+        "cells": [dict(c) for c in cells],
+    }
+    if not cells:
+        out["status"] = "WITHHELD_INCOMPLETE"
+        out["reason"] = "no cells in group"
+        return out
+
+    missing = [c["key"] for c in cells
+               if not c.get("complete", True)
+               or c.get("delta") is None or c.get("gain") is None]
+    if require_complete and missing:
+        out["status"] = "WITHHELD_INCOMPLETE"
+        out["reason"] = (
+            "pooling requires ALL %d cells of %s; missing or PARTIAL: %s.  A pooled "
+            "number over a SUBSET re-weights the group and is a different quantity."
+            % (len(cells), group or "the group", ", ".join(missing)))
+        out["missing_cells"] = missing
+        return out
+
+    k = len(cells)
+    num = sum(c["delta"] for c in cells) / k
+    den = sum(c["gain"] for c in cells) / k
+    se_num = math.sqrt(sum((c.get("se_delta") or 0.0) ** 2 for c in cells)) / k
+    sd_den = math.sqrt(sum((c.get("sd_gain") or 0.0) ** 2 for c in cells)) / k
+    any_se_missing = [c["key"] for c in cells if c.get("se_delta") is None]
+    any_sd_missing = [c["key"] for c in cells if c.get("sd_gain") is None]
+
+    out.update({
+        "our_avg_delta": num,
+        "waiv_avg_gain": den,
+        "se_our_avg_delta": se_num,
+        "sd_waiv_avg_gain": sd_den,
+        "se_missing_cells": any_se_missing,
+        "sd_missing_cells": any_sd_missing,
+        "independence_caveat": (
+            "SE_agg = sqrt(sum SE_i^2)/k assumes independent cell noise; for the 3 "
+            "THUNDER tasks of one backbone (same checkpoints, same 12 datasets) the "
+            "true SE is up to sqrt(%d) = %.2fx larger, i.e. up to %.6f"
+            % (k, math.sqrt(k), se_num * math.sqrt(k))),
+    })
+
+    # -- concentration disclosure (MANDATORY: pooling fixes small denominators but can
+    #    let one cell carry the whole result).  Signed shares, so a cell pulling the
+    #    pooled number the other way shows as negative rather than being hidden by an
+    #    absolute value.
+    tot_num = sum(c["delta"] for c in cells)
+    tot_den = sum(c["gain"] for c in cells)
+    shares, flags = {}, []
+    for c in cells:
+        sn = (c["delta"] / tot_num) if abs(tot_num) > 1e-15 else None
+        sd_ = (c["gain"] / tot_den) if abs(tot_den) > 1e-15 else None
+        shares[c["key"]] = {
+            "delta": c["delta"], "gain": c["gain"],
+            "numerator_share": sn, "denominator_share": sd_,
+        }
+        for what, s in (("numerator", sn), ("denominator", sd_)):
+            if s is not None and abs(s) > CONCENTRATION_FLAG_SHARE:
+                flags.append("%s carries %.0f%% of the pooled %s" % (c["key"], s * 100, what))
+                shares[c["key"]]["flag_%s" % what] = True
+    out["shares"] = shares
+    out["concentration_flags"] = flags
+    out["concentrated"] = bool(flags)
+
+    # -- THE denominator gate, applied to the POOLED denominator, not to each cell.
+    #    A group is ungradeable only when its POOLED denominator is noise.
+    if denominator_gate:
+        unres, reason = pooled_denominator_unresolvable(den, sd_den)
+        out["denominator_gate"] = {
+            "pooled_gain": den, "pooled_sd": sd_den,
+            "gain_over_2sd": (abs(den) / (2 * sd_den)) if sd_den else None,
+            "rule": POOLED_DENOMINATOR_GATE,
+            "unresolvable": unres, "reason": reason,
+        }
+        if unres:
+            out["status"] = "WITHHELD_DENOMINATOR"
+            out["reason"] = reason
+            out["pct"] = None
+            return out
+
+    pct = num / den * 100.0
+    # Delta method on the ratio, propagating BOTH terms.
+    rel = math.sqrt((se_num / den) ** 2 + (num * sd_den / den ** 2) ** 2)
+    ci = 2.0 * 100.0 * rel
+    out.update({
+        "status": "POOLED",
+        "pct": pct,
+        "ci": ci,
+        "lower": pct - ci,
+        "upper": pct + ci,
+        "ci_source": ("delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + "
+                      "(num*SD_den/den^2)^2); numerator term %.2f pts, denominator "
+                      "term %.2f pts"
+                      % (2 * 100 * abs(se_num / den),
+                         2 * 100 * abs(num * sd_den / den ** 2))),
+    })
+    return out
+
+
+#: Gate applied to a POOLED denominator.  A ratio is a measurement only when the sign
+#: and scale of its denominator are determined; when |gain| <= 2*SD the denominator is
+#: not distinguishable from zero and the ratio is unbounded (its distribution has no
+#: finite mean).  That -- and only that -- is what "the denominator is noise" means.
+#: It is the same 2-sigma the CI construction uses; nothing here is tuned.
+POOLED_DENOMINATOR_GATE = ("|pooled waiv gain| > 2 * SD(pooled waiv gain) -- the "
+                           "denominator's sign/scale must be determined for the ratio "
+                           "to be a measurement")
+
+
+def pooled_denominator_unresolvable(gain: float | None, sd: float | None):
+    """(unresolvable, reason) for a POOLED denominator.  See POOLED_DENOMINATOR_GATE."""
+    if gain is None:
+        return True, "no pooled waiv gain"
+    if sd is None:
+        return True, "no measured SD for the pooled waiv gain -- resolvability untestable"
+    if abs(gain) <= 2.0 * sd:
+        return True, ("pooled waiv gain %+.5f is within 2 SD (%.5f) of zero -- the "
+                      "denominator's sign is not determined, so the ratio is unbounded"
+                      % (gain, 2.0 * sd))
+    return False, None
+
+
+# ---------------------------------------------------------------------------
+# THUNDER per-seed SD -- READ FROM DISK, ONE owner
+# ---------------------------------------------------------------------------
+# `seed_sd_of_task_mean` is the SD, ACROSS THE 5 TRAINING SEEDS, of the 12-dataset task
+# mean itself.  It is the quantity the pooled machinery needs: a 1-SD, one-run noise on
+# exactly the statistic being pooled.
+#
+# It must NOT be confused with `offset_2se` (the other column in the same file), which is
+# |mean(d)| + 2*SD(d)/sqrt(12) with the SD taken OVER THE 12 DATASETS.  That is a
+# different variance component measuring a different thing, and swapping the two inflates
+# a noise estimate by roughly 2-4x.  Both live in the same JSON; only this one is loaded
+# for pooling and error propagation.
+THUNDER_SEED_SD_JSON = REPO / "docs" / "thunder_seed_floor_12ds.json"
+THUNDER_SEED_SD_FIELD = "cells[<backbone>/<task>].12ds.seed_sd_of_task_mean"
+
+
+def load_thunder_seed_sd():
+    """{backbone: {task: sd}} from docs/thunder_seed_floor_12ds.json.  (map, source_str).
+
+    Raises when the file is absent: as with the HEST seed SD, an unavailable measurement
+    must be unavailable rather than substituted with a literal.
+    """
+    if not THUNDER_SEED_SD_JSON.exists():
+        raise FileNotFoundError(
+            "%s missing -- run `python3 scripts/thunder_seed_floor_12ds.py` first.  "
+            "There is deliberately no hardcoded fallback." % THUNDER_SEED_SD_JSON)
+    blob = json.loads(THUNDER_SEED_SD_JSON.read_text())
+    out: dict = {}
+    for key, cell in (blob.get("cells") or {}).items():
+        bb, _, task = key.partition("/")
+        v = (cell.get("12ds") or {}).get("seed_sd_of_task_mean")
+        if v is not None:
+            out.setdefault(bb, {})[task] = float(v)
+    return out, "%s -> %s" % (THUNDER_SEED_SD_JSON.relative_to(REPO), THUNDER_SEED_SD_FIELD)

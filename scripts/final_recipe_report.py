@@ -202,33 +202,10 @@ THUNDER_FLOOR_SOURCE = "docs/thunder_seed_floor_12ds.md (n=5 training seeds, off
 THUNDER_SEED_SD_SOURCE = ("docs/thunder_seed_floor_12ds.json "
                           "cells[bb/task].12ds.seed_sd_of_task_mean (n=5 seeds, 12/12)")
 
-_SEED_SD_FALLBACK = {
-    "phikon":   {"knn": 0.006390, "linear_probing": 0.001888, "simple_shot": 0.002637},
-    "midnight": {"knn": 0.002441, "linear_probing": 0.002126, "simple_shot": 0.002541},
-    "virchow2": {"knn": 0.002108, "linear_probing": 0.002381, "simple_shot": 0.001978},
-}
-
-
-def _load_thunder_seed_sd():
-    """Read seed_sd_of_task_mean from the floor JSON; fall back to the literals."""
-    p = REPO / "docs" / "thunder_seed_floor_12ds.json"
-    try:
-        blob = json.loads(p.read_text())
-    except Exception:
-        return {k: dict(v) for k, v in _SEED_SD_FALLBACK.items()}, "FALLBACK LITERALS"
-    out = {a: {} for a in _SEED_SD_FALLBACK}
-    for key, cell in (blob.get("cells") or {}).items():
-        bb, _, task = key.partition("/")
-        v = ((cell.get("12ds") or {}).get("seed_sd_of_task_mean"))
-        if bb in out and v is not None:
-            out[bb][task] = v
-    for a, d in _SEED_SD_FALLBACK.items():
-        for t, v in d.items():
-            out.setdefault(a, {}).setdefault(t, v)
-    return out, str(p)
-
-
-THUNDER_SEED_SD, THUNDER_SEED_SD_PATH = _load_thunder_seed_sd()
+# F-P (2026-08-26): the loader and its literal fallback used to live here.  They now
+# live in eval_common (ONE owner, shared with scoreboard), and the fallback literals are
+# gone -- a missing measurement must be missing, not substituted.
+THUNDER_SEED_SD, THUNDER_SEED_SD_PATH = _ec.load_thunder_seed_sd()
 
 # --- F2 fix (2026-08-26): minimum-n gate -----------------------------------------
 # Every CI path in this script will happily manufacture an error bar at n=1:
@@ -528,6 +505,48 @@ def gate_denominator(bench: str, arm: str, gain: float | None, seed_sd: float | 
                  % _ec.UNRESOLVABLE_SD_PCT_LIMIT})
 
 
+def percell_gate_diagnostic(bench: str, arm: str, gain: float | None,
+                            seed_sd: float | None, sd_note: str = "") -> dict:
+    """The old PER-CELL denominator gate, retained as a DIAGNOSTIC ONLY.
+
+    F-P fix (2026-08-26).  Until now this gate VETOED a cell whenever one seed-SD
+    exceeded 10 pct_of_waiv points, i.e. whenever 2*SD_waiv > 20% of Waiv's own gain.
+    Two things were wrong with using it as a veto:
+
+      * It is not the test its own docstring describes.  "The denominator is noise"
+        means the denominator's SIGN is not determined (|gain| <= 2*SD); the 10-point
+        bar instead asks whether Waiv's gain is known to better than +/-20% relative,
+        which is a PRECISION question, not an is-it-real question.  The two differ by a
+        factor of five, and every THUNDER cell sits between them: phikon/knn's gain is
+        5.8 seed-SD -- unambiguously real -- yet the 10-point bar rejected it.
+      * A precision shortfall does not need a veto, because it can be CARRIED.  The
+        denominator's own uncertainty propagates into the interval on the ratio
+        (eval_common.pool_cells uses the delta method on both terms).  Vetoing instead
+        of propagating throws away a cell whose interval may still clear the bar --
+        phikon/knn graded 116.6 [72.1, 161.1] before the veto was introduced, an
+        interval that is wide precisely BECAUSE the denominator is imprecise, and that
+        still clears 70.
+
+    So the number below is still computed and still printed -- an honest reader wants to
+    know that Waiv's phikon/knn gain is known only to +/-35% -- but it no longer decides
+    whether a cell is graded.  Grading is decided by eval_common.pooled_denominator_
+    unresolvable applied to the POOLED denominator.
+    """
+    unres, sd_pct, why = _ec.denominator_unresolvable(gain, seed_sd)
+    return {
+        "waiv_gain": gain,
+        "seed_sd": seed_sd,
+        "seed_sd_pct_points": sd_pct,
+        "waiv_gain_over_1sd": (abs(gain) / seed_sd) if (gain and seed_sd) else None,
+        "percell_precision_flag": unres,
+        "percell_precision_note": why,
+        "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > %.0f pct_of_waiv points; "
+                        "does NOT withhold the cell (see percell_gate_diagnostic)"
+                        % _ec.UNRESOLVABLE_SD_PCT_LIMIT,
+        "sd_note": sd_note,
+    }
+
+
 def fmt_cell(c: dict) -> str:
     """`graded (capped) +/-CI n= status` -- the graded value FIRST (F-C).
 
@@ -583,12 +602,30 @@ def build_report(hest_assume_step: int | None = None) -> dict:
             "ri_base": RI_BASE_SOURCE,
             "ri_waiv": RI_WAIV_SOURCE,
             "hest_waiv": HEST_WAIV_SOURCE,
-            "denominator_gate": ("eval_common.denominator_unresolvable -- one seed-SD > "
-                                 "%.0f pct_of_waiv points, applied identically to RI, "
-                                 "HEST and THUNDER" % _ec.UNRESOLVABLE_SD_PCT_LIMIT),
-            "ci_construction": ("eval_common.ci95 -- max(empirical 2*SD/sqrt(n), measured "
-                                "seed floor 2*SD/sqrt(n)), applied identically to RI, "
-                                "HEST and THUNDER"),
+            "aggregation": ("eval_common.pool_cells -- RATIO OF MEANS: aggregate the "
+                            "numerator (our raw delta) and the denominator (Waiv's raw "
+                            "gain) over the group, then divide ONCE.  Per-cell "
+                            "percentages are never averaged.  Applied at both levels: "
+                            "3 tasks -> backbone/THUNDER, 3 backbones -> benchmark."),
+            "pooling_completeness": ("all-or-nothing: a pooled number requires EVERY "
+                                     "cell of its group; a subset is withheld"),
+            "denominator_gate": ("eval_common.pooled_denominator_unresolvable, applied "
+                                 "to the POOLED denominator (not per cell): %s"
+                                 % _ec.POOLED_DENOMINATOR_GATE),
+            "denominator_gate_change_2026_08_26": (
+                "F-P: the per-cell 'one seed-SD > %.0f pct_of_waiv points' veto is "
+                "RETIRED as a gate and kept as a diagnostic. It was a PRECISION test "
+                "(is Waiv's gain known to better than +/-20%% relative), not the "
+                "is-the-denominator-real test its own docstring described, and it "
+                "rejected cells whose denominators are unambiguously real -- "
+                "phikon/knn's Waiv gain is 5.8 seed-SD. Denominator imprecision is now "
+                "PROPAGATED into the interval (delta method on both terms) instead of "
+                "vetoing the cell." % _ec.UNRESOLVABLE_SD_PCT_LIMIT),
+            "ci_construction": ("per-cell: eval_common.ci95 -- max(empirical "
+                                "2*SD/sqrt(n), measured seed floor 2*SD/sqrt(n)).  "
+                                "Pooled: eval_common.pool_cells delta method, "
+                                "SE_agg = sqrt(sum SE_cell^2)/k on the numerator and the "
+                                "same on the denominator, carried onto the ratio."),
             "thunder_seed_sd": THUNDER_SEED_SD_SOURCE,
             "thunder_seed_sd_path": THUNDER_SEED_SD_PATH,
             "hest_base": HEST_BASE_SOURCE,
@@ -673,12 +710,9 @@ def build_report(hest_assume_step: int | None = None) -> dict:
         raw_sd, sd_note = _ec.seed_sd_at_step(ri_per_step, step_a)
         gain = RI_WAIV[a] - RI_BASE[a]
 
-        # F-B: the shared denominator gate, run BEFORE any number is formed.
-        g = gate_denominator("RI", a, gain, raw_sd, sd_note)
-        if g is not None:
-            g.update({"base": RI_BASE[a], "waiv": RI_WAIV[a], "selected_step": step_a})
-            report["cells"].setdefault(a, {})["RI"] = g
-            continue
+        # F-P: the per-cell gate is now a DIAGNOSTIC (see percell_gate_diagnostic).
+        # Withholding is decided on the POOLED denominator, in the aggregate section.
+        diag = percell_gate_diagnostic("RI", a, gain, raw_sd, sd_note)
 
         pcts_unc = [pct_of_waiv_uncapped(v, RI_BASE[a], RI_WAIV[a]) for v in vals]
         mean_pct_unc = sum(pcts_unc) / n
@@ -704,6 +738,13 @@ def build_report(hest_assume_step: int | None = None) -> dict:
             "seed_sd_raw": raw_sd, "seed_sd_pct_points": floor_sd_pct,
             "empirical_ci": emp_ci, "floor_ci": floor_ci,
             "ci_source": ci_src,
+            # Raw ABSOLUTE quantities -- these, not the percentage, are what the pooled
+            # (ratio-of-means) grading rule aggregates.
+            "our_delta": sum(vals) / n - RI_BASE[a],
+            "waiv_gain": gain,
+            "se_our_delta": (raw_sd / math.sqrt(n)) if raw_sd is not None else None,
+            "sd_waiv_gain": raw_sd,
+            "percell_denominator_diagnostic": diag,
         })
         report["cells"].setdefault(a, {})["RI"] = cell
 
@@ -720,13 +761,7 @@ def build_report(hest_assume_step: int | None = None) -> dict:
         raw_sd, sd_note = _ec.seed_sd_at_step(HEST_SEED_SD.get(a, {}), step_a)
         gain = HEST_WAIV[a] - HEST_BASE[a]
 
-        g = gate_denominator("HEST", a, gain, raw_sd, sd_note)
-        if g is not None:
-            g.update({"base": HEST_BASE[a], "waiv": HEST_WAIV[a], "selected_step": step_a,
-                      "pooling": HEST_POOLING[a], "n_seeds_available": n,
-                      "raw_mean": sum(vals) / n})
-            report["cells"].setdefault(a, {})["HEST"] = g
-            continue
+        diag = percell_gate_diagnostic("HEST", a, gain, raw_sd, sd_note)
 
         pcts_unc = [pct_of_waiv_uncapped(v, HEST_BASE[a], HEST_WAIV[a]) for v in vals]
         mean_pct_unc = sum(pcts_unc) / n
@@ -746,6 +781,11 @@ def build_report(hest_assume_step: int | None = None) -> dict:
                            .get(str(step_a), {}) or {}).get("df"),
             "empirical_ci": emp_ci, "floor_ci": floor_ci,
             "ci_source": ci_src + " [floor %s]" % sd_note,
+            "our_delta": sum(vals) / n - HEST_BASE[a],
+            "waiv_gain": gain,
+            "se_our_delta": (raw_sd / math.sqrt(n)) if raw_sd is not None else None,
+            "sd_waiv_gain": raw_sd,
+            "percell_denominator_diagnostic": diag,
         })
         report["cells"].setdefault(a, {})["HEST"] = cell
 
@@ -812,11 +852,15 @@ def build_report(hest_assume_step: int | None = None) -> dict:
             seed_sd = THUNDER_SEED_SD.get(a, {}).get(task)
             entry["resolvability_floor_offset_2se"] = floor
             entry["seed_sd_of_task_mean"] = seed_sd
-            g = gate_denominator("THUNDER/%s" % task, a, waiv_gain, seed_sd)
-            if g is not None:
-                entry.update(g)
-                tasks_out[task] = entry
-                continue
+            # F-P: per-cell precision is a DIAGNOSTIC, not a veto.  virchow2's three
+            # per-task Waiv gains are +0.0270 / -0.0030 / +0.0030 -- individually two are
+            # below the seed floor and one is NEGATIVE, so no per-task ratio means
+            # anything -- but their POOLED denominator is +0.0090 and is well
+            # conditioned.  Withholding is decided on the pooled denominator below.
+            entry["percell_denominator_diagnostic"] = percell_gate_diagnostic(
+                "THUNDER/%s" % task, a, waiv_gain, seed_sd)
+            entry["waiv_gain"] = waiv_gain
+            entry["sd_waiv_gain"] = seed_sd
             if base is None:
                 entry.update({"pct": None, "ci": None, "n": 0, "status": "PARTIAL",
                               "reason": f"our BASE covers only {base_cov}/{len(PAPER_CLS)}"})
@@ -868,61 +912,106 @@ def build_report(hest_assume_step: int | None = None) -> dict:
                 "per_seed_pct": pcts_unc, "per_seed_pct_uncapped": pcts_unc,
                 "per_seed_pct_capped": [cap100(q) for q in pcts_unc],
                 "coverage": f"{len(PAPER_CLS)}/{len(PAPER_CLS)}",
+                "our_delta": sum(x["thunder"][task]["mean"] for x in full) / n - base,
+                "se_our_delta": (seed_sd / math.sqrt(n)) if seed_sd is not None else None,
             })
             tasks_out[task] = entry
 
-        usable = [t for t in CLS_TASKS if tasks_out[t]["status"] not in UNGRADED or
-                  tasks_out[t]["status"] == "NOT RESOLVED"]
-        graded = [t for t in CLS_TASKS if tasks_out[t].get("pct") is not None]
-        if not graded:
-            reasons = sorted({tasks_out[t]["status"] for t in CLS_TASKS})
+        # ---- POOL the three tasks: ONE numerator, ONE denominator, divide ONCE -----
+        # F-P fix (2026-08-26).  This used to be the MEAN OF THE THREE PER-TASK
+        # PERCENTAGES, which is the wrong aggregation for the user's grading rule and is
+        # what made this cell ungradeable on two of three backbones.  A per-task ratio
+        # divides by that task's own Waiv gain; when one of those gains is +0.0030 the
+        # ratio explodes, and when one is NEGATIVE it rewards regressing.  Pooling first
+        # -- mean(our delta) / mean(waiv gain) -- divides by +0.0090 instead, which is a
+        # real scale.  ALL THREE tasks are required: a pooled number over two of them
+        # silently re-weights the benchmark.
+        pooled = _ec.pool_cells(
+            [{
+                "key": t,
+                "delta": tasks_out[t].get("our_delta"),
+                "gain": tasks_out[t].get("waiv_gain"),
+                "se_delta": tasks_out[t].get("se_our_delta"),
+                "sd_gain": tasks_out[t].get("sd_waiv_gain"),
+                "complete": tasks_out[t].get("our_delta") is not None
+                            and tasks_out[t].get("n", 0) >= MIN_N_FOR_VERDICT,
+                "note": tasks_out[t].get("status") or tasks_out[t].get("reason"),
+            } for t in CLS_TASKS],
+            group="%s/THUNDER (3 tasks)" % a)
+
+        if pooled["status"] != "POOLED":
             cell = {"pct": None, "pct_capped": None, "pct_uncapped": None, "ci": None,
                     "lower_uncapped": None, "upper_uncapped": None, "was_capped": False,
-                    "n": 0, "tasks": tasks_out,
-                    "status": "PARTIAL" if "PARTIAL" in reasons else "INDETERMINATE",
-                    "reason": "; ".join(f"{t}: {tasks_out[t]['status']}" for t in CLS_TASKS)}
+                    "n": 0, "tasks": tasks_out, "pooled": pooled,
+                    "status": ("PARTIAL" if pooled["status"] == "WITHHELD_INCOMPLETE"
+                               else "INDETERMINATE"),
+                    "reason": pooled.get("reason")}
         else:
-            mean_pct_unc = sum(tasks_out[t]["pct_uncapped"] for t in graded) / len(graded)
-            # F3 fix (2026-08-26): the three task CIs are NOT independent.  knn,
-            # linear_probing and simple_shot are three readouts of the SAME per-seed
-            # checkpoints over the SAME 12 datasets, so a seed that shifts one shifts
-            # all three together.  Combining them in quadrature (the old
-            # sqrt(sum(ci^2))/len) understated the aggregate half-width by up to
-            # sqrt(3) ~ 1.73x.  Under perfect correlation the half-width of the mean is
-            # the mean of the half-widths.
-            ci = sum(tasks_out[t]["ci"] for t in graded) / len(graded)
-            # An aggregate built from a subset of tasks is still a partial instrument:
-            # flag it so it is never mistaken for the full 3-task THUNDER read.
-            agg_n = max(tasks_out[t]["n"] for t in graded)
-            cell = grade(mean_pct_unc, ci, agg_n)
-            cell["ci_source"] = ("task CIs combined as the MEAN (perfect correlation: "
-                                 "same checkpoints, same 12 datasets), not in quadrature")
-            cell.update({"n": agg_n,
-                         "tasks": tasks_out,
-                         "tasks_graded": graded,
-                         "tasks_excluded": {t: tasks_out[t]["status"]
-                                            for t in CLS_TASKS if t not in graded}})
+            agg_n = max(tasks_out[t].get("n") or 0 for t in CLS_TASKS)
+            cell = grade(pooled["pct"], pooled["ci"], agg_n)
+            cell.update({
+                "n": agg_n,
+                "tasks": tasks_out,
+                "pooled": pooled,
+                "our_avg_delta": pooled["our_avg_delta"],
+                "waiv_avg_gain": pooled["waiv_avg_gain"],
+                "our_delta": pooled["our_avg_delta"],
+                "waiv_gain": pooled["waiv_avg_gain"],
+                "se_our_delta": pooled["se_our_avg_delta"],
+                "sd_waiv_gain": pooled["sd_waiv_avg_gain"],
+                "concentration_flags": pooled["concentration_flags"],
+                "ci_source": pooled["ci_source"],
+                "aggregation": pooled["rule"],
+            })
         report["cells"].setdefault(a, {})["THUNDER"] = cell
-        _ = usable
 
     # ---- aggregate ----------------------------------------------------------
     benches = ("RI", "HEST", "THUNDER")
     bench_avg = {}
     for b in benches:
-        vals = [report["cells"][a][b]["pct"] for a in ARMS
-                if report["cells"].get(a, {}).get(b, {}).get("pct") is not None]
-        # F1 fix (2026-08-26).  `overall_average` was the unweighted mean of the three
-        # benchmark means regardless of how many backbones each rested on -- so a
-        # THUNDER mean built from ONE backbone carried the same 1/3 weight as an RI mean
-        # built from all three.  A benchmark mean over a subset of backbones is not
-        # "the benchmark"; it is a different quantity sharing its name.  It is still
-        # reported with its coverage, but it no longer enters the overall average, and
-        # if ANY benchmark is short of 3 backbones the overall average is UNDEFINED
-        # rather than quietly rebuilt from whatever is left.
-        bench_avg[b] = {"mean": (sum(vals) / len(vals)) if vals else None,
-                        "n_backbones": len(vals),
-                        "coverage_ok": len(vals) == len(ARMS),
-                        "eligible_for_overall": len(vals) == len(ARMS)}
+        # ---- POOL across the three backbones: one numerator, one denominator ------
+        # F-P fix (2026-08-26).  This was the MEAN OF THE PER-BACKBONE PERCENTAGES.
+        # Under the user's grading rule a benchmark mean is the ratio of the two
+        # ABSOLUTE averages -- mean(our raw delta) / mean(Waiv's raw gain) -- divided
+        # once.  The two spellings differ whenever the per-backbone denominators differ,
+        # which they always do (RI gains run 0.337 / 0.061 / 0.021 across the trio, a
+        # 16x spread, so a mean of ratios silently weights virchow2 16x heavier than
+        # phikon).  All three backbones are required; a benchmark mean over a subset is
+        # a different quantity sharing its name (F1), and is now withheld by the same
+        # all-or-nothing rule that governs the THUNDER task pool.
+        pooled = _ec.pool_cells(
+            [{
+                "key": a,
+                "delta": (report["cells"].get(a, {}).get(b, {}) or {}).get("our_delta"),
+                "gain": (report["cells"].get(a, {}).get(b, {}) or {}).get("waiv_gain"),
+                "se_delta": (report["cells"].get(a, {}).get(b, {}) or {}).get("se_our_delta"),
+                "sd_gain": (report["cells"].get(a, {}).get(b, {}) or {}).get("sd_waiv_gain"),
+                "complete": (report["cells"].get(a, {}).get(b, {}) or {}).get("pct") is not None,
+                "note": (report["cells"].get(a, {}).get(b, {}) or {}).get("status", "NO_DATA"),
+            } for a in ARMS],
+            group="%s (3 backbones)" % b)
+        graded_bb = [a for a in ARMS
+                     if (report["cells"].get(a, {}).get(b, {}) or {}).get("pct") is not None]
+        bench_avg[b] = {
+            "mean": pooled.get("pct"),
+            "our_avg_delta": pooled.get("our_avg_delta"),
+            "waiv_avg_gain": pooled.get("waiv_avg_gain"),
+            "ci": pooled.get("ci"),
+            "lower": pooled.get("lower"),
+            "upper": pooled.get("upper"),
+            "aggregation": pooled["rule"],
+            "pooled": pooled,
+            "concentration_flags": pooled.get("concentration_flags") or [],
+            "n_backbones": len(graded_bb),
+            "coverage_ok": len(graded_bb) == len(ARMS),
+            "eligible_for_overall": pooled.get("pct") is not None,
+            "withheld_reason": pooled.get("reason") if pooled["status"] != "POOLED" else None,
+            # Diagnostic only: what the OLD mean-of-ratios would have printed, so the
+            # change in the published number is visible rather than silent.
+            "legacy_mean_of_ratios": (
+                sum((report["cells"][a][b]["pct"]) for a in graded_bb) / len(graded_bb)
+                if graded_bb else None),
+        }
     short = [b for b in benches if not bench_avg[b]["eligible_for_overall"]]
     if short:
         overall = None
@@ -1016,6 +1105,22 @@ def build_report(hest_assume_step: int | None = None) -> dict:
     return report
 
 
+def iter_pooled_groups(rep: dict):
+    """(group_label, pooled_block) for every pooled group in the report, in print order.
+
+    One walker so the concentration table can never drift out of sync with the set of
+    groups the verdict actually rests on.
+    """
+    for b in ("RI", "HEST", "THUNDER"):
+        p = (rep["benchmark_averages"].get(b) or {}).get("pooled")
+        if p and p.get("shares"):
+            yield ("%s / 3 backbones" % b), p
+    for a in ARMS:
+        p = ((rep["cells"].get(a, {}) or {}).get("THUNDER", {}) or {}).get("pooled")
+        if p and p.get("shares"):
+            yield ("%s/THUNDER / 3 tasks" % a), p
+
+
 def print_report(rep: dict) -> None:
     W = 78
     print("=" * W)
@@ -1081,10 +1186,31 @@ def print_report(rep: dict) -> None:
     print()
 
     print("-- AGGREGATE " + "-" * 65)
+    # LEAD WITH THE TWO ABSOLUTE AVERAGES.  The percentage is derived from them and is
+    # reported second; a reader who sees only "104%" cannot tell whether that is 104% of
+    # a large gain or of a rounding error.
+    print("  Pooled (ratio-of-means): ONE numerator and ONE denominator per benchmark,")
+    print("  divided ONCE.  Per-cell percentages are NEVER averaged.")
+    print()
+    print(f"  {'benchmark':<9} {'OUR avg increase':>17} {'WAIV avg increase':>18} "
+          f"{'pct':>8} {'+/-95%':>8}  coverage")
     for b in ("RI", "HEST", "THUNDER"):
         m = rep["benchmark_averages"][b]
-        v = f"{m['mean']:.1f}" if m["mean"] is not None else "n/a"
-        print(f"  {b:<8} average over backbones: {v:>6}   (from {m['n_backbones']}/3 backbones)")
+        ours = f"{m['our_avg_delta']:+.5f}" if m.get("our_avg_delta") is not None else "--"
+        waiv = f"{m['waiv_avg_gain']:+.5f}" if m.get("waiv_avg_gain") is not None else "--"
+        v = f"{m['mean']:.1f}" if m["mean"] is not None else "WITHHELD"
+        ci = f"{m['ci']:.1f}" if m.get("ci") is not None else "--"
+        print(f"  {b:<9} {ours:>17} {waiv:>18} {v:>8} {ci:>8}  "
+              f"{m['n_backbones']}/3 backbones")
+        if m.get("withheld_reason"):
+            print(f"            WITHHELD: {m['withheld_reason']}")
+        legacy = m.get("legacy_mean_of_ratios")
+        if legacy is not None and m["mean"] is not None and abs(legacy - m["mean"]) > 0.05:
+            print(f"            (was {legacy:.1f} under the retired mean-of-ratios "
+                  f"aggregation; delta {m['mean'] - legacy:+.1f} pts)")
+        for f_ in m.get("concentration_flags") or []:
+            print(f"            *** CONCENTRATION: {f_}")
+    print()
     ov = rep["overall_average"]
     print(f"  OVERALL  average of the three : {f'{ov:.1f}' if ov is not None else 'UNDEF':>6}"
           f"   (bar: > {OVERALL_BAR:.0f})")
@@ -1123,6 +1249,37 @@ def print_report(rep: dict) -> None:
                 print(f"        assumed-step run: {r_}")
         print("   These cells are reported for completeness only.  The verdict above is")
         print("   scored on the primary rule-selected HEST cells.")
+    # -- CONCENTRATION (mandatory disclosure) ---------------------------------------
+    # Pooling cures a small denominator, but it can also let ONE cell carry the whole
+    # pooled result.  Both failure modes have to be visible at once, so every pooled
+    # group prints each cell's signed share of its numerator and of its denominator.
+    print()
+    print("-- CONCENTRATION: each cell's share of its pooled numerator / denominator " + "-" * 3)
+    print(f"   {'group':<26} {'cell':<16} {'our delta':>10} {'waiv gain':>10} "
+          f"{'num%':>7} {'den%':>7}")
+    any_flag = False
+    for grp, pooled in iter_pooled_groups(rep):
+        for key, s in (pooled.get("shares") or {}).items():
+            ns = s.get("numerator_share")
+            ds = s.get("denominator_share")
+            mark = ""
+            if (ns is not None and abs(ns) > _ec.CONCENTRATION_FLAG_SHARE) or \
+               (ds is not None and abs(ds) > _ec.CONCENTRATION_FLAG_SHARE):
+                mark = "  <== CARRIES THE GROUP"
+                any_flag = True
+            print(f"   {grp:<26} {key:<16} {s['delta']:>+10.5f} {s['gain']:>+10.5f} "
+                  f"{(f'{ns * 100:+.0f}' if ns is not None else '--'):>7} "
+                  f"{(f'{ds * 100:+.0f}' if ds is not None else '--'):>7}{mark}")
+    if any_flag:
+        print(f"   *** A cell above supplies more than "
+              f"{_ec.CONCENTRATION_FLAG_SHARE * 100:.0f}% of its group's pooled")
+        print("       numerator or denominator.  The pooled number is that cell's result")
+        print("       wearing the group's name; read it with the per-cell appendix, not alone.")
+    else:
+        print(f"   (no cell exceeds {_ec.CONCENTRATION_FLAG_SHARE * 100:.0f}% of any "
+              f"pooled numerator or denominator)")
+    print()
+
     if rep["ungraded_cells"]:
         print("  UNGRADED cells (excluded from every average above):")
         for u in rep["ungraded_cells"]:
@@ -1140,7 +1297,9 @@ def print_report(rep: dict) -> None:
     print(f"RI base (disk)           : phikon/midnight/virchow2 = " +
           ", ".join(f"{RI_BASE[a]:.6f}" for a in ARMS))
     print(f"                           {RI_BASE_SOURCE['phikon']}")
+    print(f"Aggregation              : {rep['sources']['aggregation']}")
     print(f"Denominator gate         : {rep['sources']['denominator_gate']}")
+    print(f"Gate change 2026-08-26   : {rep['sources']['denominator_gate_change_2026_08_26']}")
     print(f"CI construction          : {rep['sources']['ci_construction']}")
     print()
     print("-- RETIRED LITERALS vs THE VALUES NOW READ FROM DISK " + "-" * 25)
