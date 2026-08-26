@@ -1,0 +1,21 @@
+{
+  "backbone": "paige-ai/Virchow2",
+  "ckpt": "runs/final5-virchow2-s0-t900-386804/step_0000500",
+  "n_tiles": 512,
+  "embed_dim": 2560,
+  "cosine_base_vs_ft": 0.5526455640792847,
+  "rel_l2_change": 0.8957569599151611,
+  "rel_l2_change_global_fro": 0.8945601911877288,
+  "inter_tile_cos_base": 0.30128201842308044,
+  "inter_tile_cos_ft": 0.33115291595458984,
+  "cka_base_vs_ft": 0.44850099086761475,
+  "frac_change_shared_shift": 0.36217370163367724,
+  "mean_delta_norm": 25.3486328125,
+  "mean_base_norm": 46.851173400878906,
+  "mean_delta_row_norm": 41.85971450805664,
+  "cross_scanner_cos_base": 0.8248909115791321,
+  "cross_scanner_cos_ft": 0.9558271765708923,
+  "ref_condition": "GMH_S60_to_GMH_S60.npy",
+  "other_condition": "GIVH_AT2_to_GMH_S60.npy",
+  "elapsed_s": 2110.1516196727753
+}

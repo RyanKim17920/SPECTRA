@@ -1,0 +1,21 @@
+{
+  "backbone": "owkin/phikon-v2",
+  "ckpt": "runs/final5-phikon-s0-t900-386794/step_0000500",
+  "n_tiles": 512,
+  "embed_dim": 2048,
+  "cosine_base_vs_ft": 0.5105546712875366,
+  "rel_l2_change": 0.9562987685203552,
+  "rel_l2_change_global_fro": 0.9566594331838083,
+  "inter_tile_cos_base": 0.403964638710022,
+  "inter_tile_cos_ft": 0.5683800578117371,
+  "cka_base_vs_ft": 0.7480465173721313,
+  "frac_change_shared_shift": 0.5090907865694893,
+  "mean_delta_norm": 7.081331729888916,
+  "mean_base_norm": 10.361525535583496,
+  "mean_delta_row_norm": 9.898846626281738,
+  "cross_scanner_cos_base": 0.6546054482460022,
+  "cross_scanner_cos_ft": 0.9621740579605103,
+  "ref_condition": "GMH_S60_to_GMH_S60.npy",
+  "other_condition": "GIVH_AT2_to_GMH_S60.npy",
+  "elapsed_s": 904.768634557724
+}

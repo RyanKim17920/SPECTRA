@@ -1,0 +1,21 @@
+{
+  "backbone": "kaiko-ai/midnight",
+  "ckpt": "runs/final5-midnight-s0-t900-386799/step_0000500",
+  "n_tiles": 512,
+  "embed_dim": 3072,
+  "cosine_base_vs_ft": 0.35503220558166504,
+  "rel_l2_change": 1.1413583755493164,
+  "rel_l2_change_global_fro": 1.1445205901684439,
+  "inter_tile_cos_base": 0.24648138880729675,
+  "inter_tile_cos_ft": 0.5458400249481201,
+  "cka_base_vs_ft": 0.6319220066070557,
+  "frac_change_shared_shift": 0.4502853040442689,
+  "mean_delta_norm": 7.568912982940674,
+  "mean_base_norm": 9.847073554992676,
+  "mean_delta_row_norm": 11.2479248046875,
+  "cross_scanner_cos_base": 0.8064759969711304,
+  "cross_scanner_cos_ft": 0.9715064167976379,
+  "ref_condition": "GMH_S60_to_GMH_S60.npy",
+  "other_condition": "GIVH_AT2_to_GMH_S60.npy",
+  "elapsed_s": 2994.2232670783997
+}
