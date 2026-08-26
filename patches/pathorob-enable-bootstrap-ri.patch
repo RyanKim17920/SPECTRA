@@ -1,0 +1,49 @@
+diff --git a/pathorob/robustness_index/robustness_index.py b/pathorob/robustness_index/robustness_index.py
+index a003f50..d5500f5 100644
+--- a/pathorob/robustness_index/robustness_index.py
++++ b/pathorob/robustness_index/robustness_index.py
+@@ -385,10 +385,20 @@ def results_summary(model, meta, max_patches_per_combi, median_k_opt, results, d
+     model_rob_index_mean = results[model]['robustness_index-mean']
+     model_rob_index_std = results[model]['robustness_index-std']
+     print(f"model_k_opt {model_k_opt}  median_k_opt {median_k_opt}")
+-    bootstrapping_avail = len(model_rob_index_mean) > 1
++    # LOCAL FIX (print/aggregate path only; does not touch `robustness_index`):
++    # save_total_stats() has already collapsed these two keys to scalars at k_opt, so the
++    # upstream len()/[index_k_opt_full] here raised TypeError on every bootstrapped run.
++    if np.isscalar(model_rob_index_mean) or np.ndim(model_rob_index_mean) == 0:
++        bootstrapping_avail = float(model_rob_index_mean) != -1
++        mean_at_k, std_at_k = float(model_rob_index_mean), float(model_rob_index_std)
++    else:
++        bootstrapping_avail = len(model_rob_index_mean) > 1
++        if bootstrapping_avail:
++            mean_at_k = model_rob_index_mean[index_k_opt_full]
++            std_at_k = model_rob_index_std[index_k_opt_full]
+ 
+     if bootstrapping_avail:
+-        mean_std_str = f"robustness_index mean {model_rob_index_mean[index_k_opt_full]:.3f}  std {model_rob_index_std[index_k_opt_full]:.3f}"
++        mean_std_str = f"robustness_index mean {mean_at_k:.3f}  std {std_at_k:.3f}"
+     else:
+         mean_std_str = f"robustness_index mean -1 std -1"
+ 
+diff --git a/pathorob/robustness_index/robustness_index_utils.py b/pathorob/robustness_index/robustness_index_utils.py
+index 91f7bf8..de3840d 100644
+--- a/pathorob/robustness_index/robustness_index_utils.py
++++ b/pathorob/robustness_index/robustness_index_utils.py
+@@ -761,8 +761,15 @@ def save_total_stats(stats, meta, dataset, model, results_folder, k_opt, bal_acc
+     df_dict["generalization_index"] = stats["generalization_index"][index_k_opt]
+ 
+     if "robustness_index-mean" in stats and len(stats["robustness_index-mean"]) > index_k_opt:
+-        stats["robustness_index-mean"] = stats["robustness_index-mean"][index_k_opt]
+-        stats["robustness_index-std"] = stats["robustness_index-mean"][index_k_opt]
++        # LOCAL FIX (does not touch `robustness_index`, only the bootstrap mean/std):
++        #  1. upstream re-read stats["robustness_index-mean"][index_k_opt] AFTER the
++        #     previous line had already collapsed that key to a scalar -> IndexError.
++        #  2. upstream then assigned the MEAN into the std field.
++        # Both are fixed by reading the per-k arrays once, before collapsing.
++        _boot_mean_at_k = stats["robustness_index-mean"][index_k_opt]
++        _boot_std_at_k = stats["robustness_index-std"][index_k_opt]
++        stats["robustness_index-mean"] = _boot_mean_at_k
++        stats["robustness_index-std"] = _boot_std_at_k
+         df_dict["robustness_index-mean"] = stats["robustness_index-mean"]
+         df_dict["robustness_index-std"] = stats["robustness_index-std"]
+ 
