@@ -1,0 +1,807 @@
+{
+  "estimator": "pooled WITHIN-RECIPE-FAMILY across-seed SD of the HEST scalar, sqrt(sum_f df_f * sd_f^2 / sum_f df_f), df_f = n_f - 1",
+  "estimator_source": "scripts/scoreboard.py:161-174 provenance comment for NOISE_SD -- matched exactly",
+  "family_definition": "configs identical apart from ['eval_every', 'log_every', 'num_workers', 'out_dir', 'packed_dir', 'seed']; NOT the run name, and NOT collect_final5.CHECKED_CONFIG_KEYS (9 recipe-defining keys vary outside it -- see module docstring)",
+  "metric_field": "hest_perf_per_encoder.custom_encoder",
+  "pooling_protocol": {
+    "phikon": "cls",
+    "midnight": "cls",
+    "virchow2": "clsmean"
+  },
+  "hest_work_dir": "/data/ryan.kim/hest_work",
+  "runs_dir": "/admin/home/ryan.kim/waiv/runs",
+  "units": "RAW HEST metric (same units as the scalar), 1 SD, one run",
+  "pooled_seed_sd": {
+    "midnight": {
+      "50": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "100": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "125": {
+        "sd": 1.5713484026352907e-05,
+        "df": 1,
+        "n_families": 1,
+        "n_runs": 2,
+        "families": [
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 1.5713484026352907e-05,
+            "mean": 0.4150101851851852,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s0-t900-392670",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s1-t900-392673"
+            ],
+            "signature_sha": "215dc8e5"
+          }
+        ]
+      },
+      "150": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "200": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "250": {
+        "sd": 0.0016875689879037967,
+        "df": 5,
+        "n_families": 3,
+        "n_runs": 8,
+        "families": [
+          {
+            "n": 3,
+            "df": 2,
+            "sd": 0.002267560896390341,
+            "mean": 0.4090033950617284,
+            "runs": [
+              "final5-midnight-s0-t900-386799",
+              "final5-midnight-s1-t900-386800",
+              "final5-midnight-s2-t900-386801"
+            ],
+            "signature_sha": "e3f21081"
+          },
+          {
+            "n": 3,
+            "df": 2,
+            "sd": 0.001233040297186461,
+            "mean": 0.41459166666666664,
+            "runs": [
+              "gen-lr3e-5-r32-kl0-midnight-s0-t900-391082",
+              "gen-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512-midnight-s1-t900-391934",
+              "gen-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512-midnight-s2-t900-391935"
+            ],
+            "signature_sha": "0496c02a"
+          },
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.0009565583401051607,
+            "mean": 0.41147453703703707,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s0-t900-392670",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s1-t900-392673"
+            ],
+            "signature_sha": "215dc8e5"
+          }
+        ]
+      },
+      "300": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "375": {
+        "sd": 0.0025364182132561245,
+        "df": 1,
+        "n_families": 1,
+        "n_runs": 2,
+        "families": [
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.0025364182132561245,
+            "mean": 0.408437962962963,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s0-t900-392670",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s1-t900-392673"
+            ],
+            "signature_sha": "215dc8e5"
+          }
+        ]
+      },
+      "400": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "500": {
+        "sd": 0.001908086853095901,
+        "df": 4,
+        "n_families": 1,
+        "n_runs": 5,
+        "families": [
+          {
+            "n": 5,
+            "df": 4,
+            "sd": 0.001908086853095901,
+            "mean": 0.4064994444444444,
+            "runs": [
+              "final5-midnight-s0-t900-386799",
+              "final5-midnight-s1-t900-386800",
+              "final5-midnight-s2-t900-386801",
+              "final5-midnight-s3-t900-386802",
+              "final5-midnight-s4-t900-386803"
+            ],
+            "signature_sha": "e3f21081"
+          }
+        ]
+      },
+      "1500": {
+        "sd": 0.0018548458436124732,
+        "df": 1,
+        "n_families": 1,
+        "n_runs": 2,
+        "families": [
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.0018548458436124732,
+            "mean": 0.40456712962962965,
+            "runs": [
+              "gen-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512-midnight-s1-t900-391934",
+              "gen-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512-midnight-s2-t900-391935"
+            ],
+            "signature_sha": "0496c02a"
+          }
+        ]
+      }
+    },
+    "phikon": {
+      "50": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "100": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "125": {
+        "sd": 4.255735257141662e-05,
+        "df": 1,
+        "n_families": 1,
+        "n_runs": 2,
+        "families": [
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 4.255735257141662e-05,
+            "mean": 0.3865847222222222,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s0-t900-392669",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672"
+            ],
+            "signature_sha": "ff6ea20d"
+          }
+        ]
+      },
+      "150": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "200": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "250": {
+        "sd": 0.0014893836319462114,
+        "df": 3,
+        "n_families": 2,
+        "n_runs": 5,
+        "families": [
+          {
+            "n": 3,
+            "df": 2,
+            "sd": 0.0012786661565544668,
+            "mean": 0.3924601851851852,
+            "runs": [
+              "ph-c3.0m-inf-phikon-s0-t900-390720",
+              "ph-c3.0m-inf-phikon-s1-t900-390952",
+              "ph-c3.0m-inf-phikon-s2-t900-390953"
+            ],
+            "signature_sha": "444edfd4"
+          },
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.0018397870880871839,
+            "mean": 0.3924342592592593,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s0-t900-392669",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672"
+            ],
+            "signature_sha": "ff6ea20d"
+          }
+        ]
+      },
+      "375": {
+        "sd": 0.001427962860896219,
+        "df": 1,
+        "n_families": 1,
+        "n_runs": 2,
+        "families": [
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.001427962860896219,
+            "mean": 0.3935199074074074,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s0-t900-392669",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672"
+            ],
+            "signature_sha": "ff6ea20d"
+          }
+        ]
+      },
+      "500": {
+        "sd": 0.0011450090188693596,
+        "df": 12,
+        "n_families": 6,
+        "n_runs": 18,
+        "families": [
+          {
+            "n": 5,
+            "df": 4,
+            "sd": 0.0016696379635583406,
+            "mean": 0.38709462962962965,
+            "runs": [
+              "final5-phikon-s0-t900-386794",
+              "final5-phikon-s1-t900-386795",
+              "final5-phikon-s2-t900-386796",
+              "final5-phikon-s3-t900-386797",
+              "final5-phikon-s4-t900-386798"
+            ],
+            "signature_sha": "827d8090"
+          },
+          {
+            "n": 3,
+            "df": 2,
+            "sd": 0.0009406903116647893,
+            "mean": 0.3896910493827161,
+            "runs": [
+              "ph-c2.0m-2.0-phikon-s0-t900-389705",
+              "ph-c2.0m-2.0-phikon-s1-t900-389801",
+              "ph-c2.0m-2.0-phikon-s2-t900-389802"
+            ],
+            "signature_sha": "8ffeee50"
+          },
+          {
+            "n": 3,
+            "df": 2,
+            "sd": 0.0002739244044118871,
+            "mean": 0.3897783950617284,
+            "runs": [
+              "ph-c2.0m-inf-phikon-s0-t900-390459",
+              "ph-c2.0m-inf-phikon-s1-t900-390460",
+              "ph-c2.0m-inf-phikon-s2-t900-390625"
+            ],
+            "signature_sha": "4921bae5"
+          },
+          {
+            "n": 3,
+            "df": 2,
+            "sd": 0.0008003933860757366,
+            "mean": 0.391208024691358,
+            "runs": [
+              "ph-c3.0m-inf-phikon-s0-t900-390720",
+              "ph-c3.0m-inf-phikon-s1-t900-390952",
+              "ph-c3.0m-inf-phikon-s2-t900-390953"
+            ],
+            "signature_sha": "444edfd4"
+          },
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.0003149244090284751,
+            "mean": 0.38340879629629626,
+            "runs": [
+              "combined-phikon-s0-t900-387705",
+              "falseneg-phikon-s0-t900-387704"
+            ],
+            "signature_sha": "26b10879"
+          },
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.001132025578399533,
+            "mean": 0.3930273148148148,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s0-t900-392669",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672"
+            ],
+            "signature_sha": "ff6ea20d"
+          }
+        ]
+      },
+      "750": {
+        "sd": 0.0003928371006592152,
+        "df": 1,
+        "n_families": 1,
+        "n_runs": 2,
+        "families": [
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.0003928371006592152,
+            "mean": 0.3890638888888889,
+            "runs": [
+              "ph-c2.0m-inf-phikon-s0-t900-390459",
+              "ph-c2.0m-inf-phikon-s1-t900-390460"
+            ],
+            "signature_sha": "4921bae5"
+          }
+        ]
+      },
+      "1000": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "1250": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "1500": {
+        "sd": 0.00021998877636913698,
+        "df": 1,
+        "n_families": 1,
+        "n_runs": 2,
+        "families": [
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.00021998877636913698,
+            "mean": 0.38583888888888884,
+            "runs": [
+              "combined-phikon-s0-t900-387705",
+              "falseneg-phikon-s0-t900-387704"
+            ],
+            "signature_sha": "26b10879"
+          }
+        ]
+      },
+      "2000": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "2500": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "3000": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      }
+    },
+    "virchow2": {
+      "50": {
+        "sd": 0.0010233406472171507,
+        "df": 1,
+        "n_families": 1,
+        "n_runs": 2,
+        "families": [
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.0010233406472171507,
+            "mean": 0.40925046296296297,
+            "runs": [
+              "genMASK-c3m-lr1e-4-r32-kl0-t0.07-wd0.05-ms250-pd512-virchow2-s0-t900-392695",
+              "genMASK-c3m-lr1e-4-r32-kl0-t0.07-wd0.05-ms250-pd512-virchow2-s1-t900-392698"
+            ],
+            "signature_sha": "a0763fe8"
+          }
+        ]
+      },
+      "100": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "125": {
+        "sd": 0.0017973825705559327,
+        "df": 4,
+        "n_families": 1,
+        "n_runs": 5,
+        "families": [
+          {
+            "n": 5,
+            "df": 4,
+            "sd": 0.0017973825705559327,
+            "mean": 0.41020222222222225,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s1-t900-392674",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s2-t900-393088",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s3-t900-393089",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s4-t900-393090"
+            ],
+            "signature_sha": "4352e2c8"
+          }
+        ]
+      },
+      "150": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "200": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      },
+      "250": {
+        "sd": 0.0015939465276709399,
+        "df": 6,
+        "n_families": 3,
+        "n_runs": 9,
+        "families": [
+          {
+            "n": 4,
+            "df": 3,
+            "sd": 0.0011033417927226157,
+            "mean": 0.40740138888888894,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s2-t900-393088",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s3-t900-393089",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s4-t900-393090"
+            ],
+            "signature_sha": "4352e2c8"
+          },
+          {
+            "n": 3,
+            "df": 2,
+            "sd": 0.00153166238276526,
+            "mean": 0.40773024691358023,
+            "runs": [
+              "final5-virchow2-s0-t900-386804",
+              "final5-virchow2-s1-t900-386805",
+              "final5-virchow2-s2-t900-386806"
+            ],
+            "signature_sha": "14901b90"
+          },
+          {
+            "n": 2,
+            "df": 1,
+            "sd": 0.0026267707464078596,
+            "mean": 0.4090379629629629,
+            "runs": [
+              "ret0.01-virchow2-s0-t900-391059",
+              "ret0.01-virchow2-s1-t900-392045"
+            ],
+            "signature_sha": "5e5b1454"
+          }
+        ]
+      },
+      "375": {
+        "sd": 0.001284240094163028,
+        "df": 3,
+        "n_families": 1,
+        "n_runs": 4,
+        "families": [
+          {
+            "n": 4,
+            "df": 3,
+            "sd": 0.001284240094163028,
+            "mean": 0.4051076388888889,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s2-t900-393088",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s3-t900-393089",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s4-t900-393090"
+            ],
+            "signature_sha": "4352e2c8"
+          }
+        ]
+      },
+      "500": {
+        "sd": 0.001010740475972321,
+        "df": 7,
+        "n_families": 2,
+        "n_runs": 9,
+        "families": [
+          {
+            "n": 5,
+            "df": 4,
+            "sd": 0.0011530989066326407,
+            "mean": 0.4055483333333333,
+            "runs": [
+              "final5-virchow2-s0-t900-386804",
+              "final5-virchow2-s1-t900-386805",
+              "final5-virchow2-s2-t900-386806",
+              "final5-virchow2-s3-t900-386807",
+              "final5-virchow2-s4-t900-386808"
+            ],
+            "signature_sha": "14901b90"
+          },
+          {
+            "n": 4,
+            "df": 3,
+            "sd": 0.0007815851018862696,
+            "mean": 0.40555763888888885,
+            "runs": [
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s2-t900-393088",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s3-t900-393089",
+              "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s4-t900-393090"
+            ],
+            "signature_sha": "4352e2c8"
+          }
+        ]
+      },
+      "1500": {
+        "sd": null,
+        "df": 0,
+        "n_families": 0,
+        "n_runs": 0,
+        "families": [],
+        "reason": "no recipe family with n>=2 seeds at this (backbone, step)"
+      }
+    }
+  },
+  "skipped": {
+    "no_config": [
+      "_preempted_attempt1",
+      "beta2.0-phikon-s0-t900-389725",
+      "beta2.0-phikon-s0-t900-389726",
+      "clsw1.0-midnight-s0-t900-389416",
+      "gemgrid-386051",
+      "gridcmp2-grid2-380864",
+      "gridgates-380771",
+      "gridgates-380772",
+      "gridgates-380774",
+      "gridgates-380775",
+      "headgates-380843",
+      "poolgates-380891",
+      "smoke-auxlearn-391919",
+      "smoke-auxstain-391913",
+      "smoke-auxstain-391916",
+      "splitgrid-384754",
+      "waiv-real-369042",
+      "waiv-v2rank128-376024",
+      "waiv-v2rank64-376023"
+    ],
+    "no_hest_summary": [
+      "armd-s1-385294",
+      "beta2.0-phikon-s1-t900-389727",
+      "beta2.0-phikon-s2-t900-389728",
+      "clsw0.75-phikon-s0-t900-389542",
+      "clsw1.0-midnight-s0-t900-389425",
+      "combc4-phikon-s0-t450-387817",
+      "combined3k-phikon-s0-t900-387816",
+      "ctrl-replay-380871",
+      "final5-phikon-s0-t1800-386928",
+      "final5-phikon-s0-t450-386930",
+      "final5-phikon-s1-t1800-386929",
+      "final5-phikon-s1-t450-386931",
+      "finalgem-midnight-384586",
+      "finalgem-phikon-384585",
+      "finalgem-virchow2-384587",
+      "fixed-phikon-s0-t900-387668",
+      "fnnogem-phikon-s0-t900-388980",
+      "gemgrid-386052",
+      "gemgrid-386056",
+      "gemgrid-386057",
+      "gemseed3-gem-385295",
+      "gen-lr1e-4-r32-kl0-t0.07-wd0.5-ms1500-pd512-virchow2-s0-t900-391126",
+      "gen-lr1e-4-r32-kl0.01-t0.07-wd0.05-ms250-pd512-virchow2-s1-t900-391814",
+      "gen-lr1e-4-r32-kl0.01-t0.07-wd0.05-ms250-pd512-virchow2-s2-t900-391815",
+      "genMASK-c3-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512-midnight-s1-t900-392629",
+      "genMASK-c3-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512-phikon-s1-t900-392628",
+      "genMASK-c3-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512-virchow2-s0-t900-392627",
+      "genMASK-c3-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512-virchow2-s1-t900-392630",
+      "genMASK-c3m-lr1e-4-r32-kl0-t0.07-wd0.05-ms250-pd512-phikon-s1-t900-392696",
+      "genMASK-lr1e-4-r32-kl0-t0.07-wd0.05-ms250-pd512-midnight-s0-t900-391944",
+      "genMASK-lr1e-4-r32-kl0-t0.07-wd0.05-ms250-pd512-virchow2-s0-t900-391945",
+      "genMASK-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd1024-midnight-s0-t900-391360",
+      "genMASK-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd1024-virchow2-s0-t900-391361",
+      "gridcmp-ctrl-380777",
+      "gridcmp-grid24-380778",
+      "gridcmp-grid49-380779",
+      "gridcmp2-ctrlseed-380863",
+      "gridcmp2-ctrlseed-380889",
+      "gridcmp2-grid12-380862",
+      "gridcmp2-grid2-380890",
+      "gridcmp2-smoke-grid2-380861",
+      "gridcmp3-a-381463",
+      "gridcmp3-b-381464",
+      "gridcmp3-c-381465",
+      "gridcmp3-d-381559",
+      "gridcmp3-e-382001",
+      "gridcmp3-f-382243",
+      "gridcmp3-f-383342",
+      "gridcmp3-smoke-a-381456",
+      "gridcmp3-smoke-b-381456",
+      "gridcmp3-smoke-c-381456",
+      "gridcmp3-smoke-d-381502",
+      "gridcmp3-smoke-e-381999",
+      "headcmp-clsonly-380857",
+      "headcmp-meanonly-380858",
+      "headcmp-split-380856",
+      "klprobe-off-372214",
+      "klprobe-on-372215",
+      "klsw2-lam0.03-372266",
+      "klsw2-lam0.3-372267",
+      "klsw2-lam3-372268",
+      "klsweep-lam10-372228",
+      "klsweep-lam200-372230",
+      "klsweep-lam50-372229",
+      "negprobe-n199-380721",
+      "negprobe-n199-380742",
+      "negprobe-n49-380721",
+      "negprobe-n49-380742",
+      "negprobe-n99-380721",
+      "negprobe-n99-380742",
+      "p3k-phikon-s0-t900-389424",
+      "ph-c2.0m-4.0-phikon-s0-t900-390386",
+      "ph-c2.0m-4.0-phikon-s1-t900-390387",
+      "ph2-midnight-s2-t900-391297",
+      "ph2-virchow2-s2-t900-391299",
+      "poolcmp-attn-381015",
+      "poolcmp-gem-381014",
+      "poolcmp-lse-381016",
+      "ret0.1-phikon-s0-t900-389549",
+      "seedstudy-ctrl-s2-384438",
+      "seedstudy-gem-s1-384436",
+      "seedstudy-gem-s2-384437",
+      "seedstudy-split-s1-384434",
+      "seedstudy-split-s2-384435",
+      "smoke-beta-phikon-s0-t900-389552",
+      "smoke-ctr-phikon-s0-t900-389568",
+      "smoke-ph-c2.0m-2.0-phikon-s0-t900-389701",
+      "smoke-ph2-midnight-s0-t900-390699",
+      "smoke-sim050-phikon-s0-t900-388979",
+      "splitgrid-385293",
+      "splitgrid-386337",
+      "splitgrid-386338",
+      "splitgrid-386341",
+      "splitgrid-386342",
+      "splitgrid-386343",
+      "splitgrid-386344",
+      "splitgrid-386347",
+      "splitgrid-386348",
+      "splitgrid-386349",
+      "splitgrid-386350",
+      "splitgrid-386351",
+      "splitgrid-386352",
+      "splitgrid-386370",
+      "splitgrid-386371",
+      "splitgrid-386374",
+      "splitgrid-386375",
+      "splitgrid-386376",
+      "splitgrid-386380",
+      "splitgrid-386396",
+      "splitgrid-386397",
+      "splitgrid-smoke-384752",
+      "tissuefilt-phikon-s0-t900-387666",
+      "v2ablate-virchow2-s0-t900-389672",
+      "v2ablate-virchow2-s1-t900-389673",
+      "v2ablate-virchow2-s2-t900-389674",
+      "waiv-fullft-369922",
+      "waiv-midnight-369159",
+      "waiv-rank128-371023",
+      "waiv-rank16-371021",
+      "waiv-rank64-371022",
+      "waiv-rank8-371020",
+      "waiv-v2rank128-376088",
+      "waiv-v2rank64-376087",
+      "waiv-virchow2-375367"
+    ],
+    "restart_sibling": [
+      "gridcmp3-a-381463.r1",
+      "gridcmp3-a-381463.r10",
+      "gridcmp3-a-381463.r2",
+      "gridcmp3-a-381463.r3",
+      "gridcmp3-a-381463.r4",
+      "gridcmp3-a-381463.r5",
+      "gridcmp3-a-381463.r6",
+      "gridcmp3-a-381463.r7",
+      "gridcmp3-a-381463.r8",
+      "gridcmp3-a-381463.r9",
+      "gridcmp3-b-381464.r1",
+      "gridcmp3-b-381464.r2",
+      "gridcmp3-b-381464.r3",
+      "gridcmp3-b-381464.r4",
+      "gridcmp3-b-381464.r5",
+      "gridcmp3-b-381464.r6",
+      "gridcmp3-b-381464.r7",
+      "gridcmp3-b-381464.r8",
+      "gridcmp3-c-381465.r1",
+      "gridcmp3-c-381465.r2",
+      "gridcmp3-c-381465.r3",
+      "gridcmp3-c-381465.r4",
+      "gridcmp3-c-381465.r5",
+      "gridcmp3-c-381465.r6",
+      "gridcmp3-c-381465.r7",
+      "gridcmp3-d-381559.r1",
+      "gridcmp3-d-381559.r2",
+      "gridcmp3-f-383342.r1"
+    ],
+    "unknown_backbone": [
+      "waiv-real-369043",
+      "waiv-smoke-369019"
+    ]
+  }
+}

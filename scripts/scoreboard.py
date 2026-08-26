@@ -53,7 +53,14 @@ from typing import Optional
 # Import shared logic from collect_final5 (do not re-implement)
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
+# waivphaet.eval.thunder_protocol is stdlib-only by design (see its docstring) -- it is
+# the ONE definition of THUNDER's per-backbone pooling, shared with the runner, which
+# itself cannot be imported here because it pulls in the THUNDER package.
+if str(_HERE.parent / "src") not in sys.path:
+    sys.path.insert(0, str(_HERE.parent / "src"))
 import collect_final5 as _c5
+import eval_common as _ec
+from waivphaet.eval import thunder_protocol as _thunder_protocol
 
 # F6 fix (2026-08-26): _c5.HEST_BASE is now READ FROM DISK from the same field
 # (hest_perf_per_encoder.custom_encoder) that _c5._hest_score reads for fine-tuned
@@ -67,21 +74,77 @@ PAPER_CLS = _c5.PAPER_CLS           # 12 classification datasets
 PAPER_SEG = _c5.PAPER_SEG           # 2 segmentation datasets
 THUNDER_TASKS = _c5.THUNDER_TASKS   # knn, linear_probing, simple_shot, segmentation
 
-# Waiv published targets (arXiv:2607.22861 Tables 1+3)
-WAIV = {
-    "phikon": {
-        "ri": 0.806,  "hest": 0.3943,
-        "ri_ds": {"tcga": 0.785, "camelyon": 0.702, "tolkach_esca": 0.932},
-    },
-    "midnight": {
-        "ri": 0.924,  "hest": 0.4167,
-        "ri_ds": {"tcga": 0.893, "camelyon": 0.907, "tolkach_esca": 0.972},
-    },
-    "virchow2": {
-        "ri": 0.918,  "hest": 0.4135,
-        "ri_ds": {"tcga": 0.849, "camelyon": 0.935, "tolkach_esca": 0.969},
-    },
+# ── Waiv published targets (arXiv:2607.22861 Tables 1+3) ────────────────────
+# READ FROM docs/waiv_published.json, not retyped here.  That file is the full
+# transcription of all 20 rows of their tables; this module used to hold a
+# hand-copied subset of three of them, which is a second source of truth for a
+# published constant -- the exact shape of bug that produced the HEST base
+# discrepancy (F6).  The literals it used to hold are pinned as a regression
+# guard in tests/test_invariants.py, which asserts the derived dicts still equal
+# them value-for-value.
+#
+# Their model NAMES are not our arm tokens, and for two backbones the fine-tuned
+# row has a different name from the base row (Phikon-v2 -> Phaet,
+# Midnight-12k -> Mascaret), so the correspondence has to be stated.  It is
+# stated ONCE, here, as (base_row, fine_tuned_row) keyed by our arm.
+#
+# TRAP: "H0-mini" is a separate row and a DIFFERENT model -- a distillation of
+# H-Optimus-0, with its own numbers and its own (clsmean) THUNDER protocol.  It
+# is not an alias for `hoptimus`.
+WAIV_PUBLISHED_JSON = _HERE.parent / "docs" / "waiv_published.json"
+
+WAIV_ROWS = {
+    "phikon":   (("Phikon-v2", "base"),    ("Phaet", "fine-tuned")),
+    "midnight": (("Midnight-12k", "base"), ("Mascaret", "fine-tuned")),
+    "virchow2": (("Virchow2", "base"),     ("Virchow2", "fine-tuned")),
+    "hoptimus": (("H-Optimus-0", "base"),  ("H-Optimus-0", "fine-tuned")),
+    "uni2":     (("UNI2-h", "base"),       ("UNI2-h", "fine-tuned")),
 }
+
+#: Waiv's THUNDER task names -> ours.  Their two extra tasks (calibration,
+#: adversarial) are not computed by this repo and are dropped here on purpose --
+#: see note (a) below on why any mean over these four is not their rank sum.
+_WAIV_THUNDER_TASKS = {
+    "knn": "knn",
+    "linear": "linear_probing",
+    "few_shot": "simple_shot",
+    "segmentation": "segmentation",
+}
+
+#: Their RI per-dataset key -> ours.
+_WAIV_RI_DS = {"tcga": "tcga", "camelyon": "camelyon", "tolkach": "tolkach_esca"}
+
+
+def _load_waiv_published():
+    """(WAIV, WAIV_THUNDER) read from docs/waiv_published.json.  ONE formula, all arms."""
+    try:
+        blob = json.loads(WAIV_PUBLISHED_JSON.read_text())
+    except Exception as exc:
+        raise RuntimeError(
+            f"cannot read the Waiv published-numbers transcription at "
+            f"{WAIV_PUBLISHED_JSON}: {exc}. Every pct_of_waiv denominator comes from "
+            "that file; there is no fallback literal to fall back to."
+        ) from exc
+    index = {(m["name"], m["variant"]): m for m in blob["models"]}
+    waiv, waiv_thunder = {}, {}
+    for arm, (base_row, ft_row) in WAIV_ROWS.items():
+        missing = [r for r in (base_row, ft_row) if r not in index]
+        if missing:
+            raise RuntimeError(
+                f"arm {arm!r} maps to rows {missing} which are not in "
+                f"{WAIV_PUBLISHED_JSON.name}; fix WAIV_ROWS or the transcription."
+            )
+        base, ft = index[base_row], index[ft_row]
+        waiv[arm] = {
+            "ri": ft["ri"]["avg"],
+            "hest": ft["hest_avg"],
+            "ri_ds": {ours: ft["ri"][theirs] for theirs, ours in _WAIV_RI_DS.items()},
+        }
+        waiv_thunder[arm] = {
+            "base": {ours: base["thunder"][theirs] for theirs, ours in _WAIV_THUNDER_TASKS.items()},
+            "ft": {ours: ft["thunder"][theirs] for theirs, ours in _WAIV_THUNDER_TASKS.items()},
+        }
+    return waiv, waiv_thunder
 
 # ── Waiv published THUNDER targets ──────────────────────────────────────────
 # Source: Filiot, Thaeter, Schmauch, Guillou, "Robustifying pathology foundation
@@ -129,21 +192,20 @@ WAIV = {
 #  (d) WAIV REGRESS ON SOME TASKS.  Where Waiv_ft < Waiv_base the denominator is
 #      negative and pct_of_waiv is meaningless (matching a regression would score
 #      100%).  Those cells are guarded to N/A with reason "waiv_regressed".
-WAIV_THUNDER = {
-    "phikon": {   # Table 2 rows "Phikon-v2" (Base) and "Phaet" (Fine-tuned)
-        "base": {"knn": 74.0, "linear_probing": 79.3, "simple_shot": 71.8, "segmentation": 66.5},
-        "ft":   {"knn": 77.7, "linear_probing": 80.7, "simple_shot": 73.3, "segmentation": 65.3},
-    },
-    "midnight": {  # Table 2 rows "Midnight-12k" (Base) and "Mascaret" (Fine-tuned)
-        "base": {"knn": 80.0, "linear_probing": 84.4, "simple_shot": 71.5, "segmentation": 66.0},
-        "ft":   {"knn": 81.7, "linear_probing": 84.6, "simple_shot": 75.2, "segmentation": 67.6},
-    },
-    "virchow2": {  # Table 2 rows "Virchow2" (Base) and "Virchow2" (Fine-tuned)
-        "base": {"knn": 82.9, "linear_probing": 84.8, "simple_shot": 73.9, "segmentation": 68.2},
-        "ft":   {"knn": 82.6, "linear_probing": 85.1, "simple_shot": 76.6, "segmentation": 68.0},
-    },
-}
-WAIV_THUNDER_SOURCE = "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24"
+#  (e) NOT EVERY ARM IS GRADEABLE.  For `hoptimus` and especially `uni2`, Waiv's own
+#      THUNDER gain is at or below our measured seed floor, and three of UNI2-h's four
+#      task gains are NEGATIVE.  Nothing special is done about that here: (d)'s
+#      `waiv_regressed` guard already refuses a ratio against a negative denominator,
+#      _cap_pct already handles a near-zero one, and _thunder_2se returns None for an
+#      (arm, task) whose floor was never measured -- which the callers already turn into
+#      an ungradeable cell.  The generic guards ARE the answer; do not add a per-model
+#      case.
+WAIV, WAIV_THUNDER = _load_waiv_published()
+WAIV_SOURCE = f"docs/waiv_published.json ({WAIV_PUBLISHED_JSON})"
+WAIV_THUNDER_SOURCE = (
+    "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24, "
+    "read from docs/waiv_published.json"
+)
 
 # Tasks whose dataset support differs between us (2 seg datasets) and Waiv (4).
 THUNDER_SUPPORT_MISMATCH = {"segmentation"}
@@ -178,7 +240,10 @@ NOISE_SD = {
 # "2*seed_SD > 20% of Waiv's gain" -- 2*sd/gain > 0.20  <=>  sd/gain*100 > 10.
 # What changes here is the CONSEQUENCE: the cell used to be annotated and printed anyway;
 # now the number is withheld and a raw delta + CI is printed in its place.
-UNRESOLVABLE_SD_PCT_LIMIT = 10.0
+# F-B fix (2026-08-26): the threshold AND the test now live in scripts/eval_common.py so
+# that final_recipe_report.py applies literally the same gate instead of its own private
+# THUNDER-only variant.  The name is re-exported unchanged for every existing caller.
+UNRESOLVABLE_SD_PCT_LIMIT = _ec.UNRESOLVABLE_SD_PCT_LIMIT
 
 # THUNDER per-(backbone, task) seed floors, offset-2SE form.
 # Source: docs/thunder_seed_floor_12ds.md (raw: docs/thunder_seed_floor_12ds.json,
@@ -250,7 +315,11 @@ VERDICT_MIN_PCT = 70.0
 MIN_N_FOR_VERDICT = 2
 VERDICT_MEAN_PCT = 80.0
 
-ARMS = ("phikon", "midnight", "virchow2")
+# One list of arms for the whole repo, defined in collect_final5.ARM_BACKBONE next to
+# the tables that are keyed by it.  A second tuple here is how `hoptimus` ends up in the
+# collector's aggregates and missing from every scoreboard table.
+ARMS = _c5.ARMS
+ARM_BACKBONE = _c5.ARM_BACKBONE
 
 _REPO = Path(__file__).resolve().parents[1]
 _DEFAULT_RUNS = _REPO / "runs"
@@ -338,17 +407,21 @@ def _pct_of_waiv_two_base(ours, our_base, waiv_base, waiv_ft):
 def _thunder_pooling(arm):
     """THUNDER *classification* pooling protocol per backbone.
 
-    F10 fix (2026-08-26): this used to return the HEST rule (`cls` unless virchow2),
-    which is WRONG for midnight.  The authoritative source is
-    collect_final5.THUNDER_BASE_DIRS, whose classification base dirs are
-    base_cls (phikon) / mbase_clsmean (midnight) / vbase_clsmean (virchow2) --
-    i.e. phikon is `cls`, midnight and virchow2 are `clsmean`.  This matches
-    docs/thunder_seed_floor_12ds.md.  It is DELIBERATELY different from
-    collect_final5.hest_pooling(): the two benchmarks use different protocols and
-    the two rules must never be shared.  (Display-only field, but a wrong label on
-    a results table is how protocol-mismatch bugs get reintroduced.)
+    Delegates to `waivphaet.eval.thunder_protocol`, which is the same table the
+    THUNDER runner itself resolves `WAIV_POOLING=auto` through.  Two earlier
+    versions of this function were local re-derivations and both were wrong:
+    first `cls unless virchow2` (the HEST rule, wrong for midnight), then
+    `cls if phikon else clsmean` -- which is right for the published trio by
+    coincidence and wrong for every backbone added after it, including
+    H-Optimus-0 and UNI2-h (both `cls`).  The protocol is a transcription of
+    arXiv:2607.22861 3 and cannot be inferred from an arm name at all, so this
+    reads the transcription instead of paraphrasing it.
+
+    It stays DELIBERATELY separate from collect_final5.hest_pooling(): the two
+    benchmarks use different protocols (midnight is cls on HEST, clsmean on
+    THUNDER) and those two rules must never be merged.
     """
-    return "cls" if arm == "phikon" else "clsmean"
+    return _thunder_protocol.default_pooling(ARM_BACKBONE[arm])
 
 
 def _thunder_2se(arm, task):
@@ -725,7 +798,9 @@ def score_run(meta, step):
         r["%s_by_construction" % metric] = False
         r["%s_raw_delta" % metric] = (ours_v - base_v) if (ours_v is not None and base_v is not None) else None
         r["%s_raw_ci95" % metric] = (1.96 * sd_v) if sd_v is not None else None
-        if sd_pct is not None and sd_pct > UNRESOLVABLE_SD_PCT_LIMIT:
+        unres_bc, _sdp, _why = _ec.denominator_unresolvable(
+            _waiv_gain(base_v, (waiv_dict or {}).get(metric)), sd_v)
+        if unres_bc and sd_pct is not None:
             r["%s_by_construction" % metric] = True
             r["%s_pct_withheld" % metric] = r.get("%s_pct" % metric)
             r["%s_pct" % metric] = None
