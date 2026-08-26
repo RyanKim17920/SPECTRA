@@ -513,14 +513,20 @@ def main() -> int:
         raise SystemExit("--checkpoint and --adapter are mutually exclusive")
 
     sys.path.insert(0, str(REPO / "src"))
-    from waivphaet.models.encoder import lora_scale_tag
 
     # Cache trap, same shape as run_hest.py's: extracted features live under
     # <features-dir>/<model-name>/<dataset> and nothing else. Two scales under one
     # model-name is a collision; out_dir.exists() below already refuses to overwrite, so
     # the failure mode is a confusing SystemExit hours in rather than a silent wrong
     # number -- but require the token up front so the sweep is legible on disk.
+    #
+    # The import sits INSIDE the branch, matching run_hest.py:113-115. Hoisted to the top
+    # of main() it made every base extraction -- which passes no adapter and no scale --
+    # depend on a LoRA-sweep helper it never calls, so when that helper went missing from
+    # encoder.py the plain PathoROB base path died on ImportError before loading a model.
     if args.lora_scale != 1.0:
+        from waivphaet.models.encoder import lora_scale_tag
+
         tag = lora_scale_tag(args.lora_scale)
         if tag not in args.model_name:
             raise SystemExit(

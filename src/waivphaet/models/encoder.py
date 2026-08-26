@@ -1206,6 +1206,46 @@ class WaivEncoder(nn.Module):
             return self.backbone
         return self.backbone.merge_and_unload()
 
+    def set_lora_scale(self, scale: float) -> int:
+        """Rescale every LoRA delta by ``scale`` in place; returns the layers touched.
+
+        Interpolates between the base model (``scale=0``) and the trained one
+        (``scale=1``) without rebuilding either. PEFT keeps the effective multiplier in
+        ``LoraLayer.scaling[adapter]``, normally ``alpha / r``; we overwrite it rather
+        than multiply so repeated calls are idempotent instead of compounding.
+
+        Returns the LoRA layer count so callers can assert the adapter actually attached
+        -- a silent 0 here would read as "interpolation is flat" rather than "no adapter".
+        """
+        from peft.tuners.lora import LoraLayer
+
+        n = 0
+        for module in self.backbone.modules():
+            if isinstance(module, LoraLayer):
+                for adapter in module.scaling:
+                    base = module.lora_alpha[adapter] / module.r[adapter]
+                    module.scaling[adapter] = base * scale
+                n += 1
+        if n == 0:
+            raise RuntimeError(
+                f"set_lora_scale({scale}) found no LoRA layers: the adapter did not "
+                "attach, and scoring would silently return base-model features"
+            )
+        return n
+
+
+def lora_scale_tag(scale: float) -> str:
+    """Filename-safe token for a LoRA scale: 0.5 -> 'ls050', 0.75 -> 'ls075'.
+
+    Both feature dirs and HEST exp_codes key on the model name ALONE, so two scales
+    written under one name collide and the second silently scores the first's
+    embeddings. Callers derive the required token from the value with this helper and
+    hard-fail if it is absent from the name, which also catches a hand-typed 'ls050'
+    while actually passing 0.75. Nothing is required at scale 1.0, so every name
+    already on disk stays valid.
+    """
+    return f"ls{round(scale * 100):03d}"
+
 
 #: The class was phikon-v2-specific when it was written; it no longer is. Alias kept so
 #: saved checkpoints, the THUNDER entry point and any external caller keep importing.

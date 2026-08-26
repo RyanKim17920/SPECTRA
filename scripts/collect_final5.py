@@ -146,12 +146,13 @@ THUNDER_BASE_DIRS: dict[str, dict[str, str]] = {
     "phikon":   {"cls": "base_cls",      "seg": "base_cls"},
     "midnight": {"cls": "mbase_clsmean", "seg": "mbase_cls"},
     "virchow2": {"cls": "vbase_clsmean", "seg": "vbase_cls"},
-    # hoptimus / uni2: no base THUNDER run exists yet.  `_thunder_base_per_ds` already
-    # returns empty dicts for an arm that is absent here, so every THUNDER delta for them
-    # is None ("no base") through the existing generic path.  When the base runs land,
-    # add {"cls": "<dir>", "seg": "<dir>"} -- and note that BOTH are cls-pooled for these
-    # two backbones (waivphaet.eval.thunder_protocol.THUNDER_CLS_BACKBONES), unlike
-    # midnight/virchow2 whose classification dir is clsmean.
+    # hoptimus / uni2: BOTH task kinds are cls-pooled for these two backbones
+    # (waivphaet.eval.thunder_protocol.THUNDER_CLS_BACKBONES), unlike midnight/virchow2
+    # whose classification dir is clsmean -- so these two dirs differ only by the seg
+    # suffix, not by pooling.  Same split-dir base layout as the trio above (one dir per
+    # task kind for base; the FT runs still use ONE dir for all task kinds).
+    "hoptimus": {"cls": "hoptimus_base_cls", "seg": "hoptimus_base_cls_seg"},
+    "uni2":     {"cls": "uni2_base_cls",     "seg": "uni2_base_cls_seg"},
 }
 
 # HEST work dir (run_hest.py default = H.DEFAULT_WORK_DIR)
@@ -169,9 +170,14 @@ HEST_BASE_FILES = {
     "phikon":   "base_cls_summary.json",
     "midnight": "midnight_base_cls_9task_v1_summary.json",
     "virchow2": "vbase_clsmean_summary.json",
-    # hoptimus / uni2: no base HEST summary exists yet.  Absent, not zero: `_load_hest_base`
-    # only iterates this dict, so HEST_BASE simply has no key for them and every consumer's
-    # `.get(arm)` is None.
+    # hoptimus / uni2: cls-pooled, per HEST_POOLING below (neither backbone is on Waiv's
+    # clsmean list).  Bare filenames like the entries above -- `_hest_summary_paths`
+    # resolves them against HEST_WORK_DIR/results and the results_backup mirror.  Until
+    # those base evals land the files are simply absent, and `_load_hest_base` leaves the
+    # key out of HEST_BASE entirely (absent, not zero), so every consumer's `.get(arm)`
+    # keeps returning None through the existing path.
+    "hoptimus": "hoptimus_base_cls_9task_v1_summary.json",
+    "uni2":     "uni2_base_cls_9task_v1_summary.json",
 }
 
 
