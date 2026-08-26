@@ -127,6 +127,14 @@ RI_BASE_MODEL_DIRS = {
     "phikon":   "phikonv2_clsmean_ours",
     "midnight": "midnight_clsmean_ours",
     "virchow2": "virchow2_clsmean_base",
+    # The two GATED backbones, built from local checkpoints (encoder.BACKBONE_LOCAL_DIRS).
+    # Both are `clsmean` on PathoROB, matching the trio above.
+    #
+    # An arm listed here whose results are not on disk YET is ABSENT from load_ri_base()'s
+    # output, not an error -- that is how the report learns its RI denominator has not
+    # been measured.  A PARTIAL set (some datasets but not all) still raises; see below.
+    "uni2":     "uni2h_clsmean",
+    "hoptimus": "hoptimus_clsmean",
 }
 PATHOROB_RESULTS = REPO / "third_party" / "PathoROB" / "results" / "robustness_index"
 RI_DATASETS = ("tcga", "camelyon", "tolkach_esca")
@@ -135,19 +143,33 @@ RI_DATASETS = ("tcga", "camelyon", "tolkach_esca")
 def load_ri_base():
     """Per-backbone Avg RI of the untuned backbone, averaged over RI_DATASETS.
 
-    Raises when a dataset is missing: an average over a SUBSET of the three datasets is
-    a different quantity, and silently returning it would bias every pct_of_waiv that
-    divides by it.
+    NOT MEASURED vs MEASURED-IN-PART.  An arm with NONE of the three datasets on disk is
+    simply absent from the result: its base has not been measured yet, which is a fact the
+    caller must be able to see (that is what puts a backbone in the report's "not
+    gradeable" block) rather than a crash that takes the whole report down with it.
+
+    An arm with SOME but not all three still RAISES.  An average over a subset of the
+    datasets is a different quantity wearing the same name, and silently returning it
+    would bias every pct_of_waiv that divides by it -- and, unlike a wholly-missing arm,
+    a partial one is evidence that something went wrong rather than that nothing has run.
     """
     vals, src = {}, {}
     for arm, model in RI_BASE_MODEL_DIRS.items():
+        paths = {ds: PATHOROB_RESULTS / model / ds / "-1_0" / "results_summary.json"
+                 for ds in RI_DATASETS}
+        found = [ds for ds, p in paths.items() if p.exists()]
+        if not found:
+            continue
         per = {}
         for ds in RI_DATASETS:
-            p = PATHOROB_RESULTS / model / ds / "-1_0" / "results_summary.json"
+            p = paths[ds]
             if not p.exists():
                 raise FileNotFoundError(
-                    "RI base for %s: missing %s.  Refusing to fall back to a literal -- "
-                    "an unavailable number must be unavailable, not substituted." % (arm, p))
+                    "RI base for %s is PARTIAL: %s of %s present, missing %s.  Refusing "
+                    "to average over a subset -- that is a different quantity, and "
+                    "refusing to fall back to a literal -- an unavailable number must be "
+                    "unavailable, not substituted."
+                    % (arm, sorted(found), list(RI_DATASETS), p))
             per[ds] = float(json.loads(p.read_text())["robustness_index"])
         vals[arm] = sum(per.values()) / len(per)
         src[arm] = "%s/%s/<%s>/-1_0/results_summary.json" % (
