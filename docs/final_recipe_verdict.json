@@ -1,0 +1,1002 @@
+{
+  "criterion": {
+    "pass_bar_per_cell": 70.0,
+    "overall_average_bar": 80.0,
+    "pct_capped_at": 100,
+    "cap_is_reporting_only": "the 100 cap is applied AFTER the >=70 resolution test and only to the displayed/averaged value; the test runs on the uncapped interval",
+    "scored_by": "worst (backbone, benchmark) cell"
+  },
+  "stopping_rule": "first checkpoint with mean confounder_insensitivity >= 0.75",
+  "sources": {
+    "waiv_thunder": "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24",
+    "thunder_floors": "docs/thunder_seed_floor_12ds.md (n=5 training seeds, offset-2SE, 12/12 coverage)",
+    "hest_sd_pct_points": {
+      "phikon": 5.8,
+      "midnight": 8.3,
+      "virchow2": 14.2
+    }
+  },
+  "runs": [
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s0-t900-392670",
+      "backbone": "midnight",
+      "seed": 0,
+      "train_jobid": "392670",
+      "selected_step": 125,
+      "mean_confounder_insensitivity": 0.9192967764949952,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.9192967764949952,
+          "n_datasets": 3
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.9844235445396902,
+          "n_datasets": 3
+        },
+        {
+          "step": 375,
+          "mean_ci": 1.0089241377816605,
+          "n_datasets": 3
+        },
+        {
+          "step": 500,
+          "mean_ci": 1.0003239111885878,
+          "n_datasets": 3
+        }
+      ],
+      "ri": 0.9106071997110323,
+      "hest": 0.4150222222222222,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s0-t900-392670_s0000125_cls_summary.json",
+      "thunder_model": "f5_ci-midnight-s0-392670_s0000125",
+      "thunder": {
+        "knn": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        }
+      }
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s1-t900-392673",
+      "backbone": "midnight",
+      "seed": 1,
+      "train_jobid": "392673",
+      "selected_step": 125,
+      "mean_confounder_insensitivity": 0.8898319318799714,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.8898319318799714,
+          "n_datasets": 3
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.9916604175255901,
+          "n_datasets": 3
+        },
+        {
+          "step": 375,
+          "mean_ci": 0.9964458833299933,
+          "n_datasets": 3
+        },
+        {
+          "step": 500,
+          "mean_ci": 1.0145614874938282,
+          "n_datasets": 3
+        }
+      ],
+      "ri": 0.9125618657952231,
+      "hest": 0.41500000000000004,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s1-t900-392673_s0000125_cls_summary.json",
+      "thunder_model": "f5_ci-midnight-s1-392673_s0000125",
+      "thunder": {
+        "knn": {
+          "coverage": 5,
+          "mean": null,
+          "partial_mean": 0.7814988741567775,
+          "datasets_present": [
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform"
+          ],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "wilds"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 2,
+          "mean": null,
+          "partial_mean": 0.7307388698357564,
+          "datasets_present": [
+            "mhist",
+            "tcga_crc_msi"
+          ],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "patch_camelyon",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 2,
+          "mean": null,
+          "partial_mean": 0.6146481167121928,
+          "datasets_present": [
+            "mhist",
+            "tcga_crc_msi"
+          ],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "patch_camelyon",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        }
+      }
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s0-t900-392669",
+      "backbone": "phikon",
+      "seed": 0,
+      "train_jobid": "392669",
+      "selected_step": 250,
+      "mean_confounder_insensitivity": 0.7805342423336105,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.5042910398295283,
+          "n_datasets": 3
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.7805342423336105,
+          "n_datasets": 3
+        },
+        {
+          "step": 375,
+          "mean_ci": 0.8305817448291403,
+          "n_datasets": 3
+        },
+        {
+          "step": 500,
+          "mean_ci": 0.8209948026068199,
+          "n_datasets": 3
+        }
+      ],
+      "ri": 0.8370650720692612,
+      "hest": 0.39115555555555553,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s0-t900-392669_s0000250_cls_summary.json",
+      "thunder_model": "f5_ci-phikon-s0-392669_s0000250",
+      "thunder": {
+        "knn": {
+          "coverage": 12,
+          "mean": 0.7537605861942777,
+          "partial_mean": 0.7537605861942777,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        },
+        "linear_probing": {
+          "coverage": 9,
+          "mean": null,
+          "partial_mean": 0.7741753169449772,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils"
+          ],
+          "datasets_missing": [
+            "esca",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 7,
+          "mean": null,
+          "partial_mean": 0.6642554836359112,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "mhist",
+            "tcga_crc_msi"
+          ],
+          "datasets_missing": [
+            "esca",
+            "patch_camelyon",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        }
+      }
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672",
+      "backbone": "phikon",
+      "seed": 1,
+      "train_jobid": "392672",
+      "selected_step": 250,
+      "mean_confounder_insensitivity": 0.8002730935361829,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.5115806384211393,
+          "n_datasets": 3
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.8002730935361829,
+          "n_datasets": 3
+        },
+        {
+          "step": 375,
+          "mean_ci": 0.8029839851430466,
+          "n_datasets": 3
+        },
+        {
+          "step": 500,
+          "mean_ci": 0.8279557539440523,
+          "n_datasets": 3
+        }
+      ],
+      "ri": 0.8351338230826633,
+      "hest": 0.3937333333333333,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672_s0000250_cls_summary.json",
+      "thunder_model": "f5_ci-phikon-s1-392672_s0000250",
+      "thunder": {
+        "knn": {
+          "coverage": 6,
+          "mean": null,
+          "partial_mean": 0.6978862600482856,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "mhist"
+          ],
+          "datasets_missing": [
+            "esca",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 5,
+          "mean": null,
+          "partial_mean": 0.7058081619836561,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "mhist"
+          ],
+          "datasets_missing": [
+            "crc",
+            "esca",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 5,
+          "mean": null,
+          "partial_mean": 0.6164168529838661,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "mhist"
+          ],
+          "datasets_missing": [
+            "crc",
+            "esca",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        }
+      }
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671",
+      "backbone": "virchow2",
+      "seed": 0,
+      "train_jobid": "392671",
+      "selected_step": 125,
+      "mean_confounder_insensitivity": 0.8819794106196538,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.8819794106196538,
+          "n_datasets": 3
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.9625894105788343,
+          "n_datasets": 3
+        },
+        {
+          "step": 375,
+          "mean_ci": 0.9852752239470656,
+          "n_datasets": 3
+        },
+        {
+          "step": 500,
+          "mean_ci": 0.9733386082076843,
+          "n_datasets": 3
+        }
+      ],
+      "ri": 0.9059725324855594,
+      "hest": 0.41092222222222224,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671_s0000125_clsmean_summary.json",
+      "thunder_model": "f5_ci-virchow2-s0-392671_s0000125",
+      "thunder": {
+        "knn": {
+          "coverage": 11,
+          "mean": null,
+          "partial_mean": 0.7981856405667251,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform"
+          ],
+          "datasets_missing": [
+            "wilds"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 7,
+          "mean": null,
+          "partial_mean": 0.7992967571757542,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "mhist",
+            "tcga_crc_msi"
+          ],
+          "datasets_missing": [
+            "esca",
+            "patch_camelyon",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 7,
+          "mean": null,
+          "partial_mean": 0.7331734416037419,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "mhist",
+            "tcga_crc_msi"
+          ],
+          "datasets_missing": [
+            "esca",
+            "patch_camelyon",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        }
+      }
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s1-t900-392674",
+      "backbone": "virchow2",
+      "seed": 1,
+      "train_jobid": "392674",
+      "selected_step": 125,
+      "mean_confounder_insensitivity": 0.872429819094308,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.872429819094308,
+          "n_datasets": 3
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.9609095766998764,
+          "n_datasets": 3
+        },
+        {
+          "step": 375,
+          "mean_ci": 0.9642668815669345,
+          "n_datasets": 3
+        },
+        {
+          "step": 500,
+          "mean_ci": 0.9908751971026771,
+          "n_datasets": 3
+        }
+      ],
+      "ri": 0.9080333994850136,
+      "hest": 0.41055555555555556,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s1-t900-392674_s0000125_clsmean_summary.json",
+      "thunder_model": "f5_ci-virchow2-s1-392674_s0000125",
+      "thunder": {
+        "knn": {
+          "coverage": 2,
+          "mean": null,
+          "partial_mean": 0.6966979291573898,
+          "datasets_present": [
+            "bach",
+            "bracs"
+          ],
+          "datasets_missing": [
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 1,
+          "mean": null,
+          "partial_mean": 0.8134339484545166,
+          "datasets_present": [
+            "bach"
+          ],
+          "datasets_missing": [
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 1,
+          "mean": null,
+          "partial_mean": 0.7619267919978692,
+          "datasets_present": [
+            "bach"
+          ],
+          "datasets_missing": [
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ]
+        }
+      }
+    }
+  ],
+  "cells": {
+    "phikon": {
+      "RI": {
+        "pct": 100.0,
+        "pct_capped": 100.0,
+        "pct_uncapped": 108.92099809601724,
+        "ci": 1.8987514634114167,
+        "lower_uncapped": 107.02224663260583,
+        "upper_uncapped": 110.81974955942866,
+        "was_capped": true,
+        "status": "PASS",
+        "n": 2,
+        "raw_mean": 0.8360994475759622,
+        "base": 0.4686,
+        "waiv": 0.806,
+        "per_seed_pct": [
+          100.0,
+          100.0
+        ],
+        "per_seed_pct_uncapped": [
+          109.20719385573834,
+          108.63480233629615
+        ],
+        "pct_capped_mean_of_capped_seeds": 100.0,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=0.0, measured seed floor=1.9 [no floor measured at step 250; conservative max over measured steps]); 2/2 seeds censored at the 100 cap"
+      },
+      "HEST": {
+        "pct": 90.5328798185941,
+        "pct_capped": 90.5328798185941,
+        "pct_uncapped": 90.5328798185941,
+        "ci": 8.202438661763951,
+        "lower_uncapped": 82.33044115683015,
+        "upper_uncapped": 98.73531848035805,
+        "was_capped": false,
+        "status": "PASS",
+        "n": 2,
+        "raw_mean": 0.39244444444444443,
+        "base": 0.3747,
+        "waiv": 0.3943,
+        "per_seed_pct": [
+          83.95691609977321,
+          97.108843537415
+        ],
+        "per_seed_pct_uncapped": [
+          83.95691609977321,
+          97.108843537415
+        ],
+        "pooling": "cls",
+        "ci_source": "authoritative 1-SD 5.8 pct pts, 2*SD/sqrt(n)"
+      },
+      "THUNDER": {
+        "pct": 100.0,
+        "pct_capped": 100.0,
+        "pct_uncapped": 137.71304896545317,
+        "ci": 62.972972972972926,
+        "lower_uncapped": 74.74007599248024,
+        "upper_uncapped": 200.6860219384261,
+        "was_capped": true,
+        "status": "PASS",
+        "n": 1,
+        "tasks": {
+          "knn": {
+            "waiv_gain": 0.037000000000000026,
+            "floor": 0.0233,
+            "our_base": 0.70280675807706,
+            "our_base_coverage": "12/12",
+            "pct": 100.0,
+            "pct_capped": 100.0,
+            "pct_uncapped": 137.71304896545317,
+            "ci": 62.972972972972926,
+            "lower_uncapped": 74.74007599248024,
+            "upper_uncapped": 200.6860219384261,
+            "was_capped": true,
+            "status": "PASS",
+            "n": 1,
+            "raw_mean": 0.7537605861942777,
+            "per_seed_pct": [
+              100.0
+            ],
+            "per_seed_pct_uncapped": [
+              137.71304896545317
+            ],
+            "coverage": "12/12"
+          },
+          "linear_probing": {
+            "waiv_gain": 0.014000000000000058,
+            "floor": 0.0097,
+            "our_base": 0.7654134679125493,
+            "our_base_coverage": "12/12",
+            "pct": null,
+            "pct_capped": null,
+            "pct_uncapped": null,
+            "ci": null,
+            "lower_uncapped": null,
+            "upper_uncapped": null,
+            "was_capped": false,
+            "n": 0,
+            "status": "PARTIAL",
+            "reason": "coverage 9,5/12 per seed; 12ds floor invalid below 12/12"
+          },
+          "simple_shot": {
+            "waiv_gain": 0.015,
+            "floor": 0.0087,
+            "our_base": 0.693297639657079,
+            "our_base_coverage": "12/12",
+            "pct": null,
+            "pct_capped": null,
+            "pct_uncapped": null,
+            "ci": null,
+            "lower_uncapped": null,
+            "upper_uncapped": null,
+            "was_capped": false,
+            "n": 0,
+            "status": "PARTIAL",
+            "reason": "coverage 7,5/12 per seed; 12ds floor invalid below 12/12"
+          }
+        },
+        "tasks_graded": [
+          "knn"
+        ],
+        "tasks_excluded": {
+          "linear_probing": "PARTIAL",
+          "simple_shot": "PARTIAL"
+        }
+      }
+    },
+    "midnight": {
+      "RI": {
+        "pct": 92.48003195222756,
+        "pct_capped": 92.48003195222756,
+        "pct_uncapped": 92.48003195222756,
+        "ci": 4.128715548539259,
+        "lower_uncapped": 88.3513164036883,
+        "upper_uncapped": 96.60874750076682,
+        "was_capped": false,
+        "status": "PASS",
+        "n": 2,
+        "raw_mean": 0.9115845327531278,
+        "base": 0.7589,
+        "waiv": 0.924,
+        "per_seed_pct": [
+          91.88806766264827,
+          93.07199624180684
+        ],
+        "per_seed_pct_uncapped": [
+          91.88806766264827,
+          93.07199624180684
+        ],
+        "pct_capped_mean_of_capped_seeds": 92.48003195222756,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=1.2, measured seed floor=4.1 [no floor measured at step 125; conservative max over measured steps])"
+      },
+      "HEST": {
+        "pct": 92.14104751564028,
+        "pct_capped": 92.14104751564028,
+        "pct_uncapped": 92.14104751564028,
+        "ci": 11.737972567696689,
+        "lower_uncapped": 80.4030749479436,
+        "upper_uncapped": 103.87902008333697,
+        "was_capped": false,
+        "status": "PASS",
+        "n": 2,
+        "raw_mean": 0.4150111111111111,
+        "base": 0.39521,
+        "waiv": 0.4167,
+        "per_seed_pct": [
+          92.19275115040561,
+          92.08934388087494
+        ],
+        "per_seed_pct_uncapped": [
+          92.19275115040561,
+          92.08934388087494
+        ],
+        "pooling": "cls",
+        "ci_source": "authoritative 1-SD 8.3 pct pts, 2*SD/sqrt(n)"
+      },
+      "THUNDER": {
+        "pct": null,
+        "pct_capped": null,
+        "pct_uncapped": null,
+        "ci": null,
+        "lower_uncapped": null,
+        "upper_uncapped": null,
+        "was_capped": false,
+        "n": 0,
+        "tasks": {
+          "knn": {
+            "waiv_gain": 0.01700000000000003,
+            "floor": 0.01,
+            "our_base": 0.7825353757244123,
+            "our_base_coverage": "12/12",
+            "pct": null,
+            "pct_capped": null,
+            "pct_uncapped": null,
+            "ci": null,
+            "lower_uncapped": null,
+            "upper_uncapped": null,
+            "was_capped": false,
+            "n": 0,
+            "status": "PARTIAL",
+            "reason": "coverage 0,5/12 per seed; 12ds floor invalid below 12/12"
+          },
+          "linear_probing": {
+            "waiv_gain": 0.0019999999999998864,
+            "floor": 0.0087,
+            "our_base": 0.8287964739477837,
+            "our_base_coverage": "12/12",
+            "pct": null,
+            "pct_capped": null,
+            "pct_uncapped": null,
+            "ci": null,
+            "lower_uncapped": null,
+            "upper_uncapped": null,
+            "was_capped": false,
+            "n": 0,
+            "status": "INDETERMINATE",
+            "reason": "waiv gain +0.0020 < benchmark seed noise 0.0087 -- denominator is noise"
+          },
+          "simple_shot": {
+            "waiv_gain": 0.037000000000000026,
+            "floor": 0.0104,
+            "our_base": 0.7063877457552551,
+            "our_base_coverage": "12/12",
+            "pct": null,
+            "pct_capped": null,
+            "pct_uncapped": null,
+            "ci": null,
+            "lower_uncapped": null,
+            "upper_uncapped": null,
+            "was_capped": false,
+            "n": 0,
+            "status": "PARTIAL",
+            "reason": "coverage 0,2/12 per seed; 12ds floor invalid below 12/12"
+          }
+        },
+        "status": "PARTIAL",
+        "reason": "knn: PARTIAL; linear_probing: INDETERMINATE; simple_shot: PARTIAL"
+      }
+    },
+    "virchow2": {
+      "RI": {
+        "pct": 81.61031101218475,
+        "pct_capped": 81.61031101218475,
+        "pct_uncapped": 81.61031101218475,
+        "ci": 11.23330170781303,
+        "lower_uncapped": 70.37700930437173,
+        "upper_uncapped": 92.84361271999778,
+        "was_capped": false,
+        "status": "PASS",
+        "n": 2,
+        "raw_mean": 0.9070029659852865,
+        "base": 0.8582,
+        "waiv": 0.918,
+        "per_seed_pct": [
+          79.88717806949732,
+          83.3334439548722
+        ],
+        "per_seed_pct_uncapped": [
+          79.88717806949732,
+          83.3334439548722
+        ],
+        "pct_capped_mean_of_capped_seeds": 81.61031101218475,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=3.4, measured seed floor=11.2 [no floor measured at step 125; conservative max over measured steps])"
+      },
+      "HEST": {
+        "pct": 73.08858566168541,
+        "pct_capped": 73.08858566168541,
+        "pct_uncapped": 73.08858566168541,
+        "ci": 20.081832585697946,
+        "lower_uncapped": 53.00675307598747,
+        "upper_uncapped": 93.17041824738337,
+        "was_capped": false,
+        "status": "NOT RESOLVED",
+        "n": 2,
+        "raw_mean": 0.4107388888888889,
+        "base": 0.40324,
+        "waiv": 0.4135,
+        "per_seed_pct": [
+          74.87546025557762,
+          71.30171106779319
+        ],
+        "per_seed_pct_uncapped": [
+          74.87546025557762,
+          71.30171106779319
+        ],
+        "pooling": "clsmean",
+        "ci_source": "authoritative 1-SD 14.2 pct pts, 2*SD/sqrt(n)"
+      },
+      "THUNDER": {
+        "pct": null,
+        "pct_capped": null,
+        "pct_uncapped": null,
+        "ci": null,
+        "lower_uncapped": null,
+        "upper_uncapped": null,
+        "was_capped": false,
+        "n": 0,
+        "tasks": {
+          "knn": {
+            "waiv_gain": -0.0030000000000001137,
+            "floor": 0.0083,
+            "our_base": 0.8087398563453861,
+            "our_base_coverage": "12/12",
+            "pct": null,
+            "pct_capped": null,
+            "pct_uncapped": null,
+            "ci": null,
+            "lower_uncapped": null,
+            "upper_uncapped": null,
+            "was_capped": false,
+            "n": 0,
+            "status": "INDETERMINATE",
+            "reason": "waiv gain -0.0030 < benchmark seed noise 0.0083 -- denominator is noise"
+          },
+          "linear_probing": {
+            "waiv_gain": 0.0029999999999999714,
+            "floor": 0.0088,
+            "our_base": 0.8325287216061019,
+            "our_base_coverage": "12/12",
+            "pct": null,
+            "pct_capped": null,
+            "pct_uncapped": null,
+            "ci": null,
+            "lower_uncapped": null,
+            "upper_uncapped": null,
+            "was_capped": false,
+            "n": 0,
+            "status": "INDETERMINATE",
+            "reason": "waiv gain +0.0030 < benchmark seed noise 0.0088 -- denominator is noise"
+          },
+          "simple_shot": {
+            "waiv_gain": 0.026999999999999885,
+            "floor": 0.0066,
+            "our_base": 0.727492572828019,
+            "our_base_coverage": "12/12",
+            "pct": null,
+            "pct_capped": null,
+            "pct_uncapped": null,
+            "ci": null,
+            "lower_uncapped": null,
+            "upper_uncapped": null,
+            "was_capped": false,
+            "n": 0,
+            "status": "PARTIAL",
+            "reason": "coverage 7,1/12 per seed; 12ds floor invalid below 12/12"
+          }
+        },
+        "status": "PARTIAL",
+        "reason": "knn: INDETERMINATE; linear_probing: INDETERMINATE; simple_shot: PARTIAL"
+      }
+    }
+  },
+  "benchmark_averages": {
+    "RI": {
+      "mean": 91.36344765480412,
+      "n_backbones": 3
+    },
+    "HEST": {
+      "mean": 85.25417099863994,
+      "n_backbones": 3
+    },
+    "THUNDER": {
+      "mean": 100.0,
+      "n_backbones": 1
+    }
+  },
+  "overall_average": 92.20587288448137,
+  "worst_cell": {
+    "backbone": "virchow2",
+    "benchmark": "HEST",
+    "pct": 73.08858566168541,
+    "pct_uncapped": 73.08858566168541,
+    "lower_uncapped": 53.00675307598747,
+    "ci": 20.081832585697946,
+    "status": "NOT RESOLVED"
+  },
+  "ungraded_cells": [
+    {
+      "backbone": "midnight",
+      "benchmark": "THUNDER",
+      "status": "PARTIAL",
+      "reason": "knn: PARTIAL; linear_probing: INDETERMINATE; simple_shot: PARTIAL"
+    },
+    {
+      "backbone": "virchow2",
+      "benchmark": "THUNDER",
+      "status": "PARTIAL",
+      "reason": "knn: INDETERMINATE; linear_probing: INDETERMINATE; simple_shot: PARTIAL"
+    }
+  ],
+  "verdict": "INDETERMINATE",
+  "verdict_reason": "no gradeable number for midnight/THUNDER (PARTIAL), virchow2/THUNDER (PARTIAL); error bar straddles the 70 bar for virchow2/HEST (73.1+/-20.1 uncapped)"
+}
