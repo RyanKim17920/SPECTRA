@@ -171,16 +171,41 @@ PAPER_CLS = [
     "bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
     "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds",
 ]
-# NOTE: Waiv's published segmentation mean covers 4 datasets, but this study submits only
-# ocelot + pannuke. segpath_epithelial/segpath_lymphocytes are excluded deliberately:
-# they require non-default epoch overrides (guidelines.md mandates 9 and 21) and midnight
-# has no base result for either, so no delta could be formed. Scoping the denominator to
-# what we actually run is what lets segmentation reach full coverage instead of reading
-# PARTIAL forever; the deviation from the paper's 4-dataset mean is stated in the writeup.
-# SUBMITTED segmentation panel (2 datasets).  This is the ONLY panel any of our
-# segmentation numbers may be averaged over.  collect_thunder.PAPER_SEG_PUBLISHED
-# holds Waiv's 4-dataset published panel; the two must never be conflated.
-PAPER_SEG = ["ocelot", "pannuke"]
+# ---------------------------------------------------------------------------
+# SEGMENTATION ROSTER -- SINGLE OWNER (2026-08-26)
+# ---------------------------------------------------------------------------
+# This module is the ONLY definition of the segmentation panels.  collect_thunder.py
+# imports them from here.  Until today the two modules each defined a symbol spelled
+# `PAPER_SEG` with DIFFERENT contents (4 there, 2 here), so which panel a consumer got
+# depended on which module it happened to import, and two different quantities were
+# printed under one label.
+#
+# PAPER_SEG_PUBLISHED -- Waiv's published 4-dataset segmentation panel (arXiv:2607.22861).
+# PAPER_SEG_SUBMITTED -- the 2 datasets we run on every exploratory checkpoint.
+# PAPER_SEG           -- the default panel our collectors average over = SUBMITTED.
+#
+# WHY THE DEFAULT IS 2, NOT 4 -- CORRECTED JUSTIFICATION.
+# The previous comment here claimed segpath was excluded because "midnight has no base
+# result for either".  That claim is FALSE and is retracted.  All six segpath base cells
+# exist on disk with real F1 and were produced with the mandated epoch overrides:
+#   segpath_epithelial  (epochs=9):  base_cls 0.69459  mbase_cls 0.70949  vbase_cls 0.70639
+#   segpath_lymphocytes (epochs=21): base_cls 0.60649  mbase_cls 0.63755  vbase_cls 0.63172
+# under $THUNDER_BASE_DATA_FOLDER/outputs/res/<ds>/<model>/segmentation/frozen/.
+#
+# The real reason is COST.  Measured wall-clock of a single segpath segmentation job
+# (sacct, jobs 369825/369827/369913/369915/369916/375909/375910) is 27-32 h -- roughly a
+# day and a quarter per (checkpoint x dataset) cell, versus ~1 h for ocelot/pannuke.  The
+# 2-dataset panel is therefore the deliberate operating point for exploratory cohorts, and
+# segpath is run ONCE, on the final locked configuration, as a last-case evaluation.
+#
+# CONSEQUENCE THAT MUST BE STATED WHEREVER SEGMENTATION IS COMPARED TO WAIV:
+# our segmentation mean has 2-dataset support and theirs has 4.  That is a support
+# mismatch, not a like-for-like delta, and it stays one until the final segpath run lands.
+# Flipping this default to PAPER_SEG_PUBLISHED before then would not fix the comparison --
+# it would only mark every exploratory segmentation cell PARTIAL.
+PAPER_SEG_PUBLISHED = ["ocelot", "pannuke", "segpath_epithelial", "segpath_lymphocytes"]
+PAPER_SEG_SUBMITTED = ["ocelot", "pannuke"]
+PAPER_SEG = PAPER_SEG_SUBMITTED
 THUNDER_TASKS = ["knn", "linear_probing", "simple_shot", "segmentation"]
 
 # Config keys that MUST be identical across all runs (except seed and backbone).

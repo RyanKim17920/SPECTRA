@@ -158,6 +158,7 @@ def run_robustness_index(
     paths: PathoRobPaths | None = None,
     k_opt_param: int = 0,
     paired_evaluation: bool | None = None,
+    bootstrap: bool = False,
     extra_args: list[str] | None = None,
     python_exe: str | Path | None = None,
 ) -> subprocess.CompletedProcess:
@@ -189,6 +190,12 @@ def run_robustness_index(
         # Their flag is str2bool-valued, not store_true; leaving it unset selects their
         # per-dataset default (True for tcga, False elsewhere), which is what we want.
         cmd += ["--paired_evaluation", str(paired_evaluation).lower()]
+    if bootstrap:
+        # Their store_true flag. It only ADDS `robustness_index-mean`/`-std` (a 1000x
+        # resample of the per-query SO/OS cumulative matrices); `robustness_index`
+        # itself is computed before and independently of it, so this cannot move the
+        # number we report. It is off by default because it is slow.
+        cmd += ["--compute_bootstrapped_robustness_index"]
     cmd += extra_args or []
     # PYTHONNOUSERSITE: ~/.local/lib/python3.12/site-packages is on this machine and its
     # (broken) pandas shadows the venv's pinned one. Isolate or the pins mean nothing.

@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 # The paper's 16. thunder/utils/results.py ships a *different* 16 (it swapped the two
@@ -43,14 +44,17 @@ PAPER_CLS = [
     "bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
     "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds",
 ]
-# F7 fix (2026-08-26): renamed.  Two modules used to export a symbol called
-# `PAPER_SEG` with DIFFERENT contents -- 4 here, 2 in collect_final5 -- so which one a
-# consumer got depended on which module it imported.  The names are now distinct:
-#   PAPER_SEG_PUBLISHED = Waiv's published 4-dataset segmentation panel (this file)
-#   collect_final5.PAPER_SEG = the 2-dataset panel WE actually submitted
-# A mean over the 2 we ran is NOT comparable to Waiv's 4-dataset published mean.
-PAPER_SEG_PUBLISHED = ["ocelot", "pannuke", "segpath_epithelial", "segpath_lymphocytes"]
-PAPER_SEG_SUBMITTED = ["ocelot", "pannuke"]
+# SEGMENTATION ROSTER -- IMPORTED, NOT REDEFINED (2026-08-26).
+# Renaming alone (the earlier F7 fix) left two independent literal lists in two files,
+# which can still drift apart silently.  collect_final5.py is now the single owner; see
+# the block above PAPER_SEG_PUBLISHED there for why the default panel is the 2-dataset
+# SUBMITTED one and why any Waiv segmentation comparison is a 2-vs-4 support mismatch
+# until the final segpath run.  A mean over the 2 we run is NOT comparable to Waiv's 4.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from collect_final5 import (  # noqa: E402 -- intentional, after the sys.path insert
+    PAPER_SEG_PUBLISHED,
+    PAPER_SEG_SUBMITTED,
+)
 
 TASKS = ["knn", "linear_probing", "simple_shot", "segmentation"]
 
