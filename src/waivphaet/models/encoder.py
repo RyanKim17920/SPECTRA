@@ -53,8 +53,10 @@ Design choices and where they come from
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -100,7 +102,114 @@ HALF_STD = (0.5, 0.5, 0.5)
 BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float, float, float]]] = {
     "owkin/phikon-v2": (IMAGENET_MEAN, IMAGENET_STD),
     "kaiko-ai/midnight": (HALF_MEAN, HALF_STD),
+    # H-Optimus-0's model card publishes its own H&E-corpus statistics. They are NOT
+    # ImageNet's, and feeding it ImageNet's does not crash, does not warn and does not
+    # change a single shape -- it just quietly costs accuracy on every row we then
+    # compare against the paper. Pinned so no lookup is ever attempted.
+    "bioptimus/H-optimus-0": (
+        (0.707223, 0.578729, 0.703617),
+        (0.211883, 0.230117, 0.177517),
+    ),
+    # UNI2-h really is ImageNet -- its timm pretrained_cfg says so. It is pinned anyway
+    # because "ImageNet because we read the card" and "ImageNet because the lookup fell
+    # through" are indistinguishable at the call site, and only one of them is a decision.
+    "MahmoodLab/UNI2-h": (IMAGENET_MEAN, IMAGENET_STD),
 }
+
+
+# ======================================================================================
+# GATED backbones -- served off a local directory instead of the hub.
+# ======================================================================================
+#
+# ``bioptimus/H-optimus-0`` and ``MahmoodLab/UNI2-h`` are gated repos that our token is
+# not approved for: every hub call 403s, including the ``config.json`` fetch that decides
+# timm-vs-AutoModel. The checkpoints exist on this machine, so the fix is a binding from
+# repo id -> directory, consulted BEFORE the hub by everything that would otherwise ask
+# the hub: the loader dispatch, the FFN-shape probe, the normalisation lookup, the weights.
+#
+# Without the binding the failure is not a clean 403. ``_hub_config`` swallows the error
+# and returns ``None``, ``is_timm_backbone`` therefore answers ``False``, and the run takes
+# the ``AutoModel`` path and dies with "Unrecognized model" -- an error whose text names
+# nothing about gating, about the real architecture, or about what to do next.
+#
+# Overridable via ``WAIV_BACKBONE_LOCAL_DIRS="repo=/dir,repo2=/dir2"`` so a relocated
+# checkpoint (``/data`` has been swept before) is a job-script edit, not a code change.
+
+BACKBONE_LOCAL_DIRS: dict[str, str] = {
+    "bioptimus/H-optimus-0": "/data/H-optimus-0",
+    "MahmoodLab/UNI2-h": "/data/UNI2-h",
+}
+
+#: Weight file names we accept in a local backbone directory, in preference order.
+_LOCAL_WEIGHT_NAMES: tuple[str, ...] = ("model.safetensors", "pytorch_model.bin")
+
+
+def _local_dir_table() -> dict[str, str]:
+    """``BACKBONE_LOCAL_DIRS`` with ``WAIV_BACKBONE_LOCAL_DIRS`` entries layered on top."""
+    table = dict(BACKBONE_LOCAL_DIRS)
+    raw = os.environ.get("WAIV_BACKBONE_LOCAL_DIRS", "")
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            raise RuntimeError(
+                f"WAIV_BACKBONE_LOCAL_DIRS entry {item!r} is not 'repo_id=/path'; the "
+                f"whole variable was {raw!r}"
+            )
+        repo, path = item.split("=", 1)
+        table[repo.strip()] = path.strip()
+    return table
+
+
+def local_backbone_dir(backbone: str | None) -> Path | None:
+    """Directory serving ``backbone``, or ``None`` when it is an ordinary hub backbone.
+
+    ``None`` means "not bound, use the hub" and is the normal answer for phikon-v2,
+    midnight and Virchow2. A binding that points at a directory with no ``config.json``
+    RAISES: a swept ``/data`` must stop the run here, where the message can say which
+    backbone and which path, rather than degrade into a 403 and a misrouted loader.
+    """
+    backbone = backbone or DEFAULT_BACKBONE
+    raw = _local_dir_table().get(backbone)
+    if raw is None:
+        return None
+    d = Path(raw)
+    if not (d / "config.json").is_file():
+        raise RuntimeError(
+            f"backbone {backbone!r} is bound to local directory {str(d)!r} but there is "
+            "no config.json in it. The hub repo is GATED (403), so there is no fallback: "
+            "restore the checkpoint or repoint it with "
+            f'WAIV_BACKBONE_LOCAL_DIRS="{backbone}=/new/path".'
+        )
+    return d
+
+
+def local_weight_path(backbone: str | None) -> Path | None:
+    """The weight file inside ``backbone``'s local directory, or ``None`` if hub-served."""
+    d = local_backbone_dir(backbone)
+    if d is None:
+        return None
+    for name in _LOCAL_WEIGHT_NAMES:
+        p = d / name
+        if p.is_file():
+            return p
+    raise RuntimeError(
+        f"backbone {backbone!r} is bound to {str(d)!r} but it holds none of "
+        f"{list(_LOCAL_WEIGHT_NAMES)}; found {sorted(p.name for p in d.iterdir())}"
+    )
+
+
+def local_state_dict(backbone: str | None) -> dict | None:
+    """``backbone``'s raw tensor state dict off disk, or ``None`` if hub-served."""
+    p = local_weight_path(backbone)
+    if p is None:
+        return None
+    if p.suffix == ".safetensors":
+        from safetensors.torch import load_file
+
+        return load_file(str(p))
+    return torch.load(str(p), map_location="cpu", weights_only=True)
 
 
 # ======================================================================================
@@ -132,6 +241,16 @@ def _hub_config(backbone: str) -> dict | None:
     if backbone in _HUB_CONFIG_CACHE:
         return _HUB_CONFIG_CACHE[backbone]
     cfg: dict | None = None
+    # A locally-served backbone must NEVER reach the hub here: its repo is gated, the
+    # fetch 403s, and the ``except`` below would turn that into ``None`` -- which reads as
+    # "not a timm checkpoint" and silently routes a timm ViT into ``AutoModel``.
+    local_dir = local_backbone_dir(backbone)
+    if local_dir is not None:
+        with open(local_dir / "config.json", encoding="utf-8") as fh:
+            loaded = json.load(fh)
+        cfg = loaded if isinstance(loaded, dict) else None
+        _HUB_CONFIG_CACHE[backbone] = cfg
+        return cfg
     try:
         from huggingface_hub import hf_hub_download
 
@@ -185,21 +304,49 @@ def _needs_packed_gated_mlp(fc1_out: int, fc2_in: int) -> bool:
     return fc2_in > 0 and fc1_out == 2 * fc2_in
 
 
+def _ffn_shapes(backbone: str) -> tuple[int, int]:
+    """``(blocks.0.mlp.fc1`` out-dim, ``blocks.0.mlp.fc2`` in-dim) for the checkpoint.
+
+    Reads the LOCAL file when the backbone is bound to a directory -- the hub download the
+    remote branch does would 403 on a gated repo, and the caller would then silently build
+    a plain-MLP model.
+    """
+    local = local_weight_path(backbone)
+    if local is not None:
+        if local.suffix == ".safetensors":
+            from safetensors import safe_open
+
+            with safe_open(str(local), framework="pt") as f:
+                keys = list(f.keys())
+                k1 = next((k for k in keys if k.endswith("blocks.0.mlp.fc1.weight")), None)
+                k2 = next((k for k in keys if k.endswith("blocks.0.mlp.fc2.weight")), None)
+                if k1 is None or k2 is None:
+                    return 0, 0
+                return int(f.get_slice(k1).get_shape()[0]), int(f.get_slice(k2).get_shape()[1])
+        sd = torch.load(str(local), map_location="meta", weights_only=True)
+        k1 = next((k for k in sd if k.endswith("blocks.0.mlp.fc1.weight")), None)
+        k2 = next((k for k in sd if k.endswith("blocks.0.mlp.fc2.weight")), None)
+        if k1 is None or k2 is None:
+            return 0, 0
+        return int(sd[k1].shape[0]), int(sd[k2].shape[1])
+
+    from huggingface_hub import hf_hub_download
+    from safetensors import safe_open
+
+    path = hf_hub_download(backbone, "model.safetensors")
+    with safe_open(path, framework="pt") as f:
+        keys = list(f.keys())
+        k1 = next((k for k in keys if k.endswith("blocks.0.mlp.fc1.weight")), None)
+        k2 = next((k for k in keys if k.endswith("blocks.0.mlp.fc2.weight")), None)
+        if k1 is None or k2 is None:
+            return 0, 0
+        return int(f.get_slice(k1).get_shape()[0]), int(f.get_slice(k2).get_shape()[1])
+
+
 def _timm_extra_kwargs(backbone: str) -> dict:
     """``timm.create_model`` kwargs that config.json cannot express, derived from weights."""
-    fc1_out = fc2_in = 0
     try:
-        from huggingface_hub import hf_hub_download
-        from safetensors import safe_open
-
-        path = hf_hub_download(backbone, "model.safetensors")
-        with safe_open(path, framework="pt") as f:
-            keys = list(f.keys())
-            k1 = next((k for k in keys if k.endswith("blocks.0.mlp.fc1.weight")), None)
-            k2 = next((k for k in keys if k.endswith("blocks.0.mlp.fc2.weight")), None)
-            if k1 is not None and k2 is not None:
-                fc1_out = int(f.get_slice(k1).get_shape()[0])
-                fc2_in = int(f.get_slice(k2).get_shape()[1])
+        fc1_out, fc2_in = _ffn_shapes(backbone)
     except Exception as exc:  # noqa: BLE001 -- no safetensors / no such key => plain MLP
         print(f"[encoder] FFN-shape probe failed for {backbone!r}: {exc}", flush=True)
         return {}
@@ -213,6 +360,84 @@ def _timm_extra_kwargs(backbone: str) -> dict:
         flush=True,
     )
     return {"mlp_layer": SwiGLUPacked, "act_layer": nn.SiLU}
+
+
+#: Architecture kwargs for locally-served backbones, transcribed from the model cards.
+#:
+#: These exist because ``pretrained=True`` on a hub id is what normally applies a repo's
+#: ``pretrained_cfg`` and ``model_args``; a gated repo forces ``pretrained=False`` on a
+#: bare architecture name, and then NOTHING applies them. UNI2-h is the sharp case: its
+#: ``config.json`` names ``vit_giant_patch14_224``, whose timm defaults are embed_dim=1408,
+#: depth=40, num_heads=16, plain MLP -- an entirely different model that builds without
+#: complaint and then fails to load a single block. Values that a checkpoint can prove
+#: (prefix tokens, depth, widths) are re-derived from the built model and asserted in
+#: tests/test_new_backbones.py, so a wrong entry here surfaces as a number, not as drift.
+#:
+#: ``mlp_layer``/``act_layer`` are named as strings so importing this module does not drag
+#: in timm; ``_timm_local_kwargs`` resolves them.
+BACKBONE_TIMM_KWARGS: dict[str, dict] = {
+    # https://huggingface.co/MahmoodLab/UNI2-h -- the card's ``timm_kwargs`` verbatim.
+    "MahmoodLab/UNI2-h": {
+        "img_size": 224,
+        "patch_size": 14,
+        "depth": 24,
+        "num_heads": 24,
+        "init_values": 1e-5,
+        "embed_dim": 1536,
+        "mlp_ratio": 2.66667 * 2,
+        "no_embed_class": True,
+        "mlp_layer": "SwiGLUPacked",
+        "act_layer": "SiLU",
+        "reg_tokens": 8,
+        "dynamic_img_size": True,
+    },
+    # https://huggingface.co/bioptimus/H-optimus-0 -- ``vit_giant_patch14_reg4_dinov2``
+    # already carries depth/width/SwiGLU/reg_tokens=4, so only the card's ``init_values``
+    # and ``dynamic_img_size`` are added. ``img_size`` is NOT optional: the architecture's
+    # DINOv2 default is 518, whose pos_embed is (1, 1369, 1536) against this checkpoint's
+    # (1, 256, 1536).
+    "bioptimus/H-optimus-0": {
+        "img_size": 224,
+        "init_values": 1e-5,
+        "dynamic_img_size": False,
+    },
+}
+
+#: String -> timm/torch layer classes used inside ``BACKBONE_TIMM_KWARGS``.
+_TIMM_LAYER_NAMES = ("mlp_layer", "act_layer")
+
+
+def _resolve_layer(name: str):
+    from timm.layers import SwiGLUPacked
+
+    table = {"SwiGLUPacked": SwiGLUPacked, "SiLU": nn.SiLU, "GELU": nn.GELU}
+    if name not in table:
+        raise RuntimeError(f"unknown layer name {name!r} in BACKBONE_TIMM_KWARGS")
+    return table[name]
+
+
+def _timm_local_kwargs(backbone: str) -> dict:
+    """Complete ``timm.create_model`` kwargs for a locally-served backbone.
+
+    ``num_classes=0`` and ``global_pool=""`` are forced last and are not negotiable: this
+    encoder consumes the full ``(B, T, D)`` token sequence, and timm's default
+    ``global_pool="token"`` would hand back ``(B, D)`` -- already pooled over the CLS token
+    only, with the register-token slice in ``_pool`` never reached.
+    """
+    kwargs: dict = {}
+    pinned = BACKBONE_TIMM_KWARGS.get(backbone)
+    if pinned is not None:
+        kwargs.update(pinned)
+        for key in _TIMM_LAYER_NAMES:
+            if isinstance(kwargs.get(key), str):
+                kwargs[key] = _resolve_layer(kwargs[key])
+    else:
+        # No transcribed entry: fall back to the same weight-shape probe the hub path
+        # uses, which ``_ffn_shapes`` now answers off the local file.
+        kwargs.update(_timm_extra_kwargs(backbone))
+    kwargs["num_classes"] = 0
+    kwargs["global_pool"] = ""
+    return kwargs
 
 
 def _timm_config_normalization(
@@ -502,6 +727,64 @@ class WaivEncoder(nn.Module):
     * ``projection`` -- L2-normalisable head output. This is what InfoNCE sees.
     """
 
+    @staticmethod
+    def _build_local_timm(backbone_id: str, local_dir: Path):
+        """Build a GATED timm backbone from ``local_dir`` and load its weights STRICTLY.
+
+        ``pretrained=True`` is unavailable here (the repo 403s), and ``pretrained=False``
+        means the architecture kwargs and the weight load are both ours to get right. Both
+        fail silently if we let them: a wrong ``mlp_layer`` or ``depth`` builds a clean
+        model whose blocks then simply do not match, and ``load_state_dict(strict=False)``
+        -- the usual reflex when a load is noisy -- reports that as a list nobody reads
+        while leaving those blocks at their random init. The result trains, evaluates,
+        and produces a plausible, warning-free, wrong number.
+
+        So: any missing or unexpected key is fatal, and the counts are printed on success
+        so the run log carries positive evidence rather than the absence of a complaint.
+        """
+        import timm
+
+        cfg_json = _hub_config(backbone_id) or {}
+        arch = cfg_json.get("architecture")
+        if not arch:
+            raise RuntimeError(
+                f"{local_dir / 'config.json'} has no 'architecture' key, so there is no "
+                f"way to know what to build for {backbone_id!r}"
+            )
+        kwargs = _timm_local_kwargs(backbone_id)
+        model = timm.create_model(arch, pretrained=False, **kwargs)
+
+        sd = local_state_dict(backbone_id)
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        if missing or unexpected:
+            raise RuntimeError(
+                f"{backbone_id!r} did not load cleanly from {local_dir}: "
+                f"{len(missing)} missing, {len(unexpected)} unexpected keys. "
+                f"missing[:10]={list(missing)[:10]} unexpected[:10]={list(unexpected)[:10]}. "
+                f"This means the architecture kwargs are wrong, not that the load is "
+                f"'close enough' -- the unmatched parameters would stay randomly "
+                f"initialised. Fix BACKBONE_TIMM_KWARGS[{backbone_id!r}]."
+            )
+
+        # The architecture's own default_cfg describes the HUB variant, not this file --
+        # ``vit_giant_patch14_reg4_dinov2`` advertises input_size 518 while this checkpoint
+        # is a 224 model. Prefer the local config's pretrained_cfg so ``config_image_size``
+        # below reports the checkpoint we actually built.
+        local_pc = cfg_json.get("pretrained_cfg")
+        if isinstance(local_pc, dict):
+            merged = dict(getattr(model, "pretrained_cfg", {}) or {})
+            merged.update(local_pc)
+            merged.setdefault("architecture", arch)
+            model.pretrained_cfg = merged
+
+        print(
+            f"[encoder] {backbone_id!r}: built {arch} from {local_dir} "
+            f"(GATED on the hub) -- 0 missing / 0 unexpected keys over "
+            f"{len(sd)} tensors; kwargs={ {k: getattr(v, '__name__', v) for k, v in sorted(kwargs.items())} }",
+            flush=True,
+        )
+        return model
+
     def __init__(self, cfg: EncoderConfig | None = None):
         super().__init__()
         self.cfg = cfg = cfg or EncoderConfig()
@@ -509,9 +792,13 @@ class WaivEncoder(nn.Module):
         if self.is_timm:
             import timm
 
-            backbone = timm.create_model(
-                f"hf-hub:{cfg.backbone}", pretrained=True, **_timm_extra_kwargs(cfg.backbone)
-            )
+            local_dir = local_backbone_dir(cfg.backbone)
+            if local_dir is None:
+                backbone = timm.create_model(
+                    f"hf-hub:{cfg.backbone}", pretrained=True, **_timm_extra_kwargs(cfg.backbone)
+                )
+            else:
+                backbone = self._build_local_timm(cfg.backbone, local_dir)
             # Geometry off the BUILT timm model -- same rule as the HF branch, no literals.
             self.hidden_size = int(backbone.embed_dim)
             self.num_blocks = len(backbone.blocks)

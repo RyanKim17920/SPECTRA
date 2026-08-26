@@ -7,16 +7,77 @@ Tests:
 """
 import sys
 from pathlib import Path
-# Use falseneg-pinned src so the patched grid_info_nce is tested
-_PIN = Path("/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned/src")
-sys.path.insert(0, str(_PIN))
-# Remove any already-imported waivphaet from main src
-for _k in list(sys.modules): 
-    if _k.startswith("waivphaet"): del sys.modules[_k]
 
 import torch
 import pytest
-from waivphaet.train.contrastive import grid_info_nce, grid_info_nce_split
+
+# Use falseneg-pinned src so the patched grid_info_nce is tested.
+_PIN = Path("/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned/src")
+
+
+def _import_pinned():
+    """Import the pinned ``grid_info_nce*`` WITHOUT leaking the snapshot into the session.
+
+    This used to be three statements at module scope: prepend ``_PIN`` to ``sys.path`` and
+    purge every ``waivphaet.*`` entry from ``sys.modules``. Both mutations are permanent
+    and process-wide, and pytest imports test modules into ONE process in alphabetical
+    order -- so from ``test_core_mask`` onwards the whole suite silently resolved
+    ``waivphaet`` out of a frozen August snapshot instead of the working tree. Tests after
+    this file were passing against code nobody was editing; the only reason it ever
+    surfaced is that a NEW symbol (``encoder.local_backbone_dir``) does not exist in the
+    snapshot, so the import crashed instead of quietly agreeing.
+
+    The path edit and the module purge are therefore undone in ``finally``, and the
+    previously-imported working-tree modules are put back exactly as they were.
+    """
+    saved_path = list(sys.path)
+    saved_modules = {k: v for k, v in sys.modules.items() if k.startswith("waivphaet")}
+    for k in list(sys.modules):
+        if k.startswith("waivphaet"):
+            del sys.modules[k]
+    sys.path.insert(0, str(_PIN))
+    try:
+        from waivphaet.train.contrastive import grid_info_nce, grid_info_nce_split
+
+        origin = sys.modules["waivphaet.train.contrastive"].__file__
+    finally:
+        sys.path[:] = saved_path
+        for k in list(sys.modules):
+            if k.startswith("waivphaet"):
+                del sys.modules[k]
+        sys.modules.update(saved_modules)
+    return grid_info_nce, grid_info_nce_split, origin
+
+
+if not (_PIN / "waivphaet" / "train" / "contrastive.py").is_file():
+    pytest.skip(
+        f"pinned snapshot {_PIN} is missing; these tests pin the PATCHED loss, and "
+        "silently falling back to the working tree would test the wrong function",
+        allow_module_level=True,
+    )
+
+grid_info_nce, grid_info_nce_split, _PINNED_ORIGIN = _import_pinned()
+
+# The restore above is what makes this file safe for the rest of the suite; this assert is
+# what keeps it honest for THIS file. If the restore ever ran too early, these names would
+# quietly be the working tree's and every assertion below would still pass -- against the
+# wrong implementation.
+assert Path(_PINNED_ORIGIN).is_relative_to(_PIN), (
+    f"expected the pinned loss from {_PIN}, got {_PINNED_ORIGIN}"
+)
+
+
+def test_suite_still_sees_the_working_tree_after_this_module():
+    """Regression guard for the import hack above.
+
+    The snapshot must be visible to this module and to NOTHING else. If ``sys.path`` or
+    ``sys.modules`` leaks again, every later test module silently grades the snapshot.
+    """
+    assert str(_PIN) not in sys.path
+    import waivphaet.train.contrastive as live
+
+    repo_src = Path(__file__).resolve().parents[1] / "src"
+    assert Path(live.__file__).is_relative_to(repo_src), live.__file__
 
 
 def _make_batch(C=3, T=8, D=32, seed=42):

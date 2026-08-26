@@ -47,6 +47,11 @@ waiv-repack = "waivphaet.data.repack:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.pytest.ini_options]
+markers = [
+    "slow: builds a real multi-GB backbone on CPU; deselect with -m 'not slow'",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
