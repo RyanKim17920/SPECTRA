@@ -33,3 +33,8 @@ runs/
 logs/
 core/
 results_backup/
+
+# symlinks to volatile /data (gitignore dir-patterns do not match symlinks)
+/runs
+/results_backup
+/core
