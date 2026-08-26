@@ -14,8 +14,17 @@
       "phikon": 5.8,
       "midnight": 8.3,
       "virchow2": 14.2
+    },
+    "thunder_seed_sd": "docs/thunder_seed_floor_12ds.json cells[bb/task].12ds.seed_sd_of_task_mean (n=5 seeds, 12/12)",
+    "thunder_seed_sd_path": "/admin/home/ryan.kim/waiv/docs/thunder_seed_floor_12ds.json",
+    "hest_base": {
+      "phikon": "/data/ryan.kim/hest_work/results/base_cls_summary.json",
+      "midnight": "/data/ryan.kim/hest_work/results/midnight_base_cls_9task_v1_summary.json",
+      "virchow2": "/data/ryan.kim/hest_work/results/vbase_clsmean_summary.json"
     }
   },
+  "min_n_for_verdict": 2,
+  "hest_assume_step": null,
   "runs": [
     {
       "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s0-t900-392670",
@@ -28,35 +37,62 @@
         {
           "step": 125,
           "mean_ci": 0.9192967764949952,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.32526206998375906,
+            "tolkach_esca": 1.6594377922812067,
+            "tcga": 0.7731904672200198
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 250,
           "mean_ci": 0.9844235445396902,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3607917333721438,
+            "tolkach_esca": 1.8167097564294463,
+            "tcga": 0.7757691438174804
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 375,
           "mean_ci": 1.0089241377816605,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3910844135314575,
+            "tolkach_esca": 1.8476702755499304,
+            "tcga": 0.7880177242635938
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 500,
           "mean_ci": 1.0003239111885878,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3862034457410073,
+            "tolkach_esca": 1.8356358605195926,
+            "tcga": 0.7791324273051631
+          },
+          "eligible": true,
+          "skip_reason": null
         }
       ],
       "ri": 0.9106071997110323,
-      "hest": 0.4150222222222222,
+      "hest": 0.4150212962962963,
       "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s0-t900-392670_s0000125_cls_summary.json",
       "thunder_model": "f5_ci-midnight-s0-392670_s0000125",
       "thunder": {
         "knn": {
-          "coverage": 0,
-          "mean": null,
-          "partial_mean": null,
-          "datasets_present": [],
-          "datasets_missing": [
+          "coverage": 12,
+          "mean": 0.8048795914394568,
+          "partial_mean": 0.8048795914394568,
+          "datasets_present": [
             "bach",
             "bracs",
             "break_his",
@@ -69,43 +105,46 @@
             "tcga_tils",
             "tcga_uniform",
             "wilds"
-          ]
+          ],
+          "datasets_missing": []
         },
         "linear_probing": {
-          "coverage": 0,
+          "coverage": 9,
           "mean": null,
-          "partial_mean": null,
-          "datasets_present": [],
-          "datasets_missing": [
+          "partial_mean": 0.8296305862514257,
+          "datasets_present": [
             "bach",
             "bracs",
             "break_his",
             "ccrcc",
             "crc",
-            "esca",
             "mhist",
             "patch_camelyon",
             "tcga_crc_msi",
-            "tcga_tils",
+            "tcga_tils"
+          ],
+          "datasets_missing": [
+            "esca",
             "tcga_uniform",
             "wilds"
           ]
         },
         "simple_shot": {
-          "coverage": 0,
+          "coverage": 7,
           "mean": null,
-          "partial_mean": null,
-          "datasets_present": [],
-          "datasets_missing": [
+          "partial_mean": 0.7220594156135879,
+          "datasets_present": [
             "bach",
             "bracs",
             "break_his",
             "ccrcc",
             "crc",
-            "esca",
             "mhist",
+            "tcga_crc_msi"
+          ],
+          "datasets_missing": [
+            "esca",
             "patch_camelyon",
-            "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
             "wilds"
@@ -124,90 +163,117 @@
         {
           "step": 125,
           "mean_ci": 0.8898319318799714,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.30820308628660376,
+            "tolkach_esca": 1.6077097505668936,
+            "tcga": 0.753582958786417
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 250,
           "mean_ci": 0.9916604175255901,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.36695906432748543,
+            "tolkach_esca": 1.83516980201749,
+            "tcga": 0.7728523862317948
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 375,
           "mean_ci": 0.9964458833299933,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3780397936624908,
+            "tolkach_esca": 1.8402269437374368,
+            "tcga": 0.7710709125900522
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 500,
           "mean_ci": 1.0145614874938282,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.395071245617089,
+            "tolkach_esca": 1.8651113863955653,
+            "tcga": 0.7835018304688304
+          },
+          "eligible": true,
+          "skip_reason": null
         }
       ],
       "ri": 0.9125618657952231,
-      "hest": 0.41500000000000004,
+      "hest": 0.4149990740740741,
       "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-midnight-s1-t900-392673_s0000125_cls_summary.json",
       "thunder_model": "f5_ci-midnight-s1-392673_s0000125",
       "thunder": {
         "knn": {
-          "coverage": 5,
-          "mean": null,
-          "partial_mean": 0.7814988741567775,
+          "coverage": 12,
+          "mean": 0.8049385775563113,
+          "partial_mean": 0.8049385775563113,
           "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
             "mhist",
             "patch_camelyon",
             "tcga_crc_msi",
             "tcga_tils",
-            "tcga_uniform"
-          ],
-          "datasets_missing": [
-            "bach",
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "crc",
-            "esca",
+            "tcga_uniform",
             "wilds"
-          ]
+          ],
+          "datasets_missing": []
         },
         "linear_probing": {
-          "coverage": 2,
+          "coverage": 11,
           "mean": null,
-          "partial_mean": 0.7307388698357564,
+          "partial_mean": 0.8380950979392048,
           "datasets_present": [
-            "mhist",
-            "tcga_crc_msi"
-          ],
-          "datasets_missing": [
             "bach",
             "bracs",
             "break_his",
             "ccrcc",
             "crc",
-            "esca",
+            "mhist",
             "patch_camelyon",
+            "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
             "wilds"
+          ],
+          "datasets_missing": [
+            "esca"
           ]
         },
         "simple_shot": {
-          "coverage": 2,
+          "coverage": 10,
           "mean": null,
-          "partial_mean": 0.6146481167121928,
+          "partial_mean": 0.7553408013329566,
           "datasets_present": [
-            "mhist",
-            "tcga_crc_msi"
-          ],
-          "datasets_missing": [
             "bach",
             "bracs",
             "break_his",
-            "ccrcc",
             "crc",
-            "esca",
+            "mhist",
             "patch_camelyon",
+            "tcga_crc_msi",
             "tcga_tils",
             "tcga_uniform",
             "wilds"
+          ],
+          "datasets_missing": [
+            "ccrcc",
+            "esca"
           ]
         }
       }
@@ -223,26 +289,54 @@
         {
           "step": 125,
           "mean_ci": 0.5042910398295283,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.08025879996919048,
+            "tolkach_esca": 0.8876527448477111,
+            "tcga": 0.5449615746716834
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 250,
           "mean_ci": 0.7805342423336105,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.1977262416268581,
+            "tolkach_esca": 1.4235754176862465,
+            "tcga": 0.7203010676877267
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 375,
           "mean_ci": 0.8305817448291403,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.2305397594854106,
+            "tolkach_esca": 1.5130813777027767,
+            "tcga": 0.7481240972992336
+          },
+          "eligible": true,
+          "skip_reason": null
         },
         {
           "step": 500,
           "mean_ci": 0.8209948026068199,
-          "n_datasets": 3
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.22402893159292858,
+            "tolkach_esca": 1.497903329934415,
+            "tcga": 0.7410521462931161
+          },
+          "eligible": true,
+          "skip_reason": null
         }
       ],
       "ri": 0.8370650720692612,
-      "hest": 0.39115555555555553,
+      "hest": 0.3911333333333334,
       "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s0-t900-392669_s0000250_cls_summary.json",
       "thunder_model": "f5_ci-phikon-s0-392669_s0000250",
       "thunder": {
@@ -267,9 +361,401 @@
           "datasets_missing": []
         },
         "linear_probing": {
+          "coverage": 12,
+          "mean": 0.7869478628579044,
+          "partial_mean": 0.7869478628579044,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        },
+        "simple_shot": {
+          "coverage": 12,
+          "mean": 0.7022588529385101,
+          "partial_mean": 0.7022588529385101,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        }
+      }
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672",
+      "backbone": "phikon",
+      "seed": 1,
+      "train_jobid": "392672",
+      "selected_step": 250,
+      "mean_confounder_insensitivity": 0.8002730935361829,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.5115806384211393,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.07478470778692058,
+            "tolkach_esca": 0.9000674661636536,
+            "tcga": 0.5598897413128437
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.8002730935361829,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.2066851648706201,
+            "tolkach_esca": 1.4631714224517482,
+            "tcga": 0.7309626932861801
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 375,
+          "mean_ci": 0.8029839851430466,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.20010910082734795,
+            "tolkach_esca": 1.4746409080856204,
+            "tcga": 0.7342019465161715
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 500,
+          "mean_ci": 0.8279557539440523,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.21322873470623535,
+            "tolkach_esca": 1.5218990996698383,
+            "tcga": 0.7487394274560834
+          },
+          "eligible": true,
+          "skip_reason": null
+        }
+      ],
+      "ri": 0.8351338230826633,
+      "hest": 0.3937351851851852,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672_s0000250_cls_summary.json",
+      "thunder_model": "f5_ci-phikon-s1-392672_s0000250",
+      "thunder": {
+        "knn": {
+          "coverage": 12,
+          "mean": 0.7381318380301704,
+          "partial_mean": 0.7381318380301704,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        },
+        "linear_probing": {
+          "coverage": 12,
+          "mean": 0.7833252577389395,
+          "partial_mean": 0.7833252577389395,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        },
+        "simple_shot": {
+          "coverage": 12,
+          "mean": 0.6967060555719412,
+          "partial_mean": 0.6967060555719412,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        }
+      }
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671",
+      "backbone": "virchow2",
+      "seed": 0,
+      "train_jobid": "392671",
+      "selected_step": 125,
+      "mean_confounder_insensitivity": 0.8819794106196538,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.8819794106196538,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.31646876613319563,
+            "tolkach_esca": 1.5738265464718684,
+            "tcga": 0.7556429192538977
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.9625894105788343,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3535358409535068,
+            "tolkach_esca": 1.7355984617214444,
+            "tcga": 0.7986339290615516
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 375,
+          "mean_ci": 0.9852752239470656,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3548597442430536,
+            "tolkach_esca": 1.7860964366230359,
+            "tcga": 0.8148694909751072
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 500,
+          "mean_ci": 0.9733386082076843,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3494010679751768,
+            "tolkach_esca": 1.7657158126795376,
+            "tcga": 0.8048989439683383
+          },
+          "eligible": true,
+          "skip_reason": null
+        }
+      ],
+      "ri": 0.9059725324855594,
+      "hest": 0.41092407407407405,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671_s0000125_clsmean_summary.json",
+      "thunder_model": "f5_ci-virchow2-s0-392671_s0000125",
+      "thunder": {
+        "knn": {
+          "coverage": 12,
+          "mean": 0.8132719314546324,
+          "partial_mean": 0.8132719314546324,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        },
+        "linear_probing": {
+          "coverage": 12,
+          "mean": 0.8387348810425467,
+          "partial_mean": 0.8387348810425467,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        },
+        "simple_shot": {
+          "coverage": 12,
+          "mean": 0.7609428577268592,
+          "partial_mean": 0.7609428577268592,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        }
+      }
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s1-t900-392674",
+      "backbone": "virchow2",
+      "seed": 1,
+      "train_jobid": "392674",
+      "selected_step": 125,
+      "mean_confounder_insensitivity": 0.872429819094308,
+      "ci_trace": [
+        {
+          "step": 125,
+          "mean_ci": 0.872429819094308,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3027803096715763,
+            "tolkach_esca": 1.5612313707537073,
+            "tcga": 0.7532777768576405
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 250,
+          "mean_ci": 0.9609095766998764,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3624275982660013,
+            "tolkach_esca": 1.7261951797708415,
+            "tcga": 0.7941059520627864
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 375,
+          "mean_ci": 0.9642668815669345,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3522471165318839,
+            "tolkach_esca": 1.7431388399305603,
+            "tcga": 0.7974146882383596
+          },
+          "eligible": true,
+          "skip_reason": null
+        },
+        {
+          "step": 500,
+          "mean_ci": 0.9908751971026771,
+          "n_datasets": 3,
+          "per_dataset_ci": {
+            "camelyon": 0.3761974266825301,
+            "tolkach_esca": 1.7832119879797508,
+            "tcga": 0.8132161766457503
+          },
+          "eligible": true,
+          "skip_reason": null
+        }
+      ],
+      "ri": 0.9080333994850136,
+      "hest": 0.41053333333333336,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s1-t900-392674_s0000125_clsmean_summary.json",
+      "thunder_model": "f5_ci-virchow2-s1-392674_s0000125",
+      "thunder": {
+        "knn": {
+          "coverage": 12,
+          "mean": 0.8142970854627203,
+          "partial_mean": 0.8142970854627203,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        },
+        "linear_probing": {
+          "coverage": 12,
+          "mean": 0.8401179339318007,
+          "partial_mean": 0.8401179339318007,
+          "datasets_present": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds"
+          ],
+          "datasets_missing": []
+        },
+        "simple_shot": {
           "coverage": 9,
           "mean": null,
-          "partial_mean": 0.7741753169449772,
+          "partial_mean": 0.7633295886905471,
           "datasets_present": [
             "bach",
             "bracs",
@@ -286,326 +772,41 @@
             "tcga_uniform",
             "wilds"
           ]
-        },
-        "simple_shot": {
-          "coverage": 7,
-          "mean": null,
-          "partial_mean": 0.6642554836359112,
-          "datasets_present": [
-            "bach",
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "crc",
-            "mhist",
-            "tcga_crc_msi"
-          ],
-          "datasets_missing": [
-            "esca",
-            "patch_camelyon",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
         }
       }
     },
     {
-      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672",
-      "backbone": "phikon",
-      "seed": 1,
-      "train_jobid": "392672",
-      "selected_step": 250,
-      "mean_confounder_insensitivity": 0.8002730935361829,
-      "ci_trace": [
-        {
-          "step": 125,
-          "mean_ci": 0.5115806384211393,
-          "n_datasets": 3
-        },
-        {
-          "step": 250,
-          "mean_ci": 0.8002730935361829,
-          "n_datasets": 3
-        },
-        {
-          "step": 375,
-          "mean_ci": 0.8029839851430466,
-          "n_datasets": 3
-        },
-        {
-          "step": 500,
-          "mean_ci": 0.8279557539440523,
-          "n_datasets": 3
-        }
-      ],
-      "ri": 0.8351338230826633,
-      "hest": 0.3937333333333333,
-      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-phikon-s1-t900-392672_s0000250_cls_summary.json",
-      "thunder_model": "f5_ci-phikon-s1-392672_s0000250",
-      "thunder": {
-        "knn": {
-          "coverage": 6,
-          "mean": null,
-          "partial_mean": 0.6978862600482856,
-          "datasets_present": [
-            "bach",
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "crc",
-            "mhist"
-          ],
-          "datasets_missing": [
-            "esca",
-            "patch_camelyon",
-            "tcga_crc_msi",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
-        },
-        "linear_probing": {
-          "coverage": 5,
-          "mean": null,
-          "partial_mean": 0.7058081619836561,
-          "datasets_present": [
-            "bach",
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "mhist"
-          ],
-          "datasets_missing": [
-            "crc",
-            "esca",
-            "patch_camelyon",
-            "tcga_crc_msi",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
-        },
-        "simple_shot": {
-          "coverage": 5,
-          "mean": null,
-          "partial_mean": 0.6164168529838661,
-          "datasets_present": [
-            "bach",
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "mhist"
-          ],
-          "datasets_missing": [
-            "crc",
-            "esca",
-            "patch_camelyon",
-            "tcga_crc_msi",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
-        }
-      }
-    },
-    {
-      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671",
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s2-t900-393088",
       "backbone": "virchow2",
-      "seed": 0,
-      "train_jobid": "392671",
-      "selected_step": 125,
-      "mean_confounder_insensitivity": 0.8819794106196538,
-      "ci_trace": [
-        {
-          "step": 125,
-          "mean_ci": 0.8819794106196538,
-          "n_datasets": 3
-        },
-        {
-          "step": 250,
-          "mean_ci": 0.9625894105788343,
-          "n_datasets": 3
-        },
-        {
-          "step": 375,
-          "mean_ci": 0.9852752239470656,
-          "n_datasets": 3
-        },
-        {
-          "step": 500,
-          "mean_ci": 0.9733386082076843,
-          "n_datasets": 3
-        }
-      ],
-      "ri": 0.9059725324855594,
-      "hest": 0.41092222222222224,
-      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s0-t900-392671_s0000125_clsmean_summary.json",
-      "thunder_model": "f5_ci-virchow2-s0-392671_s0000125",
-      "thunder": {
-        "knn": {
-          "coverage": 11,
-          "mean": null,
-          "partial_mean": 0.7981856405667251,
-          "datasets_present": [
-            "bach",
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "crc",
-            "esca",
-            "mhist",
-            "patch_camelyon",
-            "tcga_crc_msi",
-            "tcga_tils",
-            "tcga_uniform"
-          ],
-          "datasets_missing": [
-            "wilds"
-          ]
-        },
-        "linear_probing": {
-          "coverage": 7,
-          "mean": null,
-          "partial_mean": 0.7992967571757542,
-          "datasets_present": [
-            "bach",
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "crc",
-            "mhist",
-            "tcga_crc_msi"
-          ],
-          "datasets_missing": [
-            "esca",
-            "patch_camelyon",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
-        },
-        "simple_shot": {
-          "coverage": 7,
-          "mean": null,
-          "partial_mean": 0.7331734416037419,
-          "datasets_present": [
-            "bach",
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "crc",
-            "mhist",
-            "tcga_crc_msi"
-          ],
-          "datasets_missing": [
-            "esca",
-            "patch_camelyon",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
-        }
-      }
+      "seed": 2,
+      "train_jobid": "393088",
+      "selected_step": null,
+      "mean_confounder_insensitivity": null,
+      "ci_trace": [],
+      "note": "no ri_curve.json -- stopping rule cannot be applied (RI and THUNDER cells excluded)",
+      "has_ri_curve": false
     },
     {
-      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s1-t900-392674",
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s3-t900-393089",
       "backbone": "virchow2",
-      "seed": 1,
-      "train_jobid": "392674",
-      "selected_step": 125,
-      "mean_confounder_insensitivity": 0.872429819094308,
-      "ci_trace": [
-        {
-          "step": 125,
-          "mean_ci": 0.872429819094308,
-          "n_datasets": 3
-        },
-        {
-          "step": 250,
-          "mean_ci": 0.9609095766998764,
-          "n_datasets": 3
-        },
-        {
-          "step": 375,
-          "mean_ci": 0.9642668815669345,
-          "n_datasets": 3
-        },
-        {
-          "step": 500,
-          "mean_ci": 0.9908751971026771,
-          "n_datasets": 3
-        }
-      ],
-      "ri": 0.9080333994850136,
-      "hest": 0.41055555555555556,
-      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s1-t900-392674_s0000125_clsmean_summary.json",
-      "thunder_model": "f5_ci-virchow2-s1-392674_s0000125",
-      "thunder": {
-        "knn": {
-          "coverage": 2,
-          "mean": null,
-          "partial_mean": 0.6966979291573898,
-          "datasets_present": [
-            "bach",
-            "bracs"
-          ],
-          "datasets_missing": [
-            "break_his",
-            "ccrcc",
-            "crc",
-            "esca",
-            "mhist",
-            "patch_camelyon",
-            "tcga_crc_msi",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
-        },
-        "linear_probing": {
-          "coverage": 1,
-          "mean": null,
-          "partial_mean": 0.8134339484545166,
-          "datasets_present": [
-            "bach"
-          ],
-          "datasets_missing": [
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "crc",
-            "esca",
-            "mhist",
-            "patch_camelyon",
-            "tcga_crc_msi",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
-        },
-        "simple_shot": {
-          "coverage": 1,
-          "mean": null,
-          "partial_mean": 0.7619267919978692,
-          "datasets_present": [
-            "bach"
-          ],
-          "datasets_missing": [
-            "bracs",
-            "break_his",
-            "ccrcc",
-            "crc",
-            "esca",
-            "mhist",
-            "patch_camelyon",
-            "tcga_crc_msi",
-            "tcga_tils",
-            "tcga_uniform",
-            "wilds"
-          ]
-        }
-      }
+      "seed": 3,
+      "train_jobid": "393089",
+      "selected_step": null,
+      "mean_confounder_insensitivity": null,
+      "ci_trace": [],
+      "note": "no ri_curve.json -- stopping rule cannot be applied (RI and THUNDER cells excluded)",
+      "has_ri_curve": false
+    },
+    {
+      "run": "genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512-virchow2-s4-t900-393090",
+      "backbone": "virchow2",
+      "seed": 4,
+      "train_jobid": "393090",
+      "selected_step": null,
+      "mean_confounder_insensitivity": null,
+      "ci_trace": [],
+      "note": "no ri_curve.json -- stopping rule cannot be applied (RI and THUNDER cells excluded)",
+      "has_ri_curve": false
     }
   ],
   "cells": {
@@ -632,63 +833,69 @@
           108.63480233629615
         ],
         "pct_capped_mean_of_capped_seeds": 100.0,
-        "ci_source": "max(empirical 2*SD/sqrt(n)=0.0, measured seed floor=1.9 [no floor measured at step 250; conservative max over measured steps]); 2/2 seeds censored at the 100 cap"
+        "ci_source": "max(empirical 2*SD/sqrt(n)=0.6, measured seed floor=1.9 [no floor measured at step 250; conservative max over measured steps]); 2/2 seeds censored at the 100 cap"
       },
       "HEST": {
-        "pct": 90.5328798185941,
-        "pct_capped": 90.5328798185941,
-        "pct_uncapped": 90.5328798185941,
+        "pct": 90.48046487456917,
+        "pct_capped": 90.48046487456917,
+        "pct_uncapped": 90.48046487456917,
         "ci": 8.202438661763951,
-        "lower_uncapped": 82.33044115683015,
-        "upper_uncapped": 98.73531848035805,
+        "lower_uncapped": 82.27802621280522,
+        "upper_uncapped": 98.68290353633311,
         "was_capped": false,
         "status": "PASS",
         "n": 2,
-        "raw_mean": 0.39244444444444443,
-        "base": 0.3747,
+        "raw_mean": 0.3924342592592593,
+        "base": 0.37470092592592585,
         "waiv": 0.3943,
         "per_seed_pct": [
-          83.95691609977321,
-          97.108843537415
+          83.84277412954168,
+          97.11815561959665
         ],
         "per_seed_pct_uncapped": [
-          83.95691609977321,
-          97.108843537415
+          83.84277412954168,
+          97.11815561959665
         ],
         "pooling": "cls",
+        "step_source": "stopping rule",
         "ci_source": "authoritative 1-SD 5.8 pct pts, 2*SD/sqrt(n)"
       },
       "THUNDER": {
-        "pct": 100.0,
-        "pct_capped": 100.0,
-        "pct_uncapped": 137.71304896545317,
-        "ci": 62.972972972972926,
-        "lower_uncapped": 74.74007599248024,
-        "upper_uncapped": 200.6860219384261,
-        "was_capped": true,
+        "pct": 79.65623061740257,
+        "pct_capped": 79.65623061740257,
+        "pct_uncapped": 99.56814922086535,
+        "ci": 22.784650920374702,
+        "lower_uncapped": 76.78349830049065,
+        "upper_uncapped": 122.35280014124005,
+        "was_capped": false,
         "status": "PASS",
-        "n": 1,
+        "ci_source": "task CIs combined as the MEAN (perfect correlation: same checkpoints, same 12 datasets), not in quadrature",
+        "n": 2,
         "tasks": {
           "knn": {
             "waiv_gain": 0.037000000000000026,
             "floor": 0.0233,
             "our_base": 0.70280675807706,
             "our_base_coverage": "12/12",
-            "pct": 100.0,
-            "pct_capped": 100.0,
-            "pct_uncapped": 137.71304896545317,
-            "ci": 62.972972972972926,
-            "lower_uncapped": 74.74007599248024,
-            "upper_uncapped": 200.6860219384261,
+            "pct": 97.73659453123024,
+            "pct_capped": 97.73659453123024,
+            "pct_uncapped": 116.59311901395682,
+            "ci": 24.42574987566733,
+            "lower_uncapped": 92.1673691382895,
+            "upper_uncapped": 141.01886888962414,
             "was_capped": true,
+            "resolvability_floor_offset_2se": 0.0233,
+            "ci_source": "2 * seed_SD_12ds(0.006390) / |waiv_gain|(0.0370) * 100 / sqrt(2)",
             "status": "PASS",
-            "n": 1,
-            "raw_mean": 0.7537605861942777,
+            "n": 2,
+            "raw_mean": 0.745946212112224,
             "per_seed_pct": [
-              100.0
+              100.0,
+              95.47318906246048
             ],
             "per_seed_pct_uncapped": [
-              137.71304896545317
+              137.71304896545317,
+              95.47318906246048
             ],
             "coverage": "12/12"
           },
@@ -697,41 +904,62 @@
             "floor": 0.0097,
             "our_base": 0.7654134679125493,
             "our_base_coverage": "12/12",
-            "pct": null,
-            "pct_capped": null,
-            "pct_uncapped": null,
-            "ci": null,
-            "lower_uncapped": null,
-            "upper_uncapped": null,
-            "was_capped": false,
-            "n": 0,
-            "status": "PARTIAL",
-            "reason": "coverage 9,5/12 per seed; 12ds floor invalid below 12/12"
+            "pct": 100.0,
+            "pct_capped": 100.0,
+            "pct_uncapped": 140.87923132766176,
+            "ci": 19.066996753133413,
+            "lower_uncapped": 121.81223457452835,
+            "upper_uncapped": 159.94622808079518,
+            "was_capped": true,
+            "resolvability_floor_offset_2se": 0.0097,
+            "ci_source": "2 * seed_SD_12ds(0.001888) / |waiv_gain|(0.0140) * 100 / sqrt(2)",
+            "status": "PASS",
+            "n": 2,
+            "raw_mean": 0.7851365602984219,
+            "per_seed_pct": [
+              100.0,
+              100.0
+            ],
+            "per_seed_pct_uncapped": [
+              153.81710675253657,
+              127.94135590278695
+            ],
+            "coverage": "12/12"
           },
           "simple_shot": {
             "waiv_gain": 0.015,
             "floor": 0.0087,
             "our_base": 0.693297639657079,
             "our_base_coverage": "12/12",
-            "pct": null,
-            "pct_capped": null,
-            "pct_uncapped": null,
-            "ci": null,
-            "lower_uncapped": null,
-            "upper_uncapped": null,
+            "pct": 41.23209732097747,
+            "pct_capped": 41.23209732097747,
+            "pct_uncapped": 41.23209732097747,
+            "ci": 24.86120613232336,
+            "lower_uncapped": 16.370891188654113,
+            "upper_uncapped": 66.09330345330083,
             "was_capped": false,
-            "n": 0,
-            "status": "PARTIAL",
-            "reason": "coverage 7,5/12 per seed; 12ds floor invalid below 12/12"
+            "resolvability_floor_offset_2se": 0.0087,
+            "ci_source": "2 * seed_SD_12ds(0.002637) / |waiv_gain|(0.0150) * 100 / sqrt(2)",
+            "status": "FAIL",
+            "n": 2,
+            "raw_mean": 0.6994824542552256,
+            "per_seed_pct": [
+              59.74142187620707,
+              22.722772765747873
+            ],
+            "per_seed_pct_uncapped": [
+              59.74142187620707,
+              22.722772765747873
+            ],
+            "coverage": "12/12"
           }
         },
         "tasks_graded": [
-          "knn"
+          "knn",
+          "linear_probing",
+          "simple_shot"
         ],
-        "tasks_excluded": {
-          "linear_probing": "PARTIAL",
-          "simple_shot": "PARTIAL"
-        }
+        "tasks_excluded": {}
       }
     },
     "midnight": {
@@ -760,54 +988,68 @@
         "ci_source": "max(empirical 2*SD/sqrt(n)=1.2, measured seed floor=4.1 [no floor measured at step 125; conservative max over measured steps])"
       },
       "HEST": {
-        "pct": 92.14104751564028,
-        "pct_capped": 92.14104751564028,
-        "pct_uncapped": 92.14104751564028,
+        "pct": 92.13667111896251,
+        "pct_capped": 92.13667111896251,
+        "pct_uncapped": 92.13667111896251,
         "ci": 11.737972567696689,
-        "lower_uncapped": 80.4030749479436,
-        "upper_uncapped": 103.87902008333697,
+        "lower_uncapped": 80.39869855126582,
+        "upper_uncapped": 103.8746436866592,
         "was_capped": false,
         "status": "PASS",
         "n": 2,
-        "raw_mean": 0.4150111111111111,
-        "base": 0.39521,
+        "raw_mean": 0.4150101851851852,
+        "base": 0.39521018518518514,
         "waiv": 0.4167,
         "per_seed_pct": [
-          92.19275115040561,
-          92.08934388087494
+          92.18837519927614,
+          92.08496703864888
         ],
         "per_seed_pct_uncapped": [
-          92.19275115040561,
-          92.08934388087494
+          92.18837519927614,
+          92.08496703864888
         ],
         "pooling": "cls",
+        "step_source": "stopping rule",
         "ci_source": "authoritative 1-SD 8.3 pct pts, 2*SD/sqrt(n)"
       },
       "THUNDER": {
-        "pct": null,
-        "pct_capped": null,
-        "pct_uncapped": null,
-        "ci": null,
-        "lower_uncapped": null,
-        "upper_uncapped": null,
-        "was_capped": false,
-        "n": 0,
+        "pct": 100.0,
+        "pct_capped": 100.0,
+        "pct_uncapped": 131.61005160865676,
+        "ci": 20.309611405032463,
+        "lower_uncapped": 111.3004402036243,
+        "upper_uncapped": 151.91966301368922,
+        "was_capped": true,
+        "status": "PASS",
+        "ci_source": "task CIs combined as the MEAN (perfect correlation: same checkpoints, same 12 datasets), not in quadrature",
+        "n": 2,
         "tasks": {
           "knn": {
             "waiv_gain": 0.01700000000000003,
             "floor": 0.01,
             "our_base": 0.7825353757244123,
             "our_base_coverage": "12/12",
-            "pct": null,
-            "pct_capped": null,
-            "pct_uncapped": null,
-            "ci": null,
-            "lower_uncapped": null,
-            "upper_uncapped": null,
-            "was_capped": false,
-            "n": 0,
-            "status": "PARTIAL",
-            "reason": "coverage 0,5/12 per seed; 12ds floor invalid below 12/12"
+            "pct": 100.0,
+            "pct_capped": 100.0,
+            "pct_uncapped": 131.61005160865676,
+            "ci": 20.309611405032463,
+            "lower_uncapped": 111.3004402036243,
+            "upper_uncapped": 151.91966301368922,
+            "was_capped": true,
+            "resolvability_floor_offset_2se": 0.01,
+            "ci_source": "2 * seed_SD_12ds(0.002441) / |waiv_gain|(0.0170) * 100 / sqrt(2)",
+            "status": "PASS",
+            "n": 2,
+            "raw_mean": 0.804909084497884,
+            "per_seed_pct": [
+              100.0,
+              100.0
+            ],
+            "per_seed_pct_uncapped": [
+              131.4365630296729,
+              131.7835401876406
+            ],
+            "coverage": "12/12"
           },
           "linear_probing": {
             "waiv_gain": 0.0019999999999998864,
@@ -839,11 +1081,16 @@
             "was_capped": false,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0,2/12 per seed; 12ds floor invalid below 12/12"
+            "reason": "coverage 7,10/12 per seed; 12ds floor invalid below 12/12"
           }
         },
-        "status": "PARTIAL",
-        "reason": "knn: PARTIAL; linear_probing: INDETERMINATE; simple_shot: PARTIAL"
+        "tasks_graded": [
+          "knn"
+        ],
+        "tasks_excluded": {
+          "linear_probing": "INDETERMINATE",
+          "simple_shot": "PARTIAL"
+        }
       }
     },
     "virchow2": {
@@ -872,27 +1119,28 @@
         "ci_source": "max(empirical 2*SD/sqrt(n)=3.4, measured seed floor=11.2 [no floor measured at step 125; conservative max over measured steps])"
       },
       "HEST": {
-        "pct": 73.08858566168541,
-        "pct_capped": 73.08858566168541,
-        "pct_uncapped": 73.08858566168541,
+        "pct": 72.91402714932144,
+        "pct_capped": 72.91402714932144,
+        "pct_uncapped": 72.91402714932144,
         "ci": 20.081832585697946,
-        "lower_uncapped": 53.00675307598747,
-        "upper_uncapped": 93.17041824738337,
+        "lower_uncapped": 52.832194563623496,
+        "upper_uncapped": 92.9958597350194,
         "was_capped": false,
         "status": "NOT RESOLVED",
         "n": 2,
-        "raw_mean": 0.4107388888888889,
-        "base": 0.40324,
+        "raw_mean": 0.41072870370370373,
+        "base": 0.4032685185185185,
         "waiv": 0.4135,
         "per_seed_pct": [
-          74.87546025557762,
-          71.30171106779319
+          74.82352941176464,
+          71.00452488687823
         ],
         "per_seed_pct_uncapped": [
-          74.87546025557762,
-          71.30171106779319
+          74.82352941176464,
+          71.00452488687823
         ],
         "pooling": "clsmean",
+        "step_source": "stopping rule",
         "ci_source": "authoritative 1-SD 14.2 pct pts, 2*SD/sqrt(n)"
       },
       "THUNDER": {
@@ -944,59 +1192,63 @@
             "our_base_coverage": "12/12",
             "pct": null,
             "pct_capped": null,
-            "pct_uncapped": null,
-            "ci": null,
+            "pct_uncapped": 123.8899440697788,
+            "ci": 14.65440357252747,
             "lower_uncapped": null,
             "upper_uncapped": null,
             "was_capped": false,
-            "n": 0,
-            "status": "PARTIAL",
-            "reason": "coverage 7,1/12 per seed; 12ds floor invalid below 12/12"
+            "resolvability_floor_offset_2se": 0.0066,
+            "ci_source": "2 * seed_SD_12ds(0.001978) / |waiv_gain|(0.0270) * 100 / sqrt(1)",
+            "n": 1,
+            "status": "UNDERPOWERED",
+            "reason": "n=1 < MIN_N_FOR_VERDICT=2"
           }
         },
-        "status": "PARTIAL",
-        "reason": "knn: INDETERMINATE; linear_probing: INDETERMINATE; simple_shot: PARTIAL"
+        "status": "INDETERMINATE",
+        "reason": "knn: INDETERMINATE; linear_probing: INDETERMINATE; simple_shot: UNDERPOWERED"
       }
     }
   },
   "benchmark_averages": {
     "RI": {
       "mean": 91.36344765480412,
-      "n_backbones": 3
+      "n_backbones": 3,
+      "coverage_ok": true,
+      "eligible_for_overall": true
     },
     "HEST": {
-      "mean": 85.25417099863994,
-      "n_backbones": 3
+      "mean": 85.17705438095105,
+      "n_backbones": 3,
+      "coverage_ok": true,
+      "eligible_for_overall": true
     },
     "THUNDER": {
-      "mean": 100.0,
-      "n_backbones": 1
+      "mean": 89.82811530870129,
+      "n_backbones": 2,
+      "coverage_ok": false,
+      "eligible_for_overall": false
     }
   },
-  "overall_average": 92.20587288448137,
+  "overall_average": null,
+  "overall_average_note": "UNDEFINED: THUNDER rest(s) on fewer than 3 backbones (THUNDER=2/3); the overall average is defined only when all three benchmark means cover all three backbones",
+  "overall_average_partial_NOT_THE_CRITERION": 88.78953911481881,
   "worst_cell": {
     "backbone": "virchow2",
     "benchmark": "HEST",
-    "pct": 73.08858566168541,
-    "pct_uncapped": 73.08858566168541,
-    "lower_uncapped": 53.00675307598747,
+    "pct": 72.91402714932144,
+    "pct_uncapped": 72.91402714932144,
+    "lower_uncapped": 52.832194563623496,
     "ci": 20.081832585697946,
     "status": "NOT RESOLVED"
   },
   "ungraded_cells": [
     {
-      "backbone": "midnight",
-      "benchmark": "THUNDER",
-      "status": "PARTIAL",
-      "reason": "knn: PARTIAL; linear_probing: INDETERMINATE; simple_shot: PARTIAL"
-    },
-    {
       "backbone": "virchow2",
       "benchmark": "THUNDER",
-      "status": "PARTIAL",
-      "reason": "knn: INDETERMINATE; linear_probing: INDETERMINATE; simple_shot: PARTIAL"
+      "status": "INDETERMINATE",
+      "reason": "knn: INDETERMINATE; linear_probing: INDETERMINATE; simple_shot: UNDERPOWERED"
     }
   ],
   "verdict": "INDETERMINATE",
-  "verdict_reason": "no gradeable number for midnight/THUNDER (PARTIAL), virchow2/THUNDER (PARTIAL); error bar straddles the 70 bar for virchow2/HEST (73.1+/-20.1 uncapped)"
+  "verdict_reason": "no gradeable number for virchow2/THUNDER (INDETERMINATE); error bar straddles the 70 bar for virchow2/HEST (72.9+/-20.1 uncapped)"
 }

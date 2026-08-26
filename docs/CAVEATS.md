@@ -32,9 +32,22 @@ this reproduction.
   headline understates one axis — but even the best checkpoint stays far short of Waiv, so
   the gap is not a selection artefact.
 - **Coverage.** All three benchmarks now cover all **three** backbones (phikon-v2, Midnight-12k,
-  Virchow2 — Virchow2 added in [`RESULTS.md`](RESULTS.md) §3/§6). THUNDER: 16 of Waiv's 16
-  datasets (12/12 classification, 4/4 segmentation), so the [`RESULTS.md`](RESULTS.md) §2 segmentation average is
-  like-for-like against theirs. HEST: phikon-v2 (`cls`), Midnight (`clsmean`) and Virchow2
+  Virchow2 — Virchow2 added in [`RESULTS.md`](RESULTS.md) §3/§6). THUNDER: 14 of Waiv's 16
+  datasets (12/12 classification, 2/4 segmentation). The [`RESULTS.md`](RESULTS.md) §2
+  segmentation average is over only **2 of their 4** segmentation datasets and is therefore
+  **NOT** directly comparable to theirs — flagged `support_2v4`.
+  [corrected 2026-08-26: was "16 of Waiv's 16 datasets (12/12 classification, 4/4 segmentation),
+  so the §2 segmentation average is like-for-like against theirs". Authority:
+  `scripts/collect_final5.py` `PAPER_SEG = ["ocelot", "pannuke"]` (2 submitted) vs
+  `scripts/collect_thunder.py` `PAPER_SEG_PUBLISHED` (4 published) — `segpath_epithelial` and
+  `segpath_lymphocytes` were deliberately never submitted. The like-for-like claim is directly
+  contradicted by `docs/baseline_comparability_audit.md:138` and `docs/FINAL5_RESULTS.md:130-132`.]
+  HEST: phikon-v2 (`cls`), Midnight (`cls`) and Virchow2
+  [corrected 2026-08-26: Midnight's HEST protocol is `cls`, not `clsmean`. Only Virchow2 is
+  `clsmean` on HEST. Authority: `scripts/collect_final5.hest_pooling()` and the
+  "WRONG-PROTOCOL VALUES" block in `scripts/collect_final5.py`, which names midnight-clsmean
+  (0.41210) as a value that must never be used. Note this is NOT the THUNDER rule, where
+  Midnight IS `clsmean` — see `collect_final5.THUNDER_BASE_DIRS`.]
   (`clsmean`), base and fine-tuned. PathoROB: all three. The only benchmark dropped is Patho-Bench (~8 TB of WSIs, no
   traceable target number).
 - **The Tier-1 probe tripwire is not an early-stopping signal.** `scripts/probe_follow.py`

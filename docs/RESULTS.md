@@ -15,8 +15,8 @@ not comparable across studies without the caveats attached.
 | question | can Waiv's published results be reproduced? | what in the batch/loss geometry moves robustness? |
 | backbones | phikon-v2, Midnight-12k, Virchow2 (3) | phikon-v2 only (1) |
 | arm family | LoRA rank / checkpoint / full-FT / retention-KL sweeps against Waiv's published rows | `gridcmp` / `gridcmp2` / `headcmp` / `poolcmp` against each other |
-| HEST protocol | **9-task**, full benchmark; `cls` on phikon-v2, `clsmean` on Midnight and Virchow2 | **5-task subset** (SKCM/COAD/READ/PAAD/LUNG) selected on prior effect size; `clsmean` only |
-| HEST base | 0.3747 (phikon-v2 `cls`), 0.4121 (Midnight), 0.4032 (Virchow2) | **0.4109** (phikon-v2 `clsmean`, 5-task) |
+| HEST protocol | **9-task**, full benchmark; `cls` on phikon-v2 and Midnight, `clsmean` on Virchow2 [corrected 2026-08-26: was "`cls` on phikon-v2, `clsmean` on Midnight and Virchow2" — Midnight's matched protocol is `cls`, not `clsmean`; authority `scripts/collect_final5.py` "WRONG-PROTOCOL VALUES"] | **5-task subset** (SKCM/COAD/READ/PAAD/LUNG) selected on prior effect size; `clsmean` only |
+| HEST base | 0.3747 (phikon-v2 `cls`), 0.39521 (Midnight, `cls`) [corrected 2026-08-26: was 0.4121, which is Midnight under `clsmean` — the wrong HEST pooling protocol; authority `scripts/collect_final5.py` "WRONG-PROTOCOL VALUES — MUST NEVER BE USED AS BASE"], 0.4032 (Virchow2) | **0.4109** (phikon-v2 `clsmean`, 5-task) |
 | comparator | Waiv's published numbers | the CTRL arm |
 
 A HEST number from §12 **cannot** be compared to a HEST number from §1–§7, and neither can be
@@ -120,16 +120,21 @@ fine-tuning, which is what makes the deltas meaningful rather than merely plausi
 |---|---|---|---|---|
 | PathoROB Avg RI ↑ | 0.7589 | 0.759 | **0.9080** | 0.924 |
 | THUNDER mean Δ over 4 tasks ↑ | — | — | **+2.21** | +1.80 |
-| HEST Avg Pearson ↑ | 0.4121 | 0.3952 | **0.4132** (s500) | 0.4167 |
+| HEST Avg Pearson ↑ | 0.39521 [corrected 2026-08-26: was 0.4121, which is Midnight under `clsmean` — the wrong HEST pooling protocol; authority `scripts/collect_final5.py` "WRONG-PROTOCOL VALUES — MUST NEVER BE USED AS BASE"] | 0.3952 | **0.4132** (s500) | 0.4167 |
 
 The Midnight HEST columns are **not** on a common scale: ours is `clsmean` fp32, and both
 summary files carry the harness's own note — *"backbone=kaiko-ai/midnight pooling=clsmean has
 NO published counterpart here — this is our own reference for checkpoint-to-checkpoint
 retention only."* Waiv state no pooling protocol for their Midnight HEST number, so 0.3952
-may be CLS-only against our CLS+mean, and their runs are mixed precision. Our base 0.4121 is
-already **above** their reported base (+0.0169) and just under their fine-tuned Mascaret
-0.4167; that is a protocol artefact, not evidence we are near Mascaret. Only the base→FT
-delta is a valid comparison.
+may be CLS-only against our CLS+mean, and their runs are mixed precision. The claim that our
+base is already **above** their reported base was itself the pooling artefact: 0.4121 is
+Midnight under `clsmean`, not under the matched `cls` protocol. Under matched `cls` our base is
+**0.39521**, which agrees with their 0.3952 essentially exactly — there is no +0.0169 base
+excess and no evidence either way about being "near Mascaret".
+[corrected 2026-08-26: was "Our base 0.4121 is already **above** their reported base (+0.0169)
+and just under their fine-tuned Mascaret 0.4167; that is a protocol artefact". Authority:
+`scripts/collect_final5.py` "WRONG-PROTOCOL VALUES — MUST NEVER BE USED AS BASE"
+(0.41210 = `mbase_clsmean_summary.json`).]
 
 ### Virchow2 (ours: LoRA, step 250)
 
@@ -159,8 +164,17 @@ Reading:
   reproduces on **3 of 3** backbones, and the gap-closed fraction falls monotonically as the
   base gets stronger — 0.4686 → ~101%, 0.7589 → 90.3%, 0.8582 → ~76% — which tracks remaining
   headroom rather than architecture (§6 rules out LoRA rank as the explanation).
-- **THUNDER.** All 16 of Waiv's datasets are now covered on all three backbones, so every task
-  average — segmentation included — is over the same sets as theirs. We match or beat Waiv on
+- **THUNDER.** 14 of Waiv's 16 datasets are covered on all three backbones (12/12 classification,
+  2/4 segmentation). The classification average is over the same sets as theirs; the
+  **segmentation average is over only 2 of their 4 datasets and is NOT directly comparable**
+  — flagged `support_2v4`.
+  [corrected 2026-08-26: was "All 16 of Waiv's datasets are now covered on all three backbones,
+  so every task average — segmentation included — is over the same sets as theirs". Authority:
+  `scripts/collect_final5.py` `PAPER_SEG = ["ocelot", "pannuke"]` (2 submitted) vs
+  `scripts/collect_thunder.py` `PAPER_SEG_PUBLISHED` (4 published) — `segpath_epithelial` and
+  `segpath_lymphocytes` were deliberately never submitted; see
+  `docs/baseline_comparability_audit.md:138` and `docs/FINAL5_RESULTS.md:130-132`.]
+  We match or beat Waiv on
   **11 of the 12 comparable model × task pairs** (§2, §6) — Virchow2 contributes four, all wins,
   from Table 2. The sole loss is Midnight segmentation (−0.33 vs their +1.6); phikon-v2
   segmentation is a win in the sense that we regress less (−0.12 vs their −1.2). The
@@ -287,7 +301,13 @@ no per-type row for Midnight, so this is base→FT only — Δ, not Δ-vs-Δ.
 | CCRCC | 0.2093 | 0.2660 | +0.0567 |
 | LUNG | 0.5826 | 0.5750 | −0.0076 |
 | LYMPH_IDC | 0.2746 | 0.2731 | −0.0015 |
-| **Avg** | **0.4121** | **0.4132** | **+0.0011** |
+| **Avg** | **0.39521** | **0.4132** | **+0.0011 — INVALID** |
+
+[corrected 2026-08-26: the base was 0.4121, which is Midnight under `clsmean` — the wrong HEST
+pooling protocol; authority `scripts/collect_final5.py` "WRONG-PROTOCOL VALUES — MUST NEVER BE
+USED AS BASE". The **+0.0011 delta is invalid as stated** because it was computed off that
+wrong base (the per-task rows above are likewise `clsmean`). The matched-protocol 5-seed delta
+is **+0.0113 (n=5)**, ~53% of Waiv's +0.0215 — see `docs/FINAL5_RESULTS.md:138-142`.]
 
 Six of nine tasks regress; the average is held positive by CCRCC alone (+0.0567). Against
 Mascaret's +0.0215 this is ~1/20th of the movement, and ~1% of the benchmark's 0.0977 dynamic
@@ -318,7 +338,11 @@ plus the pre-existing ft1000/ft2000; exp codes `base_cls`, `ft500_cls` … `ft35
 | Avg Pearson | 0.3818 | 0.3794 | 0.3813 | 0.3825 | 0.3826 | 0.3838 | **0.3845** |
 | Δ vs base | +0.0071 | +0.0047 | +0.0066 | +0.0078 | +0.0079 | +0.0091 | **+0.0098** |
 
-Midnight-12k, `clsmean` protocol, base 0.4121, from `runs/waiv-midnight-369159/` (jobs
+Midnight-12k, `clsmean` protocol, base 0.4121 [note 2026-08-26: this sweep is genuinely run
+under `clsmean`, so 0.4121 is the internally consistent base for THIS table only — it is the
+WRONG protocol for any comparison against Waiv, whose matched Midnight base is `cls` = 0.39521;
+authority `scripts/collect_final5.py` "WRONG-PROTOCOL VALUES — MUST NEVER BE USED AS BASE"],
+from `runs/waiv-midnight-369159/` (jobs
 370986–370990 plus the pre-existing mft500; exp codes `mbase_clsmean`, `mft250_clsmean` …
 `mft1500_clsmean`):
 

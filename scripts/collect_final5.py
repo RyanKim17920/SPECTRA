@@ -37,7 +37,13 @@ from pathlib import Path
 # (clsmean for classification, cls for segmentation). These are separate
 # protocols for separate benchmarks. Do NOT assume one pooling per backbone
 # across both benchmarks.
-HEST_BASE = {
+# NOTE (F6 fix, 2026-08-26): these literals are now only a FALLBACK for when the
+# summary JSON is not on disk.  The authoritative base is read from disk by
+# _load_hest_base() below, from the SAME field (hest_perf_per_encoder.custom_encoder)
+# that _hest_score() reads for fine-tuned runs.  Previously these literals were the
+# rounded `results.avg` field while fine-tuned scores came from `custom_encoder`,
+# so base and FT came from DIFFERENT fields (virchow2 base was low by 2.4e-5).
+HEST_BASE_FALLBACK = {
     # phikon-v2: cls pooling
     # source: results_backup/hest_work_results/base_cls_summary.json
     "phikon":   0.37470,
@@ -54,6 +60,8 @@ HEST_BASE = {
 #   phikon-v2 clsmean 0.39144  (base_clsmean_summary.json) — wrong pooling for phikon HEST
 #   midnight  clsmean 0.41210  (mbase_clsmean_summary.json) — wrong pooling for midnight HEST
 #   any value from results_backup/hest_sub5/ — 5-task subset, wrong task count AND wrong protocol
+#   any value read from the `results.avg` field — that field is rounded and is NOT the
+#     field the fine-tuned collector reads; mixing the two biases pct_of_waiv.
 
 # ---------------------------------------------------------------------------
 # RI BASE (avg_ri for the untuned backbone, checkpoint=None adapter=None)
@@ -95,6 +103,66 @@ THUNDER_BASE_DIRS: dict[str, dict[str, str]] = {
 
 # HEST work dir (run_hest.py default = H.DEFAULT_WORK_DIR)
 HEST_WORK_DIR = Path(os.environ.get("HEST_WORK_DIR", "/data/ryan.kim/hest_work"))
+
+# ---------------------------------------------------------------------------
+# HEST single source of truth (F6/F9 fix, 2026-08-26)
+# ---------------------------------------------------------------------------
+# ONE metric field, ONE pooling rule, ONE base loader -- used by every consumer
+# (collect_final5, scoreboard, final_recipe_report).  The whole repo must read the
+# same field for base and for fine-tuned, or pct_of_waiv is biased.
+HEST_METRIC_FIELD = "hest_perf_per_encoder.custom_encoder"
+
+HEST_BASE_FILES = {
+    "phikon":   "base_cls_summary.json",
+    "midnight": "midnight_base_cls_9task_v1_summary.json",
+    "virchow2": "vbase_clsmean_summary.json",
+}
+
+
+def hest_pooling(arm: str) -> str:
+    """HEST pooling protocol per backbone.  The ONLY definition in the repo.
+
+    NOT the same as the THUNDER pooling rule -- see _thunder_pooling in scoreboard.py
+    and THUNDER_BASE_DIRS below.  midnight is `cls` on HEST but `clsmean` on THUNDER
+    classification, so the two rules must never be shared.
+    """
+    return "clsmean" if arm == "virchow2" else "cls"
+
+
+def _hest_summary_paths(fname: str):
+    repo = Path(__file__).resolve().parents[1]
+    return (
+        HEST_WORK_DIR / "results" / fname,
+        repo / "results_backup" / "hest_work_results" / fname,
+    )
+
+
+def _hest_read_metric(path) -> float | None:
+    """Read the ONE authoritative HEST scalar out of a summary JSON."""
+    try:
+        d = json.loads(Path(path).read_text())
+    except Exception:
+        return None
+    return (d.get("hest_perf_per_encoder") or {}).get("custom_encoder")
+
+
+def _load_hest_base():
+    """Authoritative per-backbone HEST base, read FROM DISK, same field as FT."""
+    vals, src = {}, {}
+    for arm, fname in HEST_BASE_FILES.items():
+        for cand in _hest_summary_paths(fname):
+            if cand.exists():
+                v = _hest_read_metric(cand)
+                if v is not None:
+                    vals[arm], src[arm] = v, str(cand)
+                    break
+        if arm not in vals:
+            vals[arm] = HEST_BASE_FALLBACK[arm]
+            src[arm] = "FALLBACK LITERAL (summary JSON absent or unreadable)"
+    return vals, src
+
+
+HEST_BASE, HEST_BASE_SOURCE = _load_hest_base()
 # THUNDER root
 THUNDER_ROOT = Path(os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder"))
 
@@ -103,7 +171,16 @@ PAPER_CLS = [
     "bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
     "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds",
 ]
-PAPER_SEG = ["ocelot", "pannuke", "segpath_epithelial", "segpath_lymphocytes"]
+# NOTE: Waiv's published segmentation mean covers 4 datasets, but this study submits only
+# ocelot + pannuke. segpath_epithelial/segpath_lymphocytes are excluded deliberately:
+# they require non-default epoch overrides (guidelines.md mandates 9 and 21) and midnight
+# has no base result for either, so no delta could be formed. Scoping the denominator to
+# what we actually run is what lets segmentation reach full coverage instead of reading
+# PARTIAL forever; the deviation from the paper's 4-dataset mean is stated in the writeup.
+# SUBMITTED segmentation panel (2 datasets).  This is the ONLY panel any of our
+# segmentation numbers may be averaged over.  collect_thunder.PAPER_SEG_PUBLISHED
+# holds Waiv's 4-dataset published panel; the two must never be conflated.
+PAPER_SEG = ["ocelot", "pannuke"]
 THUNDER_TASKS = ["knn", "linear_probing", "simple_shot", "segmentation"]
 
 # Config keys that MUST be identical across all runs (except seed and backbone).
@@ -116,6 +193,22 @@ CHECKED_CONFIG_KEYS = [
     "cls_weight", "mean_weight",           # TOP-LEVEL keys, NOT inside encoder
     "encoder.grad_checkpointing",
     "encoder.lora_rank", "encoder.lora_alpha",
+    # F11 fix (2026-08-26): recipe-DEFINING knobs that were previously unchecked, so
+    # two runs with OPPOSITE negative-masking / cls-bias settings were pooled as
+    # COMPARABLE.  Any of these differing makes them different experiments.
+    "mask_same_core",
+    "same_core_logit_bias",       # direct sibling of the two below; unchecked it would
+    "same_core_logit_bias_cls",   # leave one masking knob free while checking the rest
+    "same_core_logit_bias_mean",
+    "weight_decay",
+    "center_embeddings",
+    "cores_per_batch",
+    "grad_accum",
+    "grad_clip",
+    "ckpt_schedule",
+    "core_labels_path",
+    "encoder.proj_out_dim",
+    "encoder.pooling",
 ]
 
 
@@ -229,7 +322,7 @@ def _ri_argmax(points: list[dict]) -> tuple[float | None, int | None]:
 
 def _hest_score(run_name: str, step: int, arm: str) -> float | None:
     """Read HEST score for a (run, step) from the results summary JSON."""
-    pooling = "clsmean" if arm == "virchow2" else "cls"
+    pooling = hest_pooling(arm)
     step_str = f"{step:07d}"
     exp_code = f"f5_{run_name}_s{step_str}_{pooling}"
     # Primary: live hest_work dir
@@ -245,7 +338,9 @@ def _hest_score(run_name: str, step: int, arm: str) -> float | None:
     repo = Path(__file__).resolve().parents[1]
     for backup in (
         repo / "results_backup" / "hest_work_results" / f"{exp_code}_summary.json",
-        repo / "results_backup" / "hest_sub5" / f"{exp_code}_summary.json",
+        # results_backup/hest_sub5/ deliberately NOT searched (F12 fix, 2026-08-26):
+        # it holds a 5-task subset with a byte-identical schema, so a hit there is
+        # silently indistinguishable from a real 9-task score.
     ):
         if backup.exists():
             try:

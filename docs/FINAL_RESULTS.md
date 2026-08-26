@@ -2,6 +2,8 @@
 
 Status of every measurement at session end. Evidence tags: **MEASURED** (on disk) · **PENDING** (job queued/running) · **NOT MEASURABLE** (structurally impossible, see reason).
 
+> **SUPERSESSION BANNER (2026-08-26).** All THUNDER seed-floor numbers in this document were recomputed by the 12-dataset study, `docs/thunder_seed_floor_12ds.{json,md}` (via `scripts/thunder_seed_floor_12ds.py`). The old floors (0.0156 / 0.0208) were wrong on **two independent axes**: (1) **dataset count** — they averaged 5 datasets, not 12; and (2) **run family** — they came from a different pair of runs at n=2 seeds rather than the final5 family at n=5. Both axes matter separately: `docs/thunder_seed_floor_12ds.md:145-152` shows that holding the dataset count fixed at 5 and changing only the run family already moves the floors substantially, and in opposite directions (cls/linear_probing 0.0156 → 0.0226; clsmean/linear_probing 0.0208 → 0.0142). Do not treat the change as a pure dataset-count rescaling.
+
 ---
 
 ## 1. Final configuration
@@ -40,7 +42,7 @@ Each backbone at its max feasible negatives (memory-bound), scored at its own RI
 | midnight | cls | 0.39521 | 0.40949 | +0.0143 | 1.9× — clears |
 | Virchow2 | clsmean | 0.40327 | PENDING | — | — |
 
-**THUNDER on the final checkpoints** (fast-5, LP mean): phikon-v2 0.6978 (cls) / 0.7056 (clsmean), vs ctrl 0.7082 / 0.7127 — flat, differences 0.0104 and 0.0071 against corrected floors of 0.0156 and 0.0208. This is the predicted outcome, not a regression: THUNDER was independently measured blind on this axis.
+**THUNDER on the final checkpoints** (fast-5, LP mean): phikon-v2 0.6978 (cls) / 0.7056 (clsmean), vs ctrl 0.7082 / 0.7127 — flat, differences 0.0104 and 0.0071 against corrected floors of **0.0097** and **0.0087** [corrected 2026-08-26: was "0.0156 and 0.0208", which were 5-dataset, n=2-seed floors from `docs/thunder_seed_floor.md`. The 12-dataset, n=5-seed floors are phikon/linear_probing 0.0097 and midnight/linear_probing 0.0087; authority `docs/thunder_seed_floor_12ds.md`. Note the cls difference 0.0104 now marginally *exceeds* its floor rather than sitting well under it]. This is the predicted outcome, not a regression: THUNDER was independently measured blind on this axis.
 
 ### 2.1 The headline finding
 
@@ -87,9 +89,13 @@ Measuring Midnight under the wrong protocol **masked a real result**:
 | protocol | base | FT | Δ | verdict |
 |---|---|---|---|---|
 | `clsmean` (wrong) | 0.41210 | 0.41322 | +0.0011 | "no result" |
-| **`cls` (matched)** | **0.39521** | **0.41180** | **+0.0166** | **2.2× bar — real, 77% of Waiv's +0.0215** |
+| **`cls` (matched)** | **0.39521** | **0.4065** | **+0.0113 (n=5)** | **1.5× bar — marginal, ~53% of Waiv's +0.0215** |
 
-Under `clsmean` the base already sits near where fine-tuning lands, because the mean component supplies information the adapter would otherwise learn. The delta was being measured on an inflated base. **Same checkpoint, same benchmark, only the pooling changed — and the conclusion flipped from null to a real 77% recovery.** The earlier verdict "our fine-tuning preserves HEST; Waiv's improves it" is retracted.
+[re-corrected 2026-08-26 (second pass): the multiplier first written here was **6.6x**, which is wrong. The 0.0075 bar is 2SE for an **n=5 mean** (RESULTS.md:1794 -- per-task SD 0.0084, SE = 0.0084/sqrt(5) = 0.0037, 2SE = 0.0075). +0.0113 / 0.0075 = **1.5x**. Note this also means the n=1 row above was always being graded against a five-seed bar: the single-run 2SD bar is 2 x 0.0084 = 0.0168, against which +0.0166 is **0.99x -- inside noise**, which is precisely why it did not replicate.]
+
+[corrected 2026-08-26: the row previously read FT **0.41180**, Δ **+0.0166**, "2.2× bar — real, 77% of Waiv's +0.0215". That was a **single-seed** measurement (job 386398) that did **not** replicate at n=5. The 5-seed matched-protocol result is +0.0113 (n=5), ~53% of Waiv's +0.0215. Authority: `docs/FINAL5_RESULTS.md:138-142` and `docs/final5_results.json` (`aggregates.midnight.hest.delta_vs_base`).]
+
+Under `clsmean` the base already sits near where fine-tuning lands, because the mean component supplies information the adapter would otherwise learn. The delta was being measured on an inflated base. **Same checkpoint, same benchmark, only the pooling changed — and the conclusion flipped from null to a real ~53% recovery.** [corrected 2026-08-26: was "a real 77% recovery"; 77% came from the single-seed job 386398 (+0.0166), which did not replicate. The n=5 matched-protocol delta is +0.0113, ~53% of Waiv's +0.0215; authority `docs/FINAL5_RESULTS.md:138-142`.] The earlier verdict "our fine-tuning preserves HEST; Waiv's improves it" is retracted.
 
 ### 4.2 Operational traps when testing this
 
@@ -118,14 +124,16 @@ Define noise units `nu = spread across arms / 2SE seed floor`. Below ~2 nu a rea
 |---|---|---|---|---|
 | **RI** | ~0.007 | ~0.023 | **2–3** | **only usable ranking metric** |
 | HEST 5-task | 0.0075 | 0.00406 | ~0.5 | blind |
-| THUNDER LP cls | 0.0156 | 0.0095 | 0.61 | blind |
-| THUNDER LP clsmean | 0.0208 | 0.0124 | 0.60 | blind |
+| THUNDER LP cls | 0.0097 | 0.0095 | 0.98 | blind |
+| THUNDER LP clsmean | 0.0087 | 0.0124 | 1.43 | blind |
+
+[corrected 2026-08-26: the two THUNDER LP `corrected 2SE` values were **0.0156** and **0.0208**, which are 5-dataset, n=2-seed floors from `docs/thunder_seed_floor.md`; `nu` was 0.61 and 0.60. Replaced with the 12-dataset, n=5-seed floors — phikon/linear_probing **0.0097**, midnight/linear_probing **0.0087** — from `docs/thunder_seed_floor_12ds.md`, and `nu` recomputed. Both remain well under the ~2 nu bar, so the "blind" verdicts stand.]
 | THUNDER kNN | 0.0297 / 0.0468 | ~0.006 / ~0.010 | ~0.2 | unusable |
 
 Two results that should survive this project:
 
 - **A pure seed replicate of the control outscored all nine real arms** on THUNDER LP clsmean (0.7259 vs best real arm 0.7186). A metric a no-op outranks is measuring seeds, not manipulations.
-- **The legacy seed-floor construction was invalid.** `2·SD/√n` measures dispersion *about* the mean delta, so a consistent offset is not penalised at all. For clsmean/LP all five per-task deltas were positive with paired t p = 0.025 — the two seeds genuinely disagree. Use `offset_2se = |mean d| + 2·SD/√n`. Under the corrected bar every THUNDER protocol falls to 0.2–0.6 nu. Computation persisted at `scripts/thunder_seed_floor.py` → `docs/thunder_seed_floor.{json,md}`.
+- **The legacy seed-floor construction was invalid.** `2·SD/√n` measures dispersion *about* the mean delta, so a consistent offset is not penalised at all. For clsmean/LP all five per-task deltas were positive with paired t p = 0.025 — the two seeds genuinely disagree. Use `offset_2se = |mean d| + 2·SD/√n`. Under the corrected bar every THUNDER protocol falls to 0.2–0.6 nu. Computation persisted at `scripts/thunder_seed_floor_12ds.py` → `docs/thunder_seed_floor_12ds.{json,md}` [corrected 2026-08-26: pointer was `scripts/thunder_seed_floor.py` → `docs/thunder_seed_floor.{json,md}`, the superseded 5-dataset/n=2 computation].
 
 ---
 

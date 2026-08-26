@@ -43,7 +43,14 @@ PAPER_CLS = [
     "bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
     "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds",
 ]
-PAPER_SEG = ["ocelot", "pannuke", "segpath_epithelial", "segpath_lymphocytes"]
+# F7 fix (2026-08-26): renamed.  Two modules used to export a symbol called
+# `PAPER_SEG` with DIFFERENT contents -- 4 here, 2 in collect_final5 -- so which one a
+# consumer got depended on which module it imported.  The names are now distinct:
+#   PAPER_SEG_PUBLISHED = Waiv's published 4-dataset segmentation panel (this file)
+#   collect_final5.PAPER_SEG = the 2-dataset panel WE actually submitted
+# A mean over the 2 we ran is NOT comparable to Waiv's 4-dataset published mean.
+PAPER_SEG_PUBLISHED = ["ocelot", "pannuke", "segpath_epithelial", "segpath_lymphocytes"]
+PAPER_SEG_SUBMITTED = ["ocelot", "pannuke"]
 
 TASKS = ["knn", "linear_probing", "simple_shot", "segmentation"]
 
@@ -233,8 +240,36 @@ BACKBONE_RUN_PREFIXES = (
 )
 
 
-def infer_backbone(run_name: str) -> str | None:
-    """Map a WAIV_RUN_NAME to its backbone, or None when the convention does not cover it."""
+def read_provenance(run_name: str, root: str | Path | None = None) -> dict | None:
+    """The provenance sidecar for a run name, if scripts/write_thunder_provenance.py wrote one.
+
+    THUNDER records nothing about the encoder (see the long comment above), so this sidecar
+    -- ``outputs/provenance/<run_name>.json``, with per-results-dir copies named
+    ``waiv_provenance.json`` -- is the only artifact that binds a results directory to the
+    checkpoint that produced it (adapter path + sha256 + source training job). Absent for
+    every run predating it, hence the None return and the prefix table below as fallback.
+    """
+    base = Path(root or os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder"))
+    p = base / "outputs" / "provenance" / f"{run_name}.json"
+    if not p.is_file():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
+def infer_backbone(run_name: str, root: str | Path | None = None) -> str | None:
+    """Map a WAIV_RUN_NAME to its backbone, or None when nothing covers it.
+
+    EVIDENCE FIRST: a provenance sidecar records the backbone that was actually exported
+    for the run, so it wins over the name-prefix convention -- which is a convention, not a
+    fact, and covers only the run names this repo happened to have produced by 2026-08.
+    ``ph2mask_*`` matches no prefix at all and resolved to None before the sidecar existed.
+    """
+    prov = read_provenance(run_name, root)
+    if prov and prov.get("backbone"):
+        return prov["backbone"]
     for prefix, backbone in BACKBONE_RUN_PREFIXES:
         if run_name.startswith(prefix):
             return backbone
@@ -293,7 +328,7 @@ def main() -> None:
     if args.backbone:
         backbone = args.backbone
     else:
-        guesses = {m: infer_backbone(m) for m in args.model}
+        guesses = {m: infer_backbone(m, args.root) for m in args.model}
         distinct = {b for b in guesses.values() if b is not None}
         if len(distinct) > 1:
             ap.error("--model names map to more than one backbone "
@@ -312,7 +347,7 @@ def main() -> None:
     # column is suppressed so single-name output is unchanged; with several it is the whole
     # point of the merge and must be visible.
     source: dict[str, str] = {}
-    for ds in PAPER_CLS + PAPER_SEG:
+    for ds in PAPER_CLS + PAPER_SEG_PUBLISHED:
         found: dict[str, dict[str, tuple]] = {}
         for model in args.model:
             got: dict[str, tuple] = {}
@@ -341,7 +376,7 @@ def main() -> None:
     cols = [t for t in TASKS if any(t in v for v in table.values())]
     if args.csv:
         print("dataset,split," + ("run_name," if show_src else "") + ",".join(cols))
-        for ds in PAPER_CLS + PAPER_SEG:
+        for ds in PAPER_CLS + PAPER_SEG_PUBLISHED:
             if ds not in table:
                 continue
             grp = "classification" if ds in PAPER_CLS else "segmentation"
@@ -358,7 +393,7 @@ def main() -> None:
     print(f"| dataset |{' run_name |' if show_src else ''} {' | '.join(hdr)} | LP ECE |")
     print("|" + "---|" * (len(hdr) + 2 + (1 if show_src else 0)))
     deltas: dict[str, list[float]] = {}
-    for ds in PAPER_CLS + PAPER_SEG:
+    for ds in PAPER_CLS + PAPER_SEG_PUBLISHED:
         src = f" {source.get(ds, '--')} |" if show_src else ""
         if ds not in table:
             # segpath_epithelial was absent from this cluster until 2026-08-03, when it was
@@ -444,7 +479,9 @@ def main() -> None:
                   "came from.")
 
     # A mean over a partial roster is not the paper's mean; label it so nobody quotes it.
-    for grp, names in (("classification", PAPER_CLS), ("segmentation", PAPER_SEG)):
+    for grp, names in (("classification", PAPER_CLS),
+                       ("segmentation[published-4]", PAPER_SEG_PUBLISHED),
+                       ("segmentation[submitted-2]", PAPER_SEG_SUBMITTED)):
         for t in cols:
             vals = [table[d][t][0] for d in names if d in table and table[d].get(t, (None,))[0] is not None]
             if vals:

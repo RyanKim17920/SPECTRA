@@ -138,9 +138,14 @@ Re-measuring the Midnight fine-tuned model under the same protocol (job 386398) 
 | protocol | our base | our FT | **our Δ** | vs 0.0075 bar |
 |---|---|---|---|---|
 | `clsmean` (what §3.1 used) | 0.41210 | 0.41322 | **+0.0011** | inside noise — "no result" |
-| **`cls` (matched to Waiv)** | **0.39521** | **0.41180** | **+0.0166** | **2.2x the bar — REAL** |
+| **`cls` (matched to Waiv), n=1** | **0.39521** | **0.41180** | **+0.0166** | 0.99x the *single-run* 2SD bar (0.0168) — **INSIDE NOISE, did not replicate** |
+| **`cls` (matched to Waiv), n=5** | **0.39521** | **0.4065** | **+0.0113** | **1.5x the bar — clears it, but marginally** |
 
-Waiv's Mascaret Δ is +0.0215, so under matched protocol **we close 77% of their Midnight HEST gain** — not "no result".
+[re-corrected 2026-08-26 (second pass): the multiplier first written here was **6.6x**, which is wrong. The 0.0075 bar is 2SE for an **n=5 mean** (`RESULTS.md:1794` -- per-task SD 0.0084, SE = 0.0084/sqrt(5) = 0.0037, 2SE = 0.0075). +0.0113 / 0.0075 = **1.5x**. This also means the n=1 row above was always graded against a five-seed bar: the single-run 2SD bar is 2 x 0.0084 = 0.0168, against which +0.0166 is **0.99x -- inside noise**, which is precisely why it did not replicate.]
+
+[corrected 2026-08-26: the +0.0166 row is a **single-seed** measurement (job 386398) and was previously presented as the matched-protocol result. It did not replicate at n=5. Authority: `docs/FINAL5_RESULTS.md:138-142`, `docs/final5_results.json` (`aggregates.midnight.hest.delta_vs_base`).]
+
+Waiv's Mascaret Δ is +0.0215, so under matched protocol **we close ~53% of their Midnight HEST gain** (n=5, +0.0113) — not "no result". [corrected 2026-08-26: was "we close 77%", which came from the single-seed +0.0166; authority `docs/FINAL5_RESULTS.md:138-142`.]
 
 **Mechanism.** Under `clsmean` our base already sits at 0.4121, close to where fine-tuning lands, because the mean component supplies information the adapter would otherwise have to learn. Measuring a delta on an inflated base masks the entire effect. Same checkpoint, same benchmark, only the pooling changed.
 
@@ -161,8 +166,12 @@ Corrected HEST summary, each backbone on its matched protocol:
 | backbone | protocol | our Δ | Waiv Δ | vs 0.0075 bar |
 |---|---|---|---|---|
 | phikon-v2 | cls | +0.0047 (+0.0098 best step) | +0.0196 | marginal |
-| **Midnight** | cls | **+0.0166** | +0.0215 | **2.2x — real, 77% of theirs** |
+| **Midnight** | cls | **+0.0113 (n=5)** | +0.0215 | **1.5x — marginal, ~53% of theirs** |
+
+[re-corrected 2026-08-26 (second pass): the multiplier first written here was **6.6x**, which is wrong. The 0.0075 bar is 2SE for an **n=5 mean** (`RESULTS.md:1794` -- per-task SD 0.0084, SE = 0.0084/sqrt(5) = 0.0037, 2SE = 0.0075). +0.0113 / 0.0075 = **1.5x**. This also means the n=1 row above was always graded against a five-seed bar: the single-run 2SD bar is 2 x 0.0084 = 0.0168, against which +0.0166 is **0.99x -- inside noise**, which is precisely why it did not replicate.]
 | Virchow2 | clsmean | +0.0050 | +0.0101 | below bar |
+
+[corrected 2026-08-26: the Midnight row read `+0.0166` / "2.2x — real, 77% of theirs". That was the single-seed (job 386398) value and did not replicate; the n=5 matched-protocol delta is +0.0113, ~53% of Waiv's +0.0215. Authority: `docs/FINAL5_RESULTS.md:138-142`, `docs/final5_results.json` (`aggregates.midnight.hest.delta_vs_base`).]
 
 **RULE, to prevent this class of error:** never compare an absolute or a delta against Waiv's published table without matching their pooling protocol per backbone (`cls` for phikon-v2 and Midnight). Two operational traps when testing this: `run_hest.py` keys its embedding cache on `--exp-code` ALONE with pooling NOT in the key, so a protocol test must use a fresh exp_code or it silently rescores stale features; and the HEST dataloader crashes in shared-memory teardown at `--num-workers` 8 and 2 alike — use 0.
 

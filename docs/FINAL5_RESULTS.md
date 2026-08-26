@@ -1,6 +1,6 @@
 # final5 — three backbones, one recipe, five seeds
 
-Status: **RI and HEST complete (n=5 all arms). THUNDER in progress.**
+Status: **COMPLETE — RI, HEST and THUNDER all at n=5, full coverage.**
 Generated from `docs/final5_results.json` via `scripts/collect_final5.py`.
 
 This supersedes the three-backbone table in `FINAL_RESULTS.md` §2, which is confounded —
@@ -39,15 +39,23 @@ step 500 lies inside the seed floor of every backbone's RI peak (§3).
 
 **15/15 seeds positive.** Binomial sign test p ≈ 3×10⁻⁵.
 
+> **Caveat on that p-value (added 2026-08-26).** The arithmetic is correct but one-sided: 0.5^15 = 3.05×10⁻⁵; the two-sided value is 6.1×10⁻⁵. More importantly, the n=15 is 3 backbones × 5 seeds and these are **not 15 independent units** — the 5 deltas within a backbone share one fixed base constant and one recipe, so they are correlated. The stated p therefore overstates the precision of the evidence.
+
 Per-seed Δ (no negatives anywhere):
 - phikon: +0.01353, +0.01013, +0.01204, +0.01446, +0.01180
-- midnight: +0.01173, +0.00806, +0.01256, +0.01282, +(s3)
+- midnight (s0..s4): +0.01173, +0.00806, +0.01256, **+0.01128**, +0.01282 [corrected 2026-08-26: the list ended in the literal placeholder `+(s3)` and was mis-ordered — the printed 4th value +0.01282 is seed 4, not seed 3. Seed 3's real delta is +0.01128 (seed-3 FT mean 0.40648703703703704 − base 0.39521). Values are now in seed order s0..s4.]
 - Virchow2: +0.00112, +0.00297, +0.00259, +0.00113, +0.00373
 
-**The effect falls monotonically with base-model strength**: base 0.3747 → +0.0124;
-0.3952 → +0.0113; 0.4032 → +0.0023. Because the recipe is now provably identical, this
-ordering is attributable to **headroom**, not to configuration differences. That is the
-claim §2.1 of the old document made but could not support.
+**The effect falls monotonically with base-model strength on HEST**: base 0.3747 → +0.0124;
+0.3952 → +0.0113; 0.4032 → +0.0023.
+
+**Do NOT read this as "headroom".** An identical recipe removes *configuration* as an
+explanation, but it does not remove *tuning*. Every hyperparameter here — GEM, C=2 grid, T,
+LoRA r32/a64, lr, tau, step 500 — was selected on phikon-v2 and then applied unchanged.
+So "less headroom" and "recipe mistuned for this backbone" are **perfectly confounded** in
+this design, and the HEST ordering alone cannot distinguish them. Evidence that the second
+explanation is live is in §9. The defensible claim is: *the phikon-tuned recipe delivers
+progressively less on stronger backbones, for reasons this design cannot isolate.*
 
 ---
 
@@ -95,21 +103,49 @@ inflates the phikon mean by **+0.0060 = 1.5× the floor**. Every delta in `FINAL
 
 ---
 
-## 5. THUNDER — IN PROGRESS
+## 5. THUNDER — COMPLETE (n=5, full coverage)
 
 Deltas are computed **per dataset, then averaged** over datasets present in both the
-fine-tuned run and the matching base; partial coverage is suppressed rather than shown.
+fine-tuned run and the matching base. Classification = 12 datasets; segmentation = 2
+(see caveat below).
 
-Complete so far:
-- **phikon kNN: Δ +0.0350 (12/12 datasets, n=5)**
+| backbone | kNN Δ | LinProbe Δ | SimpleShot Δ | Segmentation Δ |
+|---|---|---|---|---|
+| phikon-v2 | **+0.0349** | **+0.0169** | +0.0024 | **−0.0088** |
+| midnight | +0.0043 | +0.0058 | **+0.0425** | +0.0045 |
+| Virchow2 | **−0.0159** | −0.0002 | +0.0174 | +0.0034 |
 
-Everything else is still accumulating. Note: an earlier partial-coverage bug reported
-phikon SimpleShot at **−0.1424**; at fuller coverage the same family of metrics is
-**positive**. Do not quote any THUNDER number that is not marked 12/12.
+**There is no single "THUNDER effect".** The per-task picture is heterogeneous and partly
+negative:
 
-Base model dirs are split per (backbone, task-kind) because the dir name encodes pooling:
-phikon `base_cls`; midnight `mbase_clsmean` / `mbase_cls`; Virchow2 `vbase_clsmean` /
-`vbase_cls` (segmentation falls back to `cls`).
+- Each backbone's *best* task is different — phikon→kNN, midnight→SimpleShot,
+  Virchow2→SimpleShot.
+- kNN spans **+0.0349 to −0.0159** across backbones and is the only task that declines
+  monotonically with base strength.
+- phikon, the backbone that gains most overall, is the one that **loses** on segmentation.
+- **midnight is the only backbone positive on all four tasks.**
+
+Reporting a single averaged "THUNDER score" would conceal all of this and is not done here.
+
+**Segmentation caveat:** Waiv's published segmentation mean covers 4 datasets; this study
+uses only `ocelot` + `pannuke`. `segpath_epithelial` / `segpath_lymphocytes` are excluded
+because they require non-default epoch overrides (guidelines.md mandates 9 and 21) and
+midnight has no base result for either, so no delta could be formed. Our segmentation
+column is therefore NOT directly comparable to Waiv's.
+
+---
+
+## 5b. Comparison with published Waiv
+
+Only one directly verifiable anchor exists: **Waiv reports +0.0215 on midnight HEST.**
+We measure **+0.0113 (n=5)** — roughly **53%** of it.
+
+The prior in-house figure of +0.0166 ("77% of Waiv") was a **single seed** and does not
+replicate at n=5; our 5-seed interval excludes it.
+
+The "gap-closed: phikon 101% / midnight 90% / Virchow2 76%" line in `FINAL_RESULTS.md` §2.1
+should be treated as unusable — it derives from the confounded three-backbone table, and its
+midnight component rests on that non-replicating +0.0166.
 
 ---
 
@@ -170,3 +206,36 @@ Not established — needs more seeds.
 implied by giving midnight the smallest T. GEM forces `--grid-forward-chunk 0`
 (`contrastive.py:896` raises otherwise), so chunking is unavailable and activation offload
 is the only lever; it is exact (bit-checked, |dgrad| = 0.0 over 294 gradients).
+
+---
+
+## 9. Does the phikon-tuned recipe transfer? (open)
+
+Every hyperparameter in §1 was chosen on phikon-v2. Three independent signals suggest the
+package does not fit the other backbones:
+
+1. **The RI-optimal step differs 3x by backbone** — phikon 750, Virchow2 500, midnight 250.
+   A recipe whose optimum sits at 750 applied to a model peaking at 250 is a mistuning, not
+   a capacity limit.
+2. **midnight cannot reach phikon's preferred geometry** — it OOMs at T=1200 and T=1800,
+   while the paired sweep (§7) orders T=1800 > T=900 > T=450.
+3. **THUNDER task ordering INVERTS across backbones** (§5). On phikon the gain concentrates
+   in kNN (+0.0349) and vanishes on SimpleShot (+0.0024); on Virchow2 it is reversed —
+   SimpleShot is the only winner (+0.0174) and kNN actively regresses (-0.0159). A pure
+   headroom story predicts the same effect shape, scaled down; it does not predict a sign
+   flip on the strongest task or a reordering of tasks.
+
+### GEM was the obvious suspect, and it is EXONERATED
+On Virchow2, an older pair-path run with no GEM beats the final5 recipe at all 6 steps with a
+widening gap (+0.0113 by step 1500). GEM looked like the phikon-specific choice responsible.
+A clean paired ablation says otherwise:
+
+**Virchow2, GEM vs no-GEM, paired by seed (3 seeds x 6 steps = 18 paired points):
+no-GEM − GEM = −0.00188, only 1/18 points positive.**
+
+GEM *helps* Virchow2. The hypothesis is dead. Since the old run differed in two ways
+(no GEM AND pair sampler), the remaining suspect is the **grid sampler** (C=2, T=900) versus
+the pair path — untested, and the obvious next experiment.
+
+Runs: `v2ablate-virchow2-s{0,1,2}-t900-3896{72,73,74}` (identical to final5 except
+`--pool-head` omitted).
