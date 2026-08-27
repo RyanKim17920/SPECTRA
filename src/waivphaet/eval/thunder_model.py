@@ -79,14 +79,23 @@ from thunder.models import PretrainedModel  # noqa: E402
 #: ``get_segmentation_embeddings`` returns raw hidden-d patch tokens. That inequality holds
 #: for every backbone with clsmean pooling, Virchow2 included (2560 != 1280), so the
 #: ``resolve_pooling`` correction below applies to it unchanged. See ``resolve_pooling``.
-THUNDER_CLSMEAN_BACKBONES = frozenset({"kaiko-ai/midnight", "paige-ai/Virchow2"})
+# SINGLE SOURCE OF TRUTH: thunder_protocol.py owns both rosters and cross-checks them
+# for overlap. This module used to carry its own copies, and they DRIFTED: the local
+# THUNDER_CLS_BACKBONES stayed {"owkin/phikon-v2"} after thunder_protocol.py gained
+# H-Optimus-0 and UNI2-h, so _default_pooling() below hard-errored on both gated
+# backbones -- i.e. WAIV_POOLING=auto was unusable for them and every caller had to
+# pass `cls` explicitly. Import, never re-declare.
+from waivphaet.eval.thunder_protocol import (  # noqa: E402
+    THUNDER_CLS_BACKBONES,
+    THUNDER_CLSMEAN_BACKBONES,
+)
 
 #: The other half of the same published table: backbones Waiv scored CLS-only.
 #: Both sets are transcriptions of a paper, so membership cannot be inferred for a
 #: backbone that is not in the paper -- which is why an unlisted backbone is an error
 #: below rather than a default. Silently taking "cls" would produce a number that looks
 #: like a THUNDER result and is not comparable to their table.
-THUNDER_CLS_BACKBONES = frozenset({"owkin/phikon-v2"})
+# (THUNDER_CLS_BACKBONES is imported above from thunder_protocol.)
 
 
 def _default_pooling(backbone: str | None) -> str:

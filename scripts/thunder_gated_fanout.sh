@@ -46,6 +46,7 @@ submit () {  # $1=dataset $2=tasks $3=run_name $4=jobtag
 if [ "$MODE" != "--seg-only" ]; then
   for ds in $CLASSIFICATION $SPIDER; do
     [ "$ARM/$ds" = "hoptimus/bach" ] && { echo "skip hoptimus/bach (canary 394088)"; continue; }
+    [ "$ARM/$ds" = "uni2/mhist" ] && { echo "skip uni2/mhist (canary 394209)"; continue; }
     submit "$ds" "$CLS_TASKS" "$RUN_NAME" "thu-${ARM}-${ds}"
   done
 fi

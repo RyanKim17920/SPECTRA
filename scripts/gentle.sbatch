@@ -108,7 +108,31 @@ BACKBONE_ARGS=()
 # WAIV_BCLS / WAIV_BMEAN, which are invisible here. HEST and PathoROB caches are keyed on
 # run name / exp_code ALONE, so two arms that collide in this string silently share results.
 RUN_NAME="gen${WAIV_MASK:+MASK}${WAIV_TAG:+-${WAIV_TAG}}${WAIV_MINTF:+-mtf${WAIV_MINTF}}-lr${WAIV_LR:-1e-4}-r${WAIV_RANK:-32}-kl${WAIV_KL:-0}-t${WAIV_TEMP:-0.07}-wd${WAIV_WD:-0.05}-ms${WAIV_MAX_STEPS:-1500}-pd${WAIV_PROJDIM:-512}-${ARM}-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
+# WAIV_RUN_NAME: replace the generated name wholesale (the job id is still appended, so
+# HEST/PathoROB cache keys stay unique per job). This exists because THUNDER's pydantic
+# run_tags hard-caps a model key at 64 chars and the THUNDER key is f5_<RUN_NAME>_s<step:07d>
+# (collect_final5.py:559) = len + 12. The generated name is ~71 chars, so every THUNDER job
+# for a gentle.sbatch run is REJECTED AT VALIDATION -- silently, as a killed sweep, not an error
+# here. If you override, keep the tokens scoreboard2.py:_parse_run_meta greps back out --
+# MASK, -lr, -kl, -ms, -s<seed>, -t<T>, a trailing job id, and a name in scoreboard2._BACKBONES --
+# or that run's scoreboard metadata degrades to unknown/None.
+if [ -n "${WAIV_RUN_NAME:-}" ]; then
+  RUN_NAME="${WAIV_RUN_NAME}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
+fi
+
+THUNDER_KEY_LEN=$(( ${#RUN_NAME} + 12 ))
+if [ "$THUNDER_KEY_LEN" -gt 64 ]; then
+  echo "RUN_NAME is too long to ever be THUNDER-evaluated:" >&2
+  echo "  f5_<run>_s<step> = $THUNDER_KEY_LEN chars > 64 (THUNDER run_tags cap)" >&2
+  echo "  run  = $RUN_NAME (${#RUN_NAME} chars; budget is 52)" >&2
+  echo "  fix  = set WAIV_RUN_NAME to something shorter" >&2
+  echo "  or   = WAIV_ALLOW_LONG_RUN_NAME=1 to proceed anyway (RI/HEST only, NO THUNDER)" >&2
+  if [ -z "${WAIV_ALLOW_LONG_RUN_NAME:-}" ]; then exit 4; fi
+  echo "  WAIV_ALLOW_LONG_RUN_NAME=1 -- proceeding; THUNDER eval will be impossible for this run" >&2
+fi
+
 OUT_DIR="$REPO/runs/$RUN_NAME"
+
 mkdir -p "$OUT_DIR"
 
 MAX_STEPS="${WAIV_MAX_STEPS:-1500}"

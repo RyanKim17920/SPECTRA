@@ -150,7 +150,9 @@ THUNDER_SEED_SD_SOURCE = ("docs/thunder_seed_floor_12ds.json "
 # ---------------------------------------------------------------------------
 # Backbone detection
 # ---------------------------------------------------------------------------
-_BACKBONES = ("phikon", "midnight", "virchow2")
+# NOTE: substring match, so order matters only if one name contains another (none do).
+# hoptimus/uni2 are the WAIV_ARM tokens gentle.sbatch folds into RUN_NAME, not the HF ids.
+_BACKBONES = ("phikon", "midnight", "virchow2", "hoptimus", "uni2")
 
 
 def _detect_backbone(name: str) -> str | None:
