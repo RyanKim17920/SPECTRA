@@ -43,3 +43,9 @@ results_backup/
 /runs
 /results_backup
 /core
+
+# timestamped scratch backups (encoder.py.bak-1788238556 etc.)
+*.bak-*
+
+# local Claude Code session state
+.claude/
