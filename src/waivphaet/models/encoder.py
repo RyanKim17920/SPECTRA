@@ -114,6 +114,26 @@ BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float,
     # because "ImageNet because we read the card" and "ImageNet because the lookup fell
     # through" are indistinguishable at the call site, and only one of them is a decision.
     "MahmoodLab/UNI2-h": (IMAGENET_MEAN, IMAGENET_STD),
+    # SophontAI/OpenMidnight is ImageNet **by statement**: its model card's own
+    # "Extracting Embeddings" snippet is
+    #   transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+    # commented "# ImageNet normalization". This is NOT inherited from its ancestor:
+    # kaiko-ai/midnight -- the model OpenMidnight replicates -- demands (0.5,0.5,0.5),
+    # so "same family" would have been exactly the wrong reason to pick stats here.
+    # The DINOv2 training config next to the checkpoint carries no normalisation key,
+    # i.e. the fork's upstream default (ImageNet) was used, which agrees with the card.
+    "SophontAI/OpenMidnight": (IMAGENET_MEAN, IMAGENET_STD),
+    # paige-ai/Virchow (v1) is ImageNet **by its own pretrained_cfg**: the repo's
+    # config.json carries mean=[0.485,0.456,0.406] std=[0.229,0.224,0.225], and the model
+    # card's snippet resolves its transform through
+    # ``timm.data.resolve_data_config(model.pretrained_cfg)``, i.e. exactly those numbers.
+    # ``_timm_config_normalization`` would derive the same values, but that path is only
+    # reachable when config.json is; pinning here keeps the stats fixed if the local
+    # binding below is ever repointed, and keeps "ImageNet because we read the card" from
+    # looking like "ImageNet because a lookup fell through" at the call site.
+    # NOTE: this is v1 only. paige-ai/Virchow2 is a separate repo id and is NOT in this
+    # table -- it derives ImageNet from its own pretrained_cfg and must stay that way.
+    "paige-ai/Virchow": (IMAGENET_MEAN, IMAGENET_STD),
 }
 
 
@@ -138,6 +158,30 @@ BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float,
 BACKBONE_LOCAL_DIRS: dict[str, str] = {
     "bioptimus/H-optimus-0": "/data/H-optimus-0",
     "MahmoodLab/UNI2-h": "/data/UNI2-h",
+    # OpenMidnight is NOT gated -- it is bound locally for the other reason this table
+    # exists: the weights we run are a file on this machine, not a hub artefact. The
+    # source is /data/OpenMidnight_ckpts/openmidnight_checkpoint.pth, a raw DINOv2
+    # *training* checkpoint ({"teacher": {"backbone.*", "dino_head.*", "ibot_head.*"}})
+    # with block_chunks=4 nesting and DINOv2's SwiGLU names -- nothing timm can load.
+    # /data/OpenMidnight holds the teacher BACKBONE only, de-chunked and passed through
+    # timm's own ``checkpoint_filter_fn`` (scripts/convert_openmidnight.py), plus the
+    # config.json this loader dispatches on. Sibling files in OpenMidnight_ckpts
+    # (highres_*, *_v2_*, run subdirectories) are DIFFERENT models; the binding names
+    # one directory so no variant can be picked up by accident.
+    "SophontAI/OpenMidnight": "/data/OpenMidnight",
+    # paige-ai/Virchow (v1) is a gated repo like the two above, and the weights that exist
+    # on this machine live in a SEPARATE hub cache root (/data/Virchow) from HF_HOME
+    # (/data/huggingface), so ``timm.create_model("hf-hub:paige-ai/Virchow")`` would go to
+    # the network and 403 rather than find them. The path is the pinned snapshot commit,
+    # not the cache root: the parent holds refs/ and blobs/ that timm cannot load, and
+    # naming the commit means a later re-download of a different revision cannot be picked
+    # up silently. Directory holds config.json + model.safetensors (both symlinks into
+    # ../../blobs -- ``is_file()`` follows them).
+    # This is v1. paige-ai/Virchow2 is hub-served and deliberately absent from this table.
+    "paige-ai/Virchow": (
+        "/data/Virchow/models--paige-ai--Virchow/snapshots/"
+        "19eebc84ae33e79f1b2d866e6ff90ae50e522f9a"
+    ),
 }
 
 #: Weight file names we accept in a local backbone directory, in preference order.
@@ -400,6 +444,45 @@ BACKBONE_TIMM_KWARGS: dict[str, dict] = {
         "img_size": 224,
         "init_values": 1e-5,
         "dynamic_img_size": False,
+    },
+    # SophontAI/OpenMidnight is architecturally the same animal as H-Optimus-0 --
+    # DINOv2 ViT-g/14, 40 blocks, 1536-d, fused SwiGLU FFN, 4 registers -- which the
+    # checkpoint proves rather than the name: its training config.yaml says
+    # ``arch: vit_giant2 / patch_size: 14 / ffn_layer: swiglufused /
+    # num_register_tokens: 4 / layerscale: 1.0e-05``, and the tensors agree
+    # (pos_embed (1, 257, 1536) -> a 16x16 grid, i.e. 224px, NOT the architecture's
+    # DINOv2 default of 518 -> (1, 1369, 1536)). So ``img_size`` is mandatory here for
+    # the same reason it is above, and ``init_values`` must be set or ``ls1.gamma`` /
+    # ``ls2.gamma`` do not exist to load into.
+    "SophontAI/OpenMidnight": {
+        "img_size": 224,
+        "init_values": 1e-5,
+        "dynamic_img_size": False,
+    },
+    # https://huggingface.co/paige-ai/Virchow -- Virchow **v1**, transcribed verbatim from
+    # that repo's config.json ``model_args`` (num_classes / global_pool are forced by
+    # ``_timm_local_kwargs`` and so are not repeated here).
+    #
+    # An explicit entry is MANDATORY here even though the weight-shape probe would find
+    # the packed FFN on its own, because the gated/local path builds the bare architecture
+    # name and NOTHING applies the repo's ``model_args``. timm's ``vit_huge_patch14_224``
+    # defaults are mlp_ratio=4 (-> fc1 out 5120, not the checkpoint's 6832) and
+    # init_values=None (-> no ``ls1.gamma``/``ls2.gamma`` to load into at all), so the
+    # strict load would fail on all 32 blocks. ``img_size`` and ``dynamic_img_size`` are
+    # copied for faithfulness rather than necessity -- this architecture already defaults
+    # to 224, unlike the DINOv2 ViT-g entries above whose default is 518.
+    #
+    # NOT a copy of the Virchow2 entry: v1 has **no register tokens**
+    # (num_prefix_tokens == 1, 257 tokens out of forward_features), where Virchow2 carries
+    # 4 registers (5 prefix tokens, 261). Virchow2 is hub-served and needs no entry here;
+    # nothing in this dict may be shared between the two.
+    "paige-ai/Virchow": {
+        "img_size": 224,
+        "init_values": 1e-5,
+        "mlp_ratio": 5.3375,
+        "dynamic_img_size": True,
+        "mlp_layer": "SwiGLUPacked",
+        "act_layer": "SiLU",
     },
 }
 

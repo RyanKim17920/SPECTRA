@@ -868,7 +868,14 @@ def test_thunder_pooling_tables_cover_virchow2_without_moving_the_published_two(
     assert mod._default_pooling(None) == "cls"
     assert mod._default_pooling(phi) == "cls"
     assert mod._default_pooling(mid) == "clsmean"
-    assert mod.THUNDER_CLS_BACKBONES == frozenset({phi})
+    # The cls roster is the THREE backbones whose THUNDER embedding is the bare class
+    # token: phikon-v2 plus the two gated ones, which fall through
+    # pretrained_models.py's generic `else` branch (no cat([cls, patch.mean(1)])).
+    # It was {phikon} only while the project had three backbones; adding H-Optimus-0
+    # and UNI2-h widened it without moving midnight/Virchow2 off clsmean.
+    assert mod.THUNDER_CLS_BACKBONES == frozenset(
+        {phi, "bioptimus/H-optimus-0", "MahmoodLab/UNI2-h"}
+    )
     assert mod.resolve_pooling(mid, None, True) == "cls"
     assert mod.resolve_pooling(mid, None, False) == "clsmean"
     assert mod.resolve_pooling(phi, None, True) == "cls"

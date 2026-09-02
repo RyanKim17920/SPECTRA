@@ -75,6 +75,9 @@ def _strict_load_counts(backbone: str) -> dict:
     }
 
 
+_EXPECTED_PREFIX = {"paige-ai/Virchow": 1}
+
+
 def preflight(backbone: str) -> dict:
     out: dict = {"backbone": backbone, "checks": {}}
     ck = out["checks"]
@@ -115,7 +118,10 @@ def preflight(backbone: str) -> dict:
         "hidden_size": hidden,
         "num_blocks": int(enc.num_blocks),
         "patch_size": int(enc.patch_size),
-        "ok": npx > 1,   # a register-carrying ViT reporting 1 means the probe failed
+        # A register-carrying ViT reporting 1 means the probe failed; Virchow (v1) has a
+        # class token only, so its expected count is pinned explicitly.
+        "ok": npx == _EXPECTED_PREFIX.get(backbone, None) if backbone in _EXPECTED_PREFIX
+              else npx > 1,
     }
     ck["lora"] = {
         "target_leaves": list(enc.lora_target_leaves),
