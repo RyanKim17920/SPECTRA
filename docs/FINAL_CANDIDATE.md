@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Predates the 5-backbone expansion, the 50-step checkpoint grid, and the parameter-free 1-SE stopping rule (uses the earlier hand-set 0.75 confounder_insensitivity threshold on a 3-backbone, 250/500-step grid). Do not cite its absolute numbers or its stopping-rule verdicts without checking RUNBOOK.md first.
+
 # FINAL CANDIDATE — cross-backbone generalization
 
 Generated 2026-08-24 from `scripts/scoreboard.py` v3 (steps 250 and 500, 143 runs discovered).

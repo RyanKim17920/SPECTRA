@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Comparison snapshot from 2026-08-17/18 (updated 08-26), predates the 5-backbone scope and the current THUNDER protocol. Check THUNDER_16DS_2026-08-26.md before citing THUNDER comparison numbers.
+
 # Our improvement system vs. published Waiv — full comparison
 
 Date: 2026-08-17. Companion to `FINDINGS_2026-08-16.md` (instrument analysis) and `RESULTS.md` (raw results).

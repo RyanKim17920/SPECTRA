@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL, with INVALID sections. This file mixes two non-interchangeable studies (see §0) and its early "THUNDER mean Δ over 4 tasks" rows are pre-16-dataset-port numbers — superseded by THUNDER_16DS_2026-08-26.md and INVALID for the paper. Read CAVEATS.md alongside, and verify any figure against a current doc before citing.
+
 # Results
 
 Full numeric record. The README carries only the headline tables; everything below is the

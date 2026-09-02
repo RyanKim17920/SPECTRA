@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL (point-in-time audit record). The 15 defects it lists are already fixed in the current scripts — this file documents *what changed*, not current numbers. See RUNBOOK.md for how the pipeline runs today.
+
 # Eval-pipeline defect fixes — 2026-08-26
 
 Audit of the verdict/reporting path found 15 confirmed defects. All Tier-1 and Tier-2

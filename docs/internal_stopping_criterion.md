@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Investigates and refutes the adapter_rel_l2_delta stopping-signal hypothesis; background reasoning behind moving to the parameter-free 1-SE rule described in RUNBOOK.md. Its own 0.75-threshold examples are superseded.
+
 # Model-agnostic stopping criterion for the LoRA recipe
 
 **Question.** Is there a rule computable from signals we already log during training that

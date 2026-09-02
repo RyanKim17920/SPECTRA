@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Intermediate analysis toward the stopping-criterion work; superseded by the parameter-free 1-SE rule now in use (see RUNBOOK.md). Do not cite its 0.75-threshold framing as current.
+
 # Is the pass/fail criterion gradeable? Error bars on the AGGREGATE, not the cell
 
 Generated 2026-08-25 by `scripts/aggregate_criterion_resolvability.py`. Sources on disk, no new jobs:

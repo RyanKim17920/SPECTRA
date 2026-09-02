@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL / PARTIAL. Covers only 3 of the current 5 backbones (phikon-v2, midnight, Virchow2 — H-Optimus-0 and UNI2-h are not included). Do not treat as the final cross-backbone table; see RUNBOOK.md and RESULTS.md for current scope.
+
 # final5 — three backbones, one recipe, five seeds
 
 Status: **COMPLETE — RI, HEST and THUNDER all at n=5, full coverage.**

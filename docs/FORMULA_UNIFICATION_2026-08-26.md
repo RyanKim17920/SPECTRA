@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL (audit journal). The formula fixes it mandates are already merged into the current scripts. Treat the per-arm numbers here as a snapshot of that audit, not a current results table.
+
 # Formula unification audit — 2026-08-26
 
 Mandate: nothing hardcoded, everything empirical, **exactly the same formula applied in

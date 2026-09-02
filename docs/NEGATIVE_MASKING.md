@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Single-seed (n=1), phikon-v2-only ablation that fed into the final WAIV_BCLS=3.0 / WAIV_BMEAN=-inf choice. Do not generalize its absolute numbers to other backbones.
+
 # Negative masking, all-91 conditions, and batch geometry — phikon seed 0
 
 Status: **complete at n=1 per arm.** All arms are phikon-v2, seed 0, T=900, C=2 unless

@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Read-only investigation from 2026-08-25; its own conclusion table marks itself SUPERSEDED for the classification finding by baseline_comparability_audit.md.
+
 # THUNDER base offset — why Waiv's base sits ~3 points above ours and above THUNDER's paper
 
 Date: 2026-08-25. Read-only forensic pass; no code changed, no jobs launched.

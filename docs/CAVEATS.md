@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Reporting-discipline conventions still apply, but example numbers/steps predate the 5-backbone, 50-step-grid, 1-SE-stopping-rule state. Cross-check any cited figure against RUNBOOK.md / RESULTS.md before using in the paper.
+
 # Caveats and reporting discipline
 
 Every claim in [`RESULTS.md`](RESULTS.md) is conditioned on this file. These are not

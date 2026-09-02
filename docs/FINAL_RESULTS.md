@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL / contains INVALID figures. The "THUNDER mean Δ over 4 tasks" rows are pre-16-dataset-port numbers now superseded by THUNDER_16DS_2026-08-26.md — do not paste them into the paper. Also predates the 5-backbone scope and the 1-SE stopping rule.
+
 # Final results — 2026-08-18
 
 Status of every measurement at session end. Evidence tags: **MEASURED** (on disk) · **PENDING** (job queued/running) · **NOT MEASURABLE** (structurally impossible, see reason).

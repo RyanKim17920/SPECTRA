@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL — superseded by RUNBOOK.md for how to run the project. Environment/venv layout described here may still be accurate; treat RUNBOOK.md as authoritative for commands.
+
 # Reproducing
 
 Environments, data preparation, training and evaluation for the two backbones reported in

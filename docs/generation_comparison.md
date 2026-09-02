@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Three-generation retrospective from 2026-08-18/25; GEN-3 scope is 3 backbones, predates the 5-backbone / 50-step-grid state.
+
 # Three generations on one scale — did we actually improve?
 
 Generated 2026-08-25. **Read-only analysis; no jobs launched or cancelled.**

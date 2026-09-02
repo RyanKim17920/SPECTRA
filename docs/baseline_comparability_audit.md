@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL, but its core finding still stands: THUNDER pct_of_waiv is INVALID as a per-task percentage (base-offset issue). Cite the finding, not the specific numeric table, and confirm against current docs.
+
 # Baseline comparability audit — is `pct_of_waiv` measuring what it claims?
 
 Date: 2026-08-25. Read-only audit; no code changed, no jobs touched.

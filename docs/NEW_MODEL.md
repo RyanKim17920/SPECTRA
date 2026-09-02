@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Earliest architecture write-up (2026-08-07), predates the 5-backbone roster (only phikon-v2/midnight discussed) and current eval pipeline. Kept for design rationale, not for numbers.
+
 # Running this recipe on a new backbone
 
 The recipe is backbone-agnostic in principle: masked InfoNCE over PLISM co-registered pairs,

@@ -1,3 +1,23 @@
+> **SUPERSEDED 2026-08-31 — do not use for the paper. See [`RUNBOOK.md`](RUNBOOK.md).**
+>
+> This document is a correct record of the 2026-08-25 three-backbone pilot and is kept for
+> history. Three things in it no longer describe what we run:
+>
+> 1. **Scope**: three backbones (phikon-v2, midnight, Virchow2). Production is now **five** —
+>    H-Optimus-0 and UNI2-h were added, and both are GATED hub repos requiring
+>    `WAIV_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated` or they 403.
+> 2. **Checkpoint grid**: `WAIV_CKPT_EVERY=125` here; production is **50**. The 1-SE rule can
+>    only return a step it actually evaluated, so the grid is part of the selection procedure,
+>    not a detail. On a 50 grid the selected steps are 200/150/100/100/125, and no fixed step
+>    serves all five.
+> 3. **Stopping rule**: the `confounder_insensitivity >= 0.75` rule below is replaced by the
+>    parameter-free **1-SE rule**, which reproduces its picks 12/12 without the arbitrary
+>    0.75 threshold.
+>
+> The head-bias question left open here is also now settled: keep `WAIV_BCLS=3.0`,
+> `WAIV_BMEAN=-inf`. Symmetric `+3/+3` costs RI ~2.3x its seed floor while its segmentation
+> gain sits below the THUNDER noise floor.
+
 # FINAL RECIPE — one configuration, three backbones, a stopping rule instead of a step
 
 Generated 2026-08-25 from `scripts/final_recipe_report.py` → `docs/final_recipe_verdict.json`.

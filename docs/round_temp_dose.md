@@ -1,3 +1,7 @@
+> **[STATUS BANNER — added 2026-08-31, see `docs/README.md` for the current doc map]**
+>
+> HISTORICAL. Pre-registered dose-response round from 2026-08-24; the doc itself flags its RI floors as SUPERSEDED. Do not cite floors from here — see current seed-floor docs.
+
 # Round: temperature dose-response + partial masking (PRE-REGISTERED)
 
 Written 2026-08-24, **before any result from this round existed**. Do not edit the
