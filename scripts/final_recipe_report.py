@@ -71,6 +71,7 @@ import json
 import math
 import re
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -124,11 +125,79 @@ WAIV_THUNDER_SOURCE = _sb.WAIV_THUNDER_SOURCE
 ALL_ARMS = _c5.ARMS
 CLS_TASKS = ("knn", "linear_probing", "simple_shot")   # segmentation deliberately excluded
 
-RUN_GLOB = "genMASK-c3s-*"
+# ---------------------------------------------------------------------------
+# THE RUN FAMILY.  Changed 2026-08-31 from the retired `genMASK-c3s-*` pilot (2 seeds,
+# 3 ungated backbones, CKPT_EVERY=125) to the FINALISED `genMASK-c50-*` sweep: five
+# backbones, CKPT_EVERY=50, ms500, warmup 200, lr 1e-4, rank 32, projdim 512, t900,
+# WAIV_BCLS=3.0 / WAIV_BMEAN=-inf, pin `falseneg-gated`  (docs/RUNBOOK.md section 1.2).
+# The c3s family is still selectable with --run-glob for before/after inspection.
+# ---------------------------------------------------------------------------
+RUN_GLOB = "genMASK-c50-*"
 CI_TARGET = 0.75
 # F13 fix: the stopping rule's mean is only comparable across checkpoints when it is
 # taken over the SAME dataset panel every time.
 N_CI_DATASETS = 3   # camelyon, tolkach_esca, tcga          # stopping rule: first ckpt with mean confounder_insensitivity >= this
+
+# ---------------------------------------------------------------------------
+# CHECKPOINT SELECTION -- the 1-SE RULE  (2026-08-31, supersedes CI >= 0.75)
+# ---------------------------------------------------------------------------
+# The rule, online, one run, no free parameters:
+#
+#   walk the checkpoint grid in step order, scoring each checkpoint by PathoROB's
+#   published bounded `avg_robustness_index` (NOT `confounder_insensitivity`, which is
+#   an unbounded odds with a per-dataset chance level -- see the audit in
+#   docs/CAVEATS.md).  Track B = best RI seen so far.
+#     1. STOP at the first checkpoint t >= 2 for which  R_t - B <= SE.
+#     2. RETURN the EARLIEST checkpoint seen so far whose RI >= B - SE.
+#   Step 2 is the rule.  Returning the stalling checkpoint instead overshoots by
+#   exactly one checkpoint on every run it was measured on.
+#
+# SE IS AN INPUT, NOT A CONSTANT.  It is the within-run standard error of the
+# 3-dataset mean RI at that checkpoint, and it must be MEASURED, not chosen: the whole
+# point of replacing CI>=0.75 was to delete a fitted constant, and swapping in a fitted
+# SE would put it straight back.  RI_SE_KEYS below are the per-dataset bootstrap fields
+# PathoROB emits under `--compute_bootstrapped_robustness_index`
+# (see patches/pathorob-enable-bootstrap-ri.patch, which repairs two crashes on that
+# path).  When they are present in a run's ri_curve.json the rule is fully automatic.
+#
+# THEY ARE NOT PRESENT ANYWHERE ON DISK TODAY.  The bootstrap flag
+# (src/waivphaet/eval/pathorob_adapter.py:161 `bootstrap: bool = False`) has never been
+# switched on by any caller, and eval_checkpoints.RESULT_KEYS would drop the fields even
+# if it had been.  So `--ri-se` exists as an EXPLICIT, operator-supplied override: a
+# number the reader can see, argue with, and vary, rather than one buried in the code.
+# Without it, or without the fields on disk, NO STEP IS SELECTED and the affected cells
+# are reported NOT REPORTABLE with that exact reason.  `--ri-se-sweep` prints the picks
+# as a function of SE so the sensitivity is visible instead of asserted.
+RI_SE_KEYS = ("robustness_index-std", "robustness_index_se", "ri_se")
+RI_SE: float | None = None          # set only by --ri-se; never defaulted to a guess
+
+# The SE the FINAL SCOREBOARD runs the rule with (scripts/final_scoreboard.py, which must
+# work with no arguments).  It is still an operator input -- this constant is where the
+# assertion is made once, with its source, instead of being retyped on a command line:
+#
+#   0.0070 = the MEASURED between-seed floor of the 3-dataset avg robustness index,
+#   max |ctrl - ctrlseed| over checkpoints, n=2 (docs/RESULTS.md section 12.3, quoted in
+#   docs/CAVEATS.md: "the avg-RI floor (0.0070)").  It is the noise of exactly the
+#   quantity this rule scores -- the same mean over the same three PathoROB datasets --
+#   which is why it is used rather than scoreboard.NOISE_SD's per-(backbone, step) RI SDs
+#   (0.0020-0.0048, measured only at steps 250/500, i.e. off this grid entirely).
+#
+# It is NOT the within-run bootstrap SE the rule was designed around: PathoROB's
+# `robustness_index-std` is absent from every ri_curve.json on disk (see RI_SE_KEYS
+# above), so no per-checkpoint SE exists to read.  A between-seed |difference| also runs
+# ~1.1-1.4x a one-run SD, so this SE is if anything WIDE, and a wider SE selects an
+# EARLIER checkpoint -- the direction that under-claims training, not over-claims it.
+# report["ri_se_sweep"] prints the pick as a function of this number so the sensitivity
+# is visible rather than asserted; at the time of writing the picks are unchanged over
+# SE 0.006-0.0085 on four of five backbones.
+RI_SE_SCOREBOARD_DEFAULT = 0.0070
+RI_SE_SCOREBOARD_SOURCE = (
+    "docs/RESULTS.md section 12.3 measured between-seed avg-RI floor 0.0070 "
+    "(max |ctrl - ctrlseed| over checkpoints, n=2); OPERATOR INPUT, not a "
+    "per-checkpoint bootstrap SE -- PathoROB's bootstrap fields are on no curve on disk")
+# The rule cannot declare a plateau off a single checkpoint: at t=1 the "improvement
+# over the best so far" is identically zero and the stop condition fires trivially.
+MIN_CHECKPOINTS_FOR_STOP = 2
 PASS_BAR = 70.0           # every cell must clear this
 OVERALL_BAR = 80.0        # ... and the mean of the three benchmark means must exceed this
 
@@ -207,8 +276,30 @@ THUNDER_FLOOR = {
     "phikon":   {"knn": 0.0233, "linear_probing": 0.0097, "simple_shot": 0.0087},
     "midnight": {"knn": 0.0100, "linear_probing": 0.0087, "simple_shot": 0.0104},
     "virchow2": {"knn": 0.0083, "linear_probing": 0.0088, "simple_shot": 0.0066},
+    # 2026-08-31: gated backbones.  Source: the "NEW SECTION ... gated backbones"
+    # part of docs/thunder_seed_floor_12ds.md, generated by
+    # scripts/thunder_seed_floor_gated.py (raw: docs/thunder_seed_floor_gated.json).
+    # SAME estimator (offset_2se over the same 12 PAPER_CLS datasets, f1, frozen) --
+    # the gated script imports pair_stats/read from thunder_seed_floor_12ds so there is
+    # one implementation.  TWO differences the reader must carry:
+    #   (a) n_seeds = 2 (one c3s s0/s1 pair at step 125), not 5.  offset_2se still has
+    #       df = 11 over datasets, but the across-seed term rests on a single pair.
+    #   (b) measured in the pathfm-full-evals corpus (corrected Resize(256,bicubic)
+    #       transform), not the old Resize(224,bilinear) corpus the three floors above
+    #       come from.  Checked, not assumed: the same c3s pairs for phikon/midnight/
+    #       virchow2 give a new/old floor ratio of mean 1.11, range 0.76-1.40, with no
+    #       consistent sign -- the transform moves absolute scores, not seed dispersion.
+    # Calibration in that section shows a single pair usually lands within +/-25% of the
+    # 5-seed value but was off by 2.2x in 1 of 9 cells.  Do not defend a gated verdict
+    # whose margin is inside 2x of the floor.
+    "hoptimus": {"knn": 0.0170, "linear_probing": 0.0226, "simple_shot": 0.0120},
+    "uni2":     {"knn": 0.0107, "linear_probing": 0.0059, "simple_shot": 0.0031},
 }
-THUNDER_FLOOR_SOURCE = "docs/thunder_seed_floor_12ds.md (n=5 training seeds, offset-2SE, 12/12 coverage)"
+THUNDER_FLOOR_SOURCE = (
+    "docs/thunder_seed_floor_12ds.md, offset-2SE, 12/12 coverage; "
+    "phikon/midnight/virchow2 n=5 training seeds (old corpus), "
+    "hoptimus/uni2 n=2 (single c3s seed pair, pathfm-full-evals corpus)"
+)
 
 # --- F4 fix (2026-08-26): THUNDER error bars -------------------------------------
 # THUNDER_FLOOR above is `offset_2se` = |mean(d)| + 2*SD(d)/sqrt(12), where d is the
@@ -242,24 +333,54 @@ MIN_N_FOR_VERDICT = 2
 HEST_POOLING = {a: _c5.hest_pooling(a) for a in ALL_ARMS}
 
 
-def _missing_denominators(arm: str) -> list[str]:
-    """Which grading inputs this arm still lacks.  Empty list = fully gradeable."""
+# ---------------------------------------------------------------------------
+# REPORTABILITY IS PER (ARM, BENCHMARK), NOT PER ARM  (2026-08-31)
+# ---------------------------------------------------------------------------
+# This used to be one all-or-nothing list per arm: an arm missing ANY denominator was
+# struck from EVERY table.  The only input the two gated backbones lack is the THUNDER
+# seed floor -- their RI base, HEST base and both Waiv targets have been on disk since
+# the gated-backbone eval landed -- so the old rule silently deleted ten perfectly
+# measurable RI/HEST cells because a third benchmark was unmeasured.  A missing
+# denominator now removes exactly the cells it actually blocks.
+def _missing_denominators_for(arm: str, bench: str) -> list[str]:
+    """Which grading inputs this (arm, benchmark) lacks.  Empty list = gradeable."""
     missing = []
-    if arm not in RI_BASE:
-        missing.append("RI base (eval_common.RI_BASE_MODEL_DIRS)")
-    if arm not in RI_WAIV:
-        missing.append("Waiv RI target (pathorob_adapter.TARGETS)")
-    if arm not in HEST_BASE:
-        missing.append("HEST base (collect_final5.HEST_BASE_FILES)")
-    if arm not in HEST_WAIV:
-        missing.append("Waiv HEST target (eval_common.HEST_WAIV)")
-    if arm not in THUNDER_FLOOR:
-        missing.append("THUNDER seed floor (docs/thunder_seed_floor_12ds.md)")
+    if bench == "RI":
+        if arm not in RI_BASE:
+            missing.append("RI base (eval_common.RI_BASE_MODEL_DIRS)")
+        if arm not in RI_WAIV:
+            missing.append("Waiv RI target (pathorob_adapter.TARGETS)")
+    elif bench == "HEST":
+        if arm not in HEST_BASE:
+            missing.append("HEST base (collect_final5.HEST_BASE_FILES)")
+        if arm not in HEST_WAIV:
+            missing.append("Waiv HEST target (eval_common.HEST_WAIV)")
+    elif bench == "THUNDER":
+        if arm not in THUNDER_FLOOR:
+            missing.append("THUNDER seed floor (docs/thunder_seed_floor_12ds.md)")
+        if arm not in WAIV_THUNDER:
+            missing.append("Waiv THUNDER target (docs/waiv_published.json Table 2)")
     return missing
 
 
-ARMS = tuple(a for a in ALL_ARMS if not _missing_denominators(a))
-ARMS_NOT_REPORTABLE = {a: _missing_denominators(a) for a in ALL_ARMS if a not in ARMS}
+BENCHES = ("RI", "HEST", "THUNDER")
+BENCH_ARMS = {b: tuple(a for a in ALL_ARMS if not _missing_denominators_for(a, b))
+              for b in BENCHES}
+THUNDER_ARMS = BENCH_ARMS["THUNDER"]
+# `ARMS` keeps its old name and its old job -- the row order of every table -- but it is
+# now the arms gradeable on AT LEAST ONE benchmark, i.e. all five.
+ARMS = tuple(a for a in ALL_ARMS
+             if any(not _missing_denominators_for(a, b) for b in BENCHES))
+# Retained for backwards compatibility with scripts/final_scoreboard.py section 5, which
+# lists "section 1 cells for <arm>: NOT REPORTABLE".  Its meaning is now the strict one:
+# an arm here has NO gradeable benchmark at all.  Per-benchmark gaps live in
+# report["cells_not_reportable"].
+ARMS_NOT_REPORTABLE = {a: sorted({m for b in BENCHES
+                                  for m in _missing_denominators_for(a, b)})
+                       for a in ALL_ARMS if a not in ARMS}
+CELLS_NOT_REPORTABLE = {"%s/%s" % (a, b): _missing_denominators_for(a, b)
+                        for a in ALL_ARMS for b in BENCHES
+                        if _missing_denominators_for(a, b)}
 
 # Statuses that must never be reported as a score.
 UNGRADED = {"PARTIAL", "INDETERMINATE", "NO_DATA", "NOT RESOLVED", "UNDERPOWERED"}
@@ -275,10 +396,10 @@ UNGRADED = {"PARTIAL", "INDETERMINATE", "NO_DATA", "NOT RESOLVED", "UNDERPOWERED
 RUN_RE = re.compile(r"-(%s)-s(\d+)-t\d+-(\d+)$" % "|".join(ALL_ARMS))
 
 
-def discover_runs() -> list[dict]:
+def discover_runs(run_glob: str | None = None) -> list[dict]:
     """Glob the recipe's runs and parse (backbone, seed, train job id) out of each name."""
     out = []
-    for d in sorted((REPO / "runs").glob(RUN_GLOB)):
+    for d in sorted((REPO / "runs").glob(run_glob or RUN_GLOB)):
         if not d.is_dir():
             continue
         m = RUN_RE.search(d.name)
@@ -294,8 +415,114 @@ def discover_runs() -> list[dict]:
     return out
 
 
-def select_step(run_dir: Path) -> tuple[int | None, float | None, list[dict]]:
-    """Apply the stopping rule to one run's ri_curve.json.
+def _ri_points(run_dir: Path) -> list[dict]:
+    """Every checkpoint on one run's curve, step-ordered, with its RI and (if measured)
+    the within-run SE of that RI.
+
+    A point is USABLE only with all N_CI_DATASETS present: the reported RI is a mean over
+    the three PathoROB datasets, and a mean over two of them is a different statistic
+    that happens to share the name (the same F13 argument the CI rule already made).
+    Short points stay in the trace, flagged, so the skip is auditable.
+    """
+    p = run_dir / "ri_curve.json"
+    if not p.exists():
+        return []
+    try:
+        blob = json.loads(p.read_text())
+    except Exception:
+        return []
+    rows = []
+    for pt in blob.get("points", []):
+        ds = pt.get("datasets") or {}
+        per_ds = {k: v.get("robustness_index") for k, v in ds.items()
+                  if isinstance(v, dict) and v.get("robustness_index") is not None}
+        # Per-dataset bootstrap SDs, when PathoROB was run with bootstrapping enabled.
+        # The SE of the 3-dataset MEAN is sqrt(sum sd_i^2)/n -- the datasets are disjoint
+        # cohorts, so their bootstrap draws are independent.
+        sds = []
+        for v in ds.values():
+            if not isinstance(v, dict):
+                continue
+            for k in RI_SE_KEYS:
+                if v.get(k) is not None:
+                    sds.append(float(v[k]))
+                    break
+        se = (math.sqrt(sum(s * s for s in sds)) / len(sds)) if len(sds) == len(per_ds) and sds else None
+        rows.append({
+            "step": pt.get("step"),
+            "ri": pt.get("avg_robustness_index"),
+            "n_datasets": len(per_ds),
+            "eligible": len(per_ds) == N_CI_DATASETS and pt.get("avg_robustness_index") is not None,
+            "measured_se": se,
+            "skip_reason": (None if len(per_ds) == N_CI_DATASETS else
+                            "only %d/%d RI datasets present" % (len(per_ds), N_CI_DATASETS)),
+        })
+    rows.sort(key=lambda r: (r["step"] is None, r["step"]))
+    return rows
+
+
+def select_step_1se(run_dir: Path, ri_se: float | None = None):
+    """THE RULE.  Returns (selected_step, se_used, trace).
+
+    Online one-standard-error rule (Breiman CART; Hastie & Tibshirani ESL), read as
+    "the least-trained checkpoint within one SE of peak robustness":
+
+        B = best RI so far.  STOP at the first checkpoint (index >=
+        MIN_CHECKPOINTS_FOR_STOP) where R_t - B <= SE.  RETURN the EARLIEST checkpoint
+        seen so far with RI >= B - SE.
+
+    Three outcomes are distinguished and none of them is silently a step:
+
+      * a step, with the SE that produced it;
+      * (None, se, trace) with trace[-1]["verdict"] == "UNTERMINATED" -- the run is still
+        improving by more than one SE at its last measured checkpoint, so the rule has
+        not fired.  Selecting the last checkpoint here would be the stop-at-last rule
+        wearing this rule's name;
+      * (None, None, trace) -- no SE.  The rule is undefined, not zero.  See RI_SE above.
+    """
+    trace = _ri_points(run_dir)
+    if ri_se is None:
+        for r in trace:
+            r["verdict"] = "NO_SE"
+        return None, None, trace
+    usable = [r for r in trace if r["eligible"]]
+    best = None            # B
+    best_step = None
+    for i, r in enumerate(usable):
+        se = r["measured_se"] if r["measured_se"] is not None else ri_se
+        r["se_used"] = se
+        if best is None:
+            best, best_step = r["ri"], r["step"]
+            r["delta_vs_best"] = 0.0
+            r["verdict"] = "SEED"          # first point: no improvement to judge
+            continue
+        r["delta_vs_best"] = r["ri"] - best
+        if i + 1 >= MIN_CHECKPOINTS_FOR_STOP and r["ri"] - best <= se:
+            r["verdict"] = "STOP"
+            if r["ri"] > best:
+                best, best_step = r["ri"], r["step"]
+            thresh = best - se
+            for q in usable[:i + 1]:
+                if q["ri"] >= thresh:
+                    q["verdict"] = q.get("verdict", "") + "|RETURNED"
+                    return q["step"], se, trace
+            # Unreachable: best itself satisfies RI >= best - se.
+            return best_step, se, trace
+        r["verdict"] = "CONTINUE"
+        if r["ri"] > best:
+            best, best_step = r["ri"], r["step"]
+    if usable:
+        usable[-1]["verdict"] = "UNTERMINATED"
+    return None, ri_se, trace
+
+
+def select_step_ci075(run_dir: Path) -> tuple[int | None, float | None, list[dict]]:
+    """RETIRED stopping rule, kept selectable with --rule ci075 for before/after work.
+
+    Retired because `confounder_insensitivity` is an unbounded ODDS whose chance level
+    differs per dataset (1.03 / 2.21 / 1.05), so its cross-dataset mean is a mixed-unit
+    quantity, and 0.75 was a grid point fitted on a script that contained a
+    never-fired-rule bug (see scripts/eval_stopping_rules.py's F-H note).
 
     Returns (selected_step, mean_confounder_insensitivity_at_that_step, trace) where
     trace is the per-checkpoint mean CI so the reader can audit the choice.  Returns
@@ -331,6 +558,84 @@ def select_step(run_dir: Path) -> tuple[int | None, float | None, list[dict]]:
         if row["eligible"] and row["mean_ci"] is not None and row["mean_ci"] >= CI_TARGET:
             return row["step"], row["mean_ci"], trace
     return None, None, trace
+
+
+RULES = ("1se", "ci075")
+
+
+def select_step(run_dir: Path, rule: str = "1se", ri_se: float | None = None):
+    """Dispatch to the configured checkpoint-selection rule.
+
+    Returns (selected_step, rule_statistic, trace).  `rule_statistic` is the SE that
+    produced the pick under `1se`, and the mean confounder_insensitivity under `ci075`.
+    """
+    if rule == "ci075":
+        return select_step_ci075(run_dir)
+    if rule == "1se":
+        return select_step_1se(run_dir, ri_se)
+    raise ValueError("unknown rule %r (choose from %s)" % (rule, ", ".join(RULES)))
+
+
+def ri_se_sweep(runs: list[dict], grid: list[float] | None = None) -> dict:
+    """Which step the 1-SE rule picks, per run, as a function of the SE it is given.
+
+    The rule's only input is the SE.  Printing the pick across a grid of SEs turns "we
+    chose step 100" into a checkable statement about how wide the SE would have to be
+    wrong for the pick to move, and it is the honest substitute for a single asserted
+    number while the bootstrap SE is unmeasured.  Nothing here selects anything: it is a
+    diagnostic table.
+    """
+    grid = grid or [0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.010,
+                    0.015, 0.020]
+    out: dict = {"grid": grid, "runs": {}, "consensus": {}}
+    for r in runs:
+        out["runs"][r["run"]] = {
+            "backbone": r["backbone"], "seed": r["seed"],
+            "picks": {("%g" % se): select_step_1se(r["run_dir"], se)[0] for se in grid},
+        }
+    for se in grid:
+        k = "%g" % se
+        per_bb: dict[str, list] = defaultdict(list)
+        for name, v in out["runs"].items():
+            per_bb[v["backbone"]].append(v["picks"][k])
+        out["consensus"][k] = {bb: sorted({p for p in v if p is not None})
+                               for bb, v in per_bb.items()}
+    return out
+
+
+def cell_steps(rows: list[dict]) -> tuple[list[int], str]:
+    """The step(s) the rule selected for the runs that build ONE cell.
+
+    The rule is applied PER RUN, so two seeds of the same backbone can plateau at
+    different checkpoints (on the 50-step grid this actually happens: uni2 s0 stops at
+    100 and s1 at 150 at the cited SE).  That is not an error and it is not a licence to
+    mix benchmarks either -- every ROW is still one (run, step) pair, and each run
+    contributes the SAME checkpoint to RI, HEST and THUNDER.  What it does mean is that
+    the cell cannot be labelled with a single step, so both the set and a printable
+    label are returned and the label carries every step that went in.
+    """
+    steps = sorted({x["selected_step"] for x in rows if x.get("selected_step")})
+    return steps, ("/".join(str(s) for s in steps) if steps else "-")
+
+
+def seed_sd_over_steps(per_step: dict, steps: list[int]):
+    """The measured seed SD for a cell whose runs may sit at different steps.
+
+    One SD per distinct step through the SHARED rule (eval_common.seed_sd_at_step), then
+    the LARGEST of them -- the same conservative direction that rule already takes when a
+    step has no measurement of its own.
+    """
+    if not steps:
+        return None, "no selected step"
+    got = [_ec.seed_sd_at_step(per_step, s) for s in steps]
+    have = [(sd, note, s) for (sd, note), s in zip(got, steps) if sd is not None]
+    if not have:
+        return None, got[0][1]
+    sd, note, s = max(have, key=lambda t: t[0])
+    if len(steps) > 1:
+        note = "max over the %d selected steps %s -> step %s: %s" % (
+            len(steps), steps, s, note)
+    return sd, note
 
 
 def ri_at_step(run_dir: Path, step: int) -> float | None:
@@ -382,8 +687,37 @@ def thunder_per_ds(model: str, task: str) -> dict[str, float]:
     return out
 
 
-def thunder_model_name(backbone: str, seed: int, jobid: str, step: int) -> str:
-    return f"f5_ci-{backbone}-s{seed}-{jobid}_s{step:07d}"
+def thunder_model_names(backbone: str, seed: int, jobid: str, step: int,
+                        run: str | None = None) -> list[str]:
+    """Every THUNDER model-dir spelling this (run, step) could have been written under.
+
+    THE HARNESS HAS USED TWO CONVENTIONS and this function used to hardcode one of them.
+    `scripts/run_thunder.sbatch` names a model `f5_<run>_s<step>`, which is what the c3s
+    gated-backbone cells on disk are called
+    (`f5_genMASK-c3s-...-hoptimus-s0-t900-394307_s0000125`), while the older three-backbone
+    c3s cells were submitted under the short `f5_ci-<bb>-s<seed>-<jobid>_s<step>` alias to
+    stay inside THUNDER's 64-character run-name limit.  Returning only the alias meant a
+    run written under the long name looked like "evaluated and empty" instead of
+    "evaluated"; returning only the long name would break every existing cell.  Both are
+    tried, in order, and the caller records which one it found.
+    """
+    names = []
+    if run:
+        names.append(f"f5_{run}_s{step:07d}")
+    names.append(f"f5_ci-{backbone}-s{seed}-{jobid}_s{step:07d}")
+    return names
+
+
+def thunder_model_name(backbone: str, seed: int, jobid: str, step: int,
+                       run: str | None = None) -> str:
+    """The spelling that actually exists on disk; the first candidate if none does."""
+    res_root = THUNDER_ROOT / "outputs" / "res"
+    cands = thunder_model_names(backbone, seed, jobid, step, run)
+    for c in cands:
+        for ds in PAPER_CLS:
+            if (res_root / ds / c).is_dir():
+                return c
+    return cands[0]
 
 
 def thunder_base_12ds(backbone: str) -> dict[str, tuple[float | None, int]]:
@@ -416,7 +750,7 @@ def thunder_base_gap() -> dict:
     out: dict = {"waiv_source": WAIV_THUNDER_SOURCE, "rosters": {}}
     for label, roster in CLS_ROSTERS.items():
         per_roster: dict = {}
-        for a in ARMS:
+        for a in THUNDER_ARMS:
             per_ds = _c5._thunder_base_per_ds(a, cls_datasets=roster)
             for task in CLS_TASKS:
                 vals = [v for k, v in (per_ds.get(task) or {}).items()
@@ -633,8 +967,14 @@ def fmt_cell(c: dict) -> str:
 # Main
 # ---------------------------------------------------------------------------
 def build_report(hest_assume_step: int | None = None,
-                 cls_roster: str = CLS_ROSTER_DEFAULT) -> dict:
+                 cls_roster: str = CLS_ROSTER_DEFAULT,
+                 rule: str = "1se",
+                 ri_se: float | None = None,
+                 run_glob: str | None = None) -> dict:
     """Build the verdict report.
+
+    `rule` / `ri_se` select the checkpoint rule (see RI_SE above).  `run_glob` selects
+    the run family (default RUN_GLOB = the finalised c50 sweep).
 
     `cls_roster` selects the THUNDER classification panel: "16" (default, Waiv's
     Table-2 roster) or "12" (the THUNDER paper's, which is what the seed floors were
@@ -648,10 +988,42 @@ def build_report(hest_assume_step: int | None = None,
     THUNDER cells (both of which need the curve), and they never enter the primary
     rule-selected HEST cell that the verdict is scored on.
     """
-    global PAPER_CLS
+    global PAPER_CLS, RUN_GLOB
     PAPER_CLS = CLS_ROSTERS[cls_roster]
+    if run_glob:
+        RUN_GLOB = run_glob
     runs = discover_runs()
     report: dict = {
+        "run_family": {
+            "glob": RUN_GLOB,
+            "n_runs_discovered": len(runs),
+            "runs": [r["run"] for r in runs],
+        },
+        "checkpoint_rule": {
+            "rule": rule,
+            "description": (
+                "1-SE (online): B = best avg_robustness_index so far; STOP at the first "
+                "checkpoint (index >= %d) with R_t - B <= SE; RETURN the EARLIEST "
+                "checkpoint with RI >= B - SE." % MIN_CHECKPOINTS_FOR_STOP
+                if rule == "1se" else
+                "RETIRED: first checkpoint with mean confounder_insensitivity >= %s"
+                % CI_TARGET),
+            "metric": ("PathoROB avg_robustness_index (bounded, published)"
+                       if rule == "1se" else "confounder_insensitivity (unbounded odds)"),
+            "se_source": (
+                "per-checkpoint bootstrap SE from ri_curve.json (%s) where present, "
+                "otherwise the operator-supplied --ri-se" % "/".join(RI_SE_KEYS)),
+            "ri_se_supplied": ri_se,
+            "se_measured_on_disk": False,   # overwritten below if any point carries one
+            "se_unmeasured_note": (
+                "PathoROB's bootstrap fields are absent from every checkpoint in this "
+                "corpus: src/waivphaet/eval/pathorob_adapter.py:161 defaults "
+                "bootstrap=False and no caller sets it, and "
+                "scripts/eval_checkpoints.RESULT_KEYS does not copy the fields into "
+                "ri_curve.json.  Until one of those changes, --ri-se is the ONLY way to "
+                "run this rule, and it is an operator input, not a measurement."),
+        },
+        "cells_not_reportable": CELLS_NOT_REPORTABLE,
         "thunder_cls_roster": {
             "selected": cls_roster,
             "n_datasets": len(PAPER_CLS),
@@ -684,7 +1056,10 @@ def build_report(hest_assume_step: int | None = None,
                                "for every average",
             "scored_by": "worst (backbone, benchmark) cell",
         },
-        "stopping_rule": f"first checkpoint with mean confounder_insensitivity >= {CI_TARGET}",
+        "stopping_rule": ("1-SE on avg_robustness_index (earliest checkpoint within "
+                          "one SE of the best seen so far)" if rule == "1se" else
+                          "RETIRED: first checkpoint with mean "
+                          "confounder_insensitivity >= %s" % CI_TARGET),
         "sources": {
             "waiv_thunder": WAIV_THUNDER_SOURCE,
             "thunder_floors": THUNDER_FLOOR_SOURCE,
@@ -739,18 +1114,38 @@ def build_report(hest_assume_step: int | None = None,
 
     # ---- per-run: apply the rule, then read the three benchmarks -------------
     for r in runs:
-        step, mean_ci, trace = select_step(r["run_dir"])
+        step, stat, trace = select_step(r["run_dir"], rule=rule, ri_se=ri_se)
+        if any(t.get("measured_se") is not None for t in trace):
+            report["checkpoint_rule"]["se_measured_on_disk"] = True
         rec = {
             "run": r["run"], "backbone": r["backbone"], "seed": r["seed"],
             "train_jobid": r["jobid"],
-            "selected_step": step, "mean_confounder_insensitivity": mean_ci,
+            "selected_step": step,
+            "rule": rule,
             "ci_trace": trace,
         }
+        if rule == "1se":
+            rec["se_used"] = stat
+        else:
+            rec["mean_confounder_insensitivity"] = stat
         if step is None:
             has_curve = (r["run_dir"] / "ri_curve.json").exists()
-            rec["note"] = (f"no checkpoint on the curve reaches mean CI >= {CI_TARGET}"
-                           if has_curve else "no ri_curve.json -- stopping rule cannot "
-                                             "be applied (RI and THUNDER cells excluded)")
+            if not has_curve:
+                why = ("no ri_curve.json -- the checkpoint rule cannot be applied "
+                       "(RI and THUNDER cells excluded)")
+            elif rule == "1se" and ri_se is None:
+                why = ("1-SE rule undefined: no per-checkpoint RI SE.  PathoROB's "
+                       "bootstrap fields (%s) are absent from this curve and no --ri-se "
+                       "was supplied." % "/".join(RI_SE_KEYS))
+            elif rule == "1se":
+                why = ("1-SE rule UNTERMINATED: RI is still improving by more than one "
+                       "SE at the last measured checkpoint (%s), so the run has not "
+                       "plateaued.  Returning the last checkpoint here would be the "
+                       "stop-at-last rule under this rule's name."
+                       % ([t["step"] for t in trace if t.get("eligible")][-1:] or "none"))
+            else:
+                why = f"no checkpoint on the curve reaches mean CI >= {CI_TARGET}"
+            rec["note"] = why
             rec["has_ri_curve"] = has_curve
             # F5: HEST-only admission at an EXPLICIT assumed step.  Deliberately does
             # NOT set selected_step, so this run stays out of by_bb and therefore out of
@@ -768,8 +1163,11 @@ def build_report(hest_assume_step: int | None = None,
         h, hp = hest_score(r["run"], step, r["backbone"])
         rec["hest"] = h
         rec["hest_path"] = hp
-        model = thunder_model_name(r["backbone"], r["seed"], r["jobid"], step)
+        model = thunder_model_name(r["backbone"], r["seed"], r["jobid"], step, r["run"])
         rec["thunder_model"] = model
+        rec["thunder_model_candidates"] = thunder_model_names(
+            r["backbone"], r["seed"], r["jobid"], step, r["run"])
+        rec["thunder_root"] = str(THUNDER_ROOT / "outputs" / "res")
         rec["thunder"] = {}
         for task in CLS_TASKS:
             per_ds = thunder_per_ds(model, task)
@@ -791,13 +1189,14 @@ def build_report(hest_assume_step: int | None = None,
         if n == 0:
             report["cells"].setdefault(a, {})["RI"] = {"pct": None, "ci": None, "n": 0, "status": "NO_DATA"}
             continue
-        step_a = by_bb[a][0]["selected_step"]
+        steps_a, step_label = cell_steps(by_bb[a])
+        step_a = step_label
         # The measured RI seed SD, per (backbone, step), through the ONE step-selection
         # rule shared with HEST (eval_common.seed_sd_at_step): exact step if measured,
         # otherwise the largest SD measured for that backbone at any step -- an
         # over-estimate by construction, the safe direction for an error bar.
         ri_per_step = {st: v.get("ri") for st, v in (_sb.NOISE_SD.get(a, {}) or {}).items()}
-        raw_sd, sd_note = _ec.seed_sd_at_step(ri_per_step, step_a)
+        raw_sd, sd_note = seed_sd_over_steps(ri_per_step, steps_a)
         gain = RI_WAIV[a] - RI_BASE[a]
 
         # F-P: the per-cell gate is now a DIAGNOSTIC (see percell_gate_diagnostic).
@@ -823,6 +1222,9 @@ def build_report(hest_assume_step: int | None = None,
             "n": n,
             "raw_mean": sum(vals) / n, "base": RI_BASE[a], "waiv": RI_WAIV[a],
             "selected_step": step_a,
+            "selected_steps": steps_a,
+            "steps_mixed": len(steps_a) > 1,
+            "per_run_step": {x["run"]: x["selected_step"] for x in by_bb[a]},
             "per_seed_pct": pcts_unc, "per_seed_pct_uncapped": pcts_unc,
             "per_seed_pct_capped": [cap100(q) for q in pcts_unc],
             "seed_sd_raw": raw_sd, "seed_sd_pct_points": floor_sd_pct,
@@ -845,30 +1247,41 @@ def build_report(hest_assume_step: int | None = None,
         if n == 0:
             report["cells"].setdefault(a, {})["HEST"] = {"pct": None, "ci": None, "n": 0, "status": "NO_DATA"}
             continue
-        step_a = by_bb[a][0]["selected_step"]
+        steps_a, step_label = cell_steps(by_bb[a])
+        step_a = step_label
         # F-A: derived from disk, same estimator as scoreboard.NOISE_SD, same step rule
         # as RI above.
-        raw_sd, sd_note = _ec.seed_sd_at_step(HEST_SEED_SD.get(a, {}), step_a)
+        raw_sd, sd_note = seed_sd_over_steps(HEST_SEED_SD.get(a, {}), steps_a)
         gain = HEST_WAIV[a] - HEST_BASE[a]
 
         diag = percell_gate_diagnostic("HEST", a, gain, raw_sd, sd_note)
 
         pcts_unc = [pct_of_waiv_uncapped(v, HEST_BASE[a], HEST_WAIV[a]) for v in vals]
         mean_pct_unc = sum(pcts_unc) / n
-        floor_sd_pct = raw_sd / gain * 100.0
+        # 2026-09-01: None-guard, matching the RI cell above.  HEST_SEED_SD is keyed by
+        # backbone and the two gated backbones have no measured HEST seed SD at all, so
+        # this divided None by a float and killed the whole report the first time the
+        # five-backbone family was graded.  A missing floor must leave the cell with the
+        # EMPIRICAL interval only (and ci95 already reports which term it used), never
+        # crash and never silently substitute another backbone's floor.
+        floor_sd_pct = (raw_sd / gain * 100.0) if raw_sd is not None else None
         ci, emp_ci, floor_ci, ci_src = _ec.ci95(pcts_unc, floor_sd_pct)
         cell = grade(mean_pct_unc, ci, n)
         cell.update({
             "n": n,
             "raw_mean": sum(vals) / n, "base": HEST_BASE[a], "waiv": HEST_WAIV[a],
             "selected_step": step_a,
+            "selected_steps": steps_a,
+            "steps_mixed": len(steps_a) > 1,
+            "per_run_step": {x["run"]: x["selected_step"] for x in by_bb[a]},
             "per_seed_pct": pcts_unc, "per_seed_pct_uncapped": pcts_unc,
             "per_seed_pct_capped": [cap100(q) for q in pcts_unc],
             "pooling": HEST_POOLING[a],
             "step_source": "stopping rule",
             "seed_sd_raw": raw_sd, "seed_sd_pct_points": floor_sd_pct,
             "seed_sd_df": ((_HEST_SD_BLOB["pooled_seed_sd"].get(a, {}) or {})
-                           .get(str(step_a), {}) or {}).get("df"),
+                           .get(str(steps_a[0]) if len(steps_a) == 1 else "",
+                                {}) or {}).get("df"),
             "empirical_ci": emp_ci, "floor_ci": floor_ci,
             "ci_source": ci_src + " [floor %s]" % sd_note,
             "our_delta": sum(vals) / n - HEST_BASE[a],
@@ -908,7 +1321,9 @@ def build_report(hest_assume_step: int | None = None,
             report.setdefault("hest_supplementary", {})[a] = scell
 
     # ---- THUNDER ------------------------------------------------------------
-    for a in ARMS:
+    # Only the arms with a measured THUNDER seed floor.  The other arms get an explicit
+    # NOT REPORTABLE cell below so the gap is a printed row, not an absent one.
+    for a in THUNDER_ARMS:
         base12 = thunder_base_12ds(a)
         tasks_out: dict[str, dict] = {}
         for task in CLS_TASKS:
@@ -961,9 +1376,19 @@ def build_report(hest_assume_step: int | None = None,
             n = len(full)
             if n == 0:
                 cov_s = ",".join(str(c) for c in covs) or "-"
+                # Name the DIRECTORIES that were looked for.  "coverage 0/16" alone reads
+                # as a half-finished eval; when every seed is at 0 the actual fact is
+                # usually that this run family was never submitted to THIS harness at
+                # all, and the reader has to be able to tell those two apart without
+                # going to the filesystem.
+                looked = sorted({m for x in by_bb[a]
+                                 for m in (x.get("thunder_model_candidates") or [])})
+                where = ("; nothing on disk for this (run, step) under %s -- searched %s"
+                         % (str(THUNDER_ROOT / "outputs" / "res"), ", ".join(looked))
+                         ) if all(c == 0 for c in covs) and looked else ""
                 entry.update({"pct": None, "ci": None, "n": 0, "status": "PARTIAL",
                               "reason": f"coverage {cov_s}/{len(PAPER_CLS)} per seed; "
-                                        f"12ds floor invalid below 12/12"})
+                                        f"12ds floor invalid below 12/12" + where})
                 tasks_out[task] = entry
                 continue
             pcts_unc = [pct_of_waiv_uncapped(x["thunder"][task]["mean"], base, base + waiv_gain)
@@ -1055,6 +1480,23 @@ def build_report(hest_assume_step: int | None = None,
             })
         report["cells"].setdefault(a, {})["THUNDER"] = cell
 
+    # ---- cells with no denominator: PRINTED, not omitted ---------------------
+    # A cell that cannot be graded because an INPUT is missing is a different thing from
+    # a cell that scored badly, and it is a different thing again from a cell that is
+    # simply absent from the table.  Give it a row and the reason.
+    for bench in BENCHES:
+        for a in ALL_ARMS:
+            miss = _missing_denominators_for(a, bench)
+            if not miss:
+                continue
+            report["cells"].setdefault(a, {})[bench] = {
+                "pct": None, "pct_capped": None, "pct_uncapped": None, "ci": None,
+                "lower_uncapped": None, "upper_uncapped": None, "was_capped": False,
+                "n": 0, "status": "NOT REPORTABLE",
+                "reason": "missing denominator(s): " + ", ".join(miss),
+                "missing_inputs": miss,
+            }
+
     # ---- aggregate ----------------------------------------------------------
     benches = ("RI", "HEST", "THUNDER")
     bench_avg = {}
@@ -1078,9 +1520,9 @@ def build_report(hest_assume_step: int | None = None,
                 "sd_gain": (report["cells"].get(a, {}).get(b, {}) or {}).get("sd_waiv_gain"),
                 "complete": (report["cells"].get(a, {}).get(b, {}) or {}).get("pct") is not None,
                 "note": (report["cells"].get(a, {}).get(b, {}) or {}).get("status", "NO_DATA"),
-            } for a in ARMS],
-            group="%s (3 backbones)" % b)
-        graded_bb = [a for a in ARMS
+            } for a in BENCH_ARMS[b]],
+            group="%s (%d backbones)" % (b, len(BENCH_ARMS[b])))
+        graded_bb = [a for a in BENCH_ARMS[b]
                      if (report["cells"].get(a, {}).get(b, {}) or {}).get("pct") is not None]
         bench_avg[b] = {
             "mean": pooled.get("pct"),
@@ -1093,7 +1535,9 @@ def build_report(hest_assume_step: int | None = None,
             "pooled": pooled,
             "concentration_flags": pooled.get("concentration_flags") or [],
             "n_backbones": len(graded_bb),
-            "coverage_ok": len(graded_bb) == len(ARMS),
+            "coverage_ok": len(graded_bb) == len(BENCH_ARMS[b]),
+            "n_backbones_required": len(BENCH_ARMS[b]),
+            "backbones_without_a_denominator": [a for a in ALL_ARMS if a not in BENCH_ARMS[b]],
             "eligible_for_overall": pooled.get("pct") is not None,
             "withheld_reason": pooled.get("reason") if pooled["status"] != "POOLED" else None,
             # Diagnostic only: what the OLD mean-of-ratios would have printed, so the
@@ -1109,7 +1553,8 @@ def build_report(hest_assume_step: int | None = None,
                         "overall average is defined only when all three benchmark means "
                         "cover all three backbones"
                         % (", ".join(short), len(ARMS),
-                           ", ".join("%s=%d/3" % (b, bench_avg[b]["n_backbones"])
+                           ", ".join("%s=%d/%d" % (b, bench_avg[b]["n_backbones"],
+                                                   len(BENCH_ARMS[b]))
                                      for b in short)))
     else:
         overall = sum(bench_avg[b]["mean"] for b in benches) / len(benches)
@@ -1118,9 +1563,9 @@ def build_report(hest_assume_step: int | None = None,
     _partial = [bench_avg[b]["mean"] for b in benches if bench_avg[b]["mean"] is not None]
     overall_partial = (sum(_partial) / len(_partial)) if _partial else None
 
-    graded_cells = [(a, b, report["cells"][a][b]) for a in ARMS for b in benches
+    graded_cells = [(a, b, report["cells"][a][b]) for b in benches for a in BENCH_ARMS[b]
                     if report["cells"].get(a, {}).get(b, {}).get("pct") is not None]
-    ungraded_cells = [(a, b, report["cells"][a][b]) for a in ARMS for b in benches
+    ungraded_cells = [(a, b, report["cells"][a][b]) for b in benches for a in BENCH_ARMS[b]
                       if report["cells"].get(a, {}).get(b, {}).get("pct") is None]
     unresolved = [(a, b, c) for a, b, c in graded_cells if c["status"] == "NOT RESOLVED"]
     failed = [(a, b, c) for a, b, c in graded_cells if c["status"] == "FAIL"]
@@ -1249,6 +1694,40 @@ def build_report(hest_assume_step: int | None = None,
             "verdict": v,
             "verdict_reason": why,
         }
+        # SECONDARY, and labelled as such: the same bars applied to only the benchmarks
+        # this model actually has a number on.  NOT the criterion -- a model that clears
+        # 70 on two benchmarks has not been shown to clear it on the third -- but the
+        # difference between "we measured it and it failed" and "we have not measured
+        # it" is the whole content of the verdict right now, and burying both under one
+        # INDETERMINATE hides which one applies.
+        if gradeable and len(gradeable) < len(benches):
+            g_avg = sum(pcts[b] for b in gradeable) / len(gradeable)
+            g_fail = [b for b in gradeable if stats[b] == "FAIL"]
+            g_unres = [b for b in gradeable if stats[b] == "NOT RESOLVED"]
+            if g_fail:
+                gv, gwhy = "FAIL", ("below the %g bar: " % PASS_BAR + ", ".join(
+                    "%s = %.1f+/-%.1f" % (b, pcts[b], cells_a[b]["ci"]) for b in g_fail))
+            elif g_unres:
+                gv, gwhy = "NOT RESOLVED", ("error bar straddles %g for " % PASS_BAR
+                                            + ", ".join(g_unres))
+            elif g_avg <= OVERALL_BAR:
+                gv, gwhy = "FAIL", ("every measured benchmark clears %g but their mean "
+                                    "%.1f does not exceed %g" % (PASS_BAR, g_avg, OVERALL_BAR))
+            else:
+                gv, gwhy = "PASS", ("worst measured benchmark %s = %.1f >= %g; mean of "
+                                    "measured %.1f > %g"
+                                    % (min(gradeable, key=lambda b: pcts[b]),
+                                       min(pcts[b] for b in gradeable), PASS_BAR,
+                                       g_avg, OVERALL_BAR))
+            per_model[a]["measured_only"] = {
+                "benchmarks": gradeable,
+                "average": g_avg,
+                "verdict": gv,
+                "verdict_reason": gwhy,
+                "NOT_THE_CRITERION": ("the criterion needs all of %s; this is the same "
+                                      "bars on %s only"
+                                      % ("/".join(benches), "/".join(gradeable))),
+            }
     report["per_model"] = per_model
     report["per_model_criterion"] = (
         "THE CRITERION.  Each backbone independently: pct_of_waiv >= %g on EACH of "
@@ -1257,6 +1736,9 @@ def build_report(hest_assume_step: int | None = None,
     pm_v = [per_model[a]["verdict"] for a in ARMS]
     report["per_model_verdict"] = ("FAIL" if "FAIL" in pm_v else
                                    "INDETERMINATE" if "INDETERMINATE" in pm_v else "PASS")
+    # The rule's sensitivity to its one input, printed rather than asserted.
+    if rule == "1se":
+        report["ri_se_sweep"] = ri_se_sweep(runs)
     report["pooled_across_backbones_NOT_THE_CRITERION"] = (
         "report['benchmark_averages'], report['overall_average'] and report['verdict'] "
         "pool across the three backbones.  They are SECONDARY.  The criterion is "
@@ -1285,7 +1767,17 @@ def print_report(rep: dict) -> None:
     print("=" * W)
     print("FINAL RECIPE VERDICT -- mask_same_core / cls-bias 3.0 / lr1e-4 / T0.07 / wd0.05")
     print("=" * W)
+    cr = rep.get("checkpoint_rule") or {}
+    print(f"Run family    : {rep.get('run_family', {}).get('glob')}  "
+          f"({rep.get('run_family', {}).get('n_runs_discovered')} runs)")
     print(f"Stopping rule : {rep['stopping_rule']}")
+    if cr.get("rule") == "1se":
+        print(f"                metric {cr.get('metric')}")
+        print(f"                SE     {cr.get('se_source')}")
+        print(f"                SE supplied via --ri-se: {cr.get('ri_se_supplied')}  "
+              f"| bootstrap SE found on disk: {cr.get('se_measured_on_disk')}")
+        if not cr.get("se_measured_on_disk"):
+            print(f"                {cr.get('se_unmeasured_note')}")
     print(f"Criterion     : pct_of_waiv >= {PASS_BAR:.0f} on EVERY cell (worst cell, not a mean),")
     print(f"                AND mean of the three benchmark means > {OVERALL_BAR:.0f}.")
     print("                ONE quantity is graded and averaged: the UNCAPPED pct_of_waiv.")
@@ -1294,14 +1786,37 @@ def print_report(rep: dict) -> None:
     print()
 
     print("-- CHECKPOINT SELECTION (rule applied per run) " + "-" * 31)
-    print(f"{'run':<20} {'seed':>4} {'step':>6} {'mean CI':>8}   curve (step:meanCI)")
+    is_1se = (rep.get("checkpoint_rule") or {}).get("rule") == "1se"
+    key, lab, hdr = (("ri", "SE used", "curve (step:RI)") if is_1se
+                     else ("mean_ci", "mean CI", "curve (step:meanCI)"))
+    print(f"{'backbone':<10} {'seed':>4} {'step':>6} {lab:>9}   {hdr}")
     for r in rep["runs"]:
-        curve = " ".join(f"{t['step']}:{t['mean_ci']:.2f}" if t["mean_ci"] is not None
+        curve = " ".join(f"{t['step']}:{t[key]:.4f}" if t.get(key) is not None
                          else f"{t['step']}:--" for t in r["ci_trace"])
         step = r["selected_step"] if r["selected_step"] is not None else "none"
-        mci = f"{r['mean_confounder_insensitivity']:.3f}" if r.get("mean_confounder_insensitivity") else "  --"
-        print(f"{r['backbone']:<20} {r['seed']:>4} {str(step):>6} {mci:>8}   {curve}")
+        stat = r.get("se_used") if is_1se else r.get("mean_confounder_insensitivity")
+        stat_s = f"{stat:.4f}" if isinstance(stat, (int, float)) else "   --"
+        print(f"{r['backbone']:<10} {r['seed']:>4} {str(step):>6} {stat_s:>9}   {curve}")
+        if r["selected_step"] is None and r.get("note"):
+            print(f"{'':<10} {'':>4} {'':>6} {'':>9}   -> {r['note']}")
     print()
+
+    sweep = rep.get("ri_se_sweep")
+    if sweep:
+        print("-- 1-SE SENSITIVITY: which step the rule picks, per backbone, vs the SE "
+              + "-" * 5)
+        print("   The rule has exactly one input.  This is what varying it does; it is a")
+        print("   diagnostic, not a selection.  A '-' means the rule did not fire.")
+        bbs = sorted({v["backbone"] for v in sweep["runs"].values()})
+        print("   " + "SE".ljust(9) + "".join(b_[:11].rjust(13) for b_ in bbs))
+        for se in sweep["grid"]:
+            k = "%g" % se
+            row = "   " + k.ljust(9)
+            for b_ in bbs:
+                picks = sweep["consensus"][k].get(b_) or []
+                row += (",".join(str(x) for x in picks) or "-").rjust(13)
+            print(row)
+        print()
 
     not_reportable = rep.get("arms_not_reportable") or {}
     if not_reportable:
@@ -1518,6 +2033,23 @@ def main() -> None:
                          "this explicit step.  They never enter the RI or THUNDER cells, "
                          "and never the primary rule-selected HEST cell the verdict is "
                          "scored on.  Off by default; remove the flag to revert.")
+    ap.add_argument("--rule", choices=RULES, default="1se",
+                    help="checkpoint-selection rule.  1se (default) = the parameter-free "
+                         "one-standard-error rule on avg_robustness_index; ci075 = the "
+                         "RETIRED first-checkpoint-with-mean-confounder_insensitivity"
+                         ">=0.75 rule, kept for before/after inspection.")
+    ap.add_argument("--ri-se", type=float, default=None, metavar="SE",
+                    help="EXPLICIT, operator-supplied within-run SE of the 3-dataset mean "
+                         "RI, used by --rule 1se wherever PathoROB's bootstrap fields are "
+                         "not on disk (they are not, anywhere, today).  This is an input "
+                         "you are asserting, not a measurement the report made: supply it "
+                         "only with a source, and read --ri-se-sweep first.  Omitted, the "
+                         "rule does not fire and every affected cell is NOT REPORTABLE.")
+    ap.add_argument("--ri-se-sweep", action="store_true",
+                    help="print the SE-vs-pick sensitivity table and exit.")
+    ap.add_argument("--run-glob", default=None, metavar="GLOB",
+                    help=f"run family under runs/ (default {RUN_GLOB} = the finalised "
+                         "5-backbone 50-step sweep).")
     ap.add_argument("--cls-roster", choices=sorted(CLS_ROSTERS), default=CLS_ROSTER_DEFAULT,
                     help="THUNDER classification panel: 16 = Waiv's Table-2 roster "
                          "(12 THUNDER-paper sets + 4 SPIDER), the default and the only "
@@ -1526,8 +2058,13 @@ def main() -> None:
                          "pre-2026-08-26 number.")
     args = ap.parse_args()
 
+    if args.ri_se_sweep:
+        sw = ri_se_sweep(discover_runs(args.run_glob))
+        print(json.dumps(sw, indent=2))
+        return
     rep = build_report(hest_assume_step=args.hest_assume_step,
-                       cls_roster=args.cls_roster)
+                       cls_roster=args.cls_roster,
+                       rule=args.rule, ri_se=args.ri_se, run_glob=args.run_glob)
     print_report(rep)
     if args.json:
         out = Path(args.json_out)

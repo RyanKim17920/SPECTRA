@@ -22,14 +22,20 @@ export PYTHONNOUSERSITE=1
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/gemgrid-pinned}"
+# Default to the gated snapshot: it resolves all five backbones, gemgrid-pinned only three.
+PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/falseneg-gated}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 RUN="${WAIV_RUN:?set WAIV_RUN}"
 OUT="$REPO/runs/$RUN"
+# H-Optimus-0 and UNI2-h are gated: they resolve only under the falseneg-gated snapshot,
+# which is the one carrying BACKBONE_LOCAL_DIRS.  Matching `*hopt*` as well as `*hoptimus*`
+# because the short token is what the newer run names use.
 case "$RUN" in
   *phikon*)   BB="" ;;
   *midnight*) BB="kaiko-ai/midnight" ;;
   *virchow2*) BB="paige-ai/Virchow2" ;;
+  *hoptimus*|*hopt*) BB="bioptimus/H-optimus-0" ;;
+  *uni2*)     BB="MahmoodLab/UNI2-h" ;;
   *) echo "bad run $RUN" >&2; exit 2 ;;
 esac
 BBA=(); [ -n "$BB" ] && BBA=(--backbone "$BB")

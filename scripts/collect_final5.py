@@ -178,6 +178,10 @@ HEST_BASE_FILES = {
     # keeps returning None through the existing path.
     "hoptimus": "hoptimus_base_cls_9task_v1_summary.json",
     "uni2":     "uni2_base_cls_9task_v1_summary.json",
+    # Listed only once the files existed (2026-09-02): _load_hest_base raises at import
+    # for a listed-but-absent file (F-E).
+    "openmidnight": "openmidnight_base_cls_9task_v1_summary.json",
+    "virchow1":     "virchow1_base_clsmean_9task_v1_summary.json",
 }
 
 
@@ -202,6 +206,10 @@ HEST_POOLING: dict[str, str] = {
     # DISTILLATION of H-Optimus-0 and a separate row of their tables -- not the same model.
     "hoptimus": "cls",
     "uni2":     "cls",
+    # OpenMidnight replicates Midnight-12k -> cls.  Virchow (v1) -> clsmean, the readout
+    # THUNDER and the HEST leaderboard both use for it (CLS ++ mean(patch)).
+    "openmidnight": "cls",
+    "virchow1":     "clsmean",
 }
 
 

@@ -52,35 +52,30 @@ from collect_final5 import (  # noqa: E402 — intentional after sys.path insert
 # rounded incorrectly. The correct value is 0.40324, which is what
 # collect_final5.HEST_BASE["virchow2"] carries (source: vbase_clsmean_summary.json).
 # ---------------------------------------------------------------------------
-WAIV: dict[str, dict] = {
-    "phikon": {
-        "base_ri":   _c5.RI_BASE["phikon"],      # F-E/F-F: read from PathoROB results on disk
-        "waiv_ri":   _c5.RI_WAIV["phikon"],
-        "base_hest": _c5.HEST_BASE["phikon"],    # F-E: loader, not a literal
-        "waiv_hest": _ec.HEST_WAIV["phikon"],
-        "base_ds": {"tcga": 0.619, "camelyon": 0.019, "tolkach_esca": 0.768},
-        "waiv_ds":  {"tcga": 0.785, "camelyon": 0.702, "tolkach_esca": 0.932},
-        "pool": "cls",
-    },
-    "midnight": {
-        "base_ri":   _c5.RI_BASE["midnight"],    # F-E/F-F: read from PathoROB results on disk
-        "waiv_ri":   _c5.RI_WAIV["midnight"],
-        "base_hest": _c5.HEST_BASE["midnight"],  # F-E: loader, not a literal
-        "waiv_hest": _ec.HEST_WAIV["midnight"],
-        "base_ds": {"tcga": 0.858, "camelyon": 0.478, "tolkach_esca": 0.941},
-        "waiv_ds":  {"tcga": 0.893, "camelyon": 0.907, "tolkach_esca": 0.972},
-        "pool": "cls",
-    },
-    "virchow2": {
-        "base_ri":   _c5.RI_BASE["virchow2"],    # F-E/F-F: read from PathoROB results on disk
-        "waiv_ri":   _c5.RI_WAIV["virchow2"],
-        "base_hest": _c5.HEST_BASE["virchow2"],  # F-E: was the ROUNDED results.avg 0.40324; the loader reads custom_encoder 0.4032685
-        "waiv_hest": _ec.HEST_WAIV["virchow2"],
-        "base_ds": {"tcga": 0.822, "camelyon": 0.799, "tolkach_esca": 0.954},
-        "waiv_ds":  {"tcga": 0.849, "camelyon": 0.935, "tolkach_esca": 0.969},
-        "pool": "clsmean",
-    },
-}
+WAIV: dict[str, dict] = {}
+# F-J (2026-08-31): the three per-arm blocks that used to sit here were hand-typed
+# literals covering phikon/midnight/virchow2 ONLY, so any run on a gated backbone
+# (hoptimus / hopt / uni2) crashed main() with KeyError.  Same numbers, now built for
+# EVERY arm eval_common knows, and every value read from a loader or from
+# docs/waiv_published.json -- no literal survives here.
+_WAIV_PUB = json.loads(_ec.WAIV_PUBLISHED_JSON.read_text())
+_WAIV_PUB_IDX = {(m["name"], m["variant"]): m for m in _WAIV_PUB["models"]}
+for _arm, (_base_row, _ft_row) in _ec.WAIV_ROWS.items():
+    _pub_base = _WAIV_PUB_IDX[tuple(_base_row)]
+    _pub_ft   = _WAIV_PUB_IDX[tuple(_ft_row)]
+    WAIV[_arm] = {
+        "base_ri":   _c5.RI_BASE[_arm],      # F-E/F-F: read from PathoROB results on disk
+        "waiv_ri":   _c5.RI_WAIV[_arm],      # docs/waiv_published.json Table 1
+        "base_hest": _c5.HEST_BASE[_arm],    # F-E: loader, not a literal
+        "waiv_hest": _ec.HEST_WAIV[_arm],    # docs/waiv_published.json Table 1
+        # Waiv print per-dataset RI under their own dataset names; WAIV_RI_DS is the
+        # published-name -> our-name map eval_common already owns.
+        "base_ds": {_ours: _pub_base["ri"].get(_theirs)
+                    for _theirs, _ours in _ec.WAIV_RI_DS.items()},
+        "waiv_ds": {_ours: _pub_ft["ri"].get(_theirs)
+                    for _theirs, _ours in _ec.WAIV_RI_DS.items()},
+        "pool": _c5.hest_pooling(_arm),      # HEST_POOLING table, not a literal
+    }
 
 # ---------------------------------------------------------------------------
 # RI-budget floors -- QUARANTINED 2026-08-26 (F-I).  OFF BY DEFAULT.
@@ -152,13 +147,23 @@ THUNDER_SEED_SD_SOURCE = ("docs/thunder_seed_floor_12ds.json "
 # ---------------------------------------------------------------------------
 # NOTE: substring match, so order matters only if one name contains another (none do).
 # hoptimus/uni2 are the WAIV_ARM tokens gentle.sbatch folds into RUN_NAME, not the HF ids.
-_BACKBONES = ("phikon", "midnight", "virchow2", "hoptimus", "uni2")
+# "hopt" is an abbreviation used when the full "hoptimus" token would push a run name
+# past the 52-char budget that leaves room for SLURM's .rN requeue suffix.
+_BACKBONES = ("phikon", "midnight", "virchow2", "hoptimus", "hopt", "uni2")
+
+
+# F-J (2026-08-31): "hopt" is a run-name ABBREVIATION for the same backbone as
+# "hoptimus", not a fourth arm.  Returning it verbatim made every downstream lookup
+# (WAIV, SEED_FLOORS, hest_pooling, THUNDER_SEED_SD) miss, and WAIV[...] raised
+# KeyError: 'hopt' before the footer could print.  Canonicalise at the one place the
+# name is resolved; --backbones still accepts either spelling.
+_BACKBONE_ALIASES = {"hopt": "hoptimus"}
 
 
 def _detect_backbone(name: str) -> str | None:
     for b in _BACKBONES:
         if b in name:
-            return b
+            return _BACKBONE_ALIASES.get(b, b)
     return None
 
 
@@ -459,7 +464,10 @@ def main() -> None:
                 run_dirs.append(d)
 
     if args.backbones:
-        run_dirs = [d for d in run_dirs if _detect_backbone(d.name) in args.backbones]
+        # F-J: --backbones hopt and --backbones hoptimus select the same arm, because
+        # _detect_backbone now canonicalises the abbreviation.
+        wanted = {_BACKBONE_ALIASES.get(b, b) for b in args.backbones}
+        run_dirs = [d for d in run_dirs if _detect_backbone(d.name) in wanted]
 
     if not run_dirs:
         print("No runs found.")
@@ -498,7 +506,7 @@ def main() -> None:
     rows.sort(key=_sort_key)
 
     # Backbone ordering
-    _bb_order = {"phikon": 0, "midnight": 1, "virchow2": 2}
+    _bb_order = {"phikon": 0, "midnight": 1, "virchow2": 2, "hoptimus": 3, "uni2": 4}
     backbones_present: list[str] = []
     seen: set[str] = set()
     for r in sorted(rows, key=lambda r: _bb_order.get(r["backbone"], 9)):

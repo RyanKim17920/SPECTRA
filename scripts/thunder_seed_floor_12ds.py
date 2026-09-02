@@ -81,6 +81,20 @@ SEEDS = [0, 1, 2, 3, 4]
 # the eval protocol used for that backbone.
 POOLING = {"phikon": "cls", "midnight": "clsmean", "virchow2": "clsmean"}
 
+# NOTE 2026-08-31 (CORRECTED): an earlier edit repointed this default at
+# /data/ryan.kim/pathfm-full-evals/thunder on the belief that /data/ryan.kim/thunder
+# had been swept.  It has NOT been: /data/ryan.kim/thunder/outputs/res still holds all
+# 15 f5_final5-* run dirs, and the repoint silently broke this script (every cell
+# printed "insufficient", because the pathfm-full-evals corpus contains no f5_final5-*
+# runs at all).  The five-seed final5 replicates this script measures exist ONLY in the
+# old corpus, so the default points back there and the published table below is
+# reproducible.
+#
+# The pathfm-full-evals corpus is the one that carries the corrected input transform
+# (Resize(256,bicubic)+CenterCrop vs the old Resize(224,bilinear), worth 1.3-2.3 pts).
+# The floor is insensitive to that change -- see the "Gated backbones" section of
+# docs/thunder_seed_floor_12ds.md, which measures the same seed pairs in both corpora.
+# Seed floors for H-Optimus-0 / UNI2-h come from scripts/thunder_seed_floor_gated.py.
 DEFAULT_ROOT = os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder")
 
 # Waiv's published THUNDER gains, F1 fractions (scripts/scoreboard.py WAIV_THUNDER).

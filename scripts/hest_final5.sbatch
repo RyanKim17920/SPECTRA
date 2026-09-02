@@ -40,13 +40,24 @@ STEP="${WAIV_STEP:?set WAIV_STEP e.g. 0000500}"
 # ARM is derived from the run name so pooling cannot drift from the checkpoint.
 case "$RUN" in
   *phikon*)   ARM=phikon;   BACKBONE="owkin/phikon-v2";  POOLING="cls" ;;
+  # openmidnight MUST precede midnight: `*midnight*` matches "openmidnight" too, and the
+  # controller looped 30+ HEST jobs merging OpenMidnight adapters into kaiko-ai/midnight
+  # (each died on "adapter keys not consumed") before this case existed.  cls like Midnight.
+  *openmidnight*) ARM=openmidnight; BACKBONE="SophontAI/OpenMidnight"; POOLING="cls" ;;
   *midnight*) ARM=midnight; BACKBONE="kaiko-ai/midnight"; POOLING="cls" ;;
+  # Virchow (v1) run names carry "-virchow-s<seed>"; `*virchow2*` never matches them.
+  # clsmean: THUNDER and the HEST leaderboard both read Virchow as CLS ++ mean(patch).
+  *-virchow-s*) ARM=virchow1; BACKBONE="paige-ai/Virchow"; POOLING="clsmean" ;;
   *virchow2*) ARM=virchow2; BACKBONE="paige-ai/Virchow2"; POOLING="clsmean" ;;
   # cls, not clsmean: arXiv:2607.22861 3 line 106 names the clsmean models (Virchow2,
   # AquaViT, H0-mini, Midnight-12k) and neither of these is in it.  H0-mini IS in it but
   # is a DISTILLATION of H-Optimus-0 and a separate row of their tables -- not this model.
   # Must agree with collect_final5.HEST_POOLING; tests/test_invariants.py asserts it does.
-  *hoptimus*) ARM=hoptimus; BACKBONE="bioptimus/H-optimus-0"; POOLING="cls" ;;
+  # "hopt" is the abbreviated arm token used when the full "hoptimus" would push
+  # RUN_NAME past the 64-char THUNDER key budget; scoreboard2._BACKBONES carries the
+  # same alias.  "hopt" is a prefix of "hoptimus", so one glob would cover both, but
+  # both are spelled out so a grep for either token finds this line.
+  *hoptimus*|*hopt*) ARM=hoptimus; BACKBONE="bioptimus/H-optimus-0"; POOLING="cls" ;;
   *uni2*)     ARM=uni2;     BACKBONE="MahmoodLab/UNI2-h";     POOLING="cls" ;;
   *) echo "FATAL: cannot infer backbone from run name '$RUN'" >&2; exit 2 ;;
 esac

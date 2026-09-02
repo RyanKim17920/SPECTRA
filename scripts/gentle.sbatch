@@ -85,7 +85,7 @@ grep -q 'delegate rather than refuse' "$PIN/src/waivphaet/train/contrastive.py" 
   || { echo "PIN LACKS pool-head delegation -- GEM+grid cannot run: $PIN" >&2; exit 3; }
 
 PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
-ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow2|hoptimus|uni2}"
+ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow|virchow2|hoptimus|uni2|openmidnight}"
 SEED="${WAIV_SEED:?set WAIV_SEED}"
 GRID_TILES="${WAIV_T:?set WAIV_T (common across backbones -- that is the point)}"
 
@@ -98,6 +98,23 @@ case "$ARM" in
   # WAIV_BACKBONE_LOCAL_DIRS if /data is swept again.
   hoptimus) BACKBONE="bioptimus/H-optimus-0" ;;
   uni2)     BACKBONE="MahmoodLab/UNI2-h" ;;
+  # OpenMidnight is NOT gated; it is bound locally because the source is a raw DINOv2
+  # training checkpoint, converted once into /data/OpenMidnight by
+  # scripts/convert_openmidnight.py.  Same DINOv2 ViT-g/14 shape as H-Optimus-0.
+  openmidnight) BACKBONE="SophontAI/OpenMidnight" ;;
+  # Virchow **v1** -- a DIFFERENT model from the virchow2 arm above, not a variant of it:
+  # timm ViT-H/14, 32 blocks, 1280-d, packed-SwiGLU FFN, but NO register tokens (1 prefix
+  # token / 257 tokens, against Virchow2's 5 / 261).  The repo is gated, so
+  # encoder.BACKBONE_LOCAL_DIRS binds the id to the pinned snapshot under /data/Virchow.
+  #
+  # This `case` matches EXACT arm tokens, not globs, so `virchow` and `virchow2` cannot
+  # shadow each other here whichever order they are listed in.  Downstream eval scripts
+  # (hest_final5.sbatch, ri_backfill.sbatch, rescore_ri.sbatch, submit_final5_evals.sh)
+  # do glob on the RUN NAME, and their pattern is `*virchow2*`, which a `-virchow-s<seed>`
+  # run name does NOT match -- so a v1 run falls through to their `*)` error rather than
+  # being silently evaluated as Virchow2.  Do NOT "fix" that by adding a `*virchow*` case:
+  # that pattern DOES match virchow2 and would capture every existing Virchow2 run.
+  virchow)  BACKBONE="paige-ai/Virchow" ;;
   *) echo "bad WAIV_ARM=$ARM" >&2; exit 2 ;;
 esac
 BACKBONE_ARGS=()
