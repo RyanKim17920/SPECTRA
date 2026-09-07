@@ -93,7 +93,14 @@ def grid_batch():
     fig.text(0.5, 1.03, "columns: corresponding registered locations",
              ha="center", va="bottom", fontsize=7.5, color=INK)
     fig.savefig(OUT / "grid_batch.pdf", bbox_inches="tight")
-    fig.savefig(OUT / "grid_batch.png", dpi=200, bbox_inches="tight")
+    # 1050 dpi (was 700, originally 200): this PNG is not just a preview --
+    # annotate_grid_batch.py composites it as the left panel of the final figure, so its
+    # pixel count sets the embedded raster resolution in grid_batch.pdf. 200 dpi here
+    # capped the print figure at 100 ppi; 700 dpi supported a 400 ppi embed. The author
+    # asked for 600 ppi, so this scales proportionally (700 * 600/400 = 1050) and keeps
+    # the source comfortably above the final embed resolution.
+    # The PLISM tiles themselves are 224x224 native and are drawn undownsampled.
+    fig.savefig(OUT / "grid_batch.png", dpi=1050, bbox_inches="tight")
 
 
 def base_to_tuned():
