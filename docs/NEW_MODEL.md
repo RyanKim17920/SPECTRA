@@ -17,6 +17,11 @@ a marked gap. Library-level symbols named here (`src/waivphaet/models/encoder.py
 
 ## 1. Register the backbone
 
+> **SUPERSEDED (2026-09-07).** Registration is now ONE entry in
+> `src/waivphaet/models/backbones.py`; the tables named below are views over it.
+> See the "Adding a backbone" section of the top-level `README.md`. The rationale
+> in this section is still why each field exists.
+
 - **Normalization.** `BACKBONE_NORMALIZATION` in `src/waivphaet/models/encoder.py` is
   table-driven; `normalization_for()` falls back to the HF preprocessor config and raises on
   a backbone it cannot resolve. Add an explicit entry keyed by the HF id. Do not skip this:

@@ -49,6 +49,76 @@ Waiv's published targets are transcribed once, in
 [`docs/waiv_published.json`](docs/waiv_published.json) (Tables 1–4), and loaded from there by
 every comparison script.
 
+## Configuration: where everything lives
+
+No script in this repo carries an absolute path. Every root is an environment variable
+with a repo-relative default, resolved in one place -- `src/waivphaet/paths.py` for
+Python, `scripts/_env.sh` for shell and sbatch. Copy `.env.example` to `.env`, set the
+handful your machine needs, and everything downstream follows:
+
+```
+cp .env.example .env && $EDITOR .env
+./.venv/bin/python scripts/_config.py     # print every resolved root
+```
+
+| variable | what it points at | default |
+|---|---|---|
+| `SPECTRA_REPO` | the checkout | auto-detected |
+| `SPECTRA_RUNS` | run dirs: checkpoints, `ri_curve.json`, summaries | `<repo>/runs` |
+| `SPECTRA_DATA` | the root every corpus below defaults under | `<repo>/data_root` |
+| `SPECTRA_PLISM` / `SPECTRA_PLISM_PACKED` | PLISM corpus, and the repacked tiles training reads | `<data>/plism`, `<plism>/repacked` |
+| `SPECTRA_THUNDER` | THUNDER's `THUNDER_BASE_DATA_FOLDER` | `<data>/thunder` |
+| `SPECTRA_HEST_BENCH` / `SPECTRA_HEST_WORK` | HEST benchmark data, and its work dir | `<data>/hest_bench`, `<data>/hest_work` |
+| `SPECTRA_EVALS` | output root of the per-checkpoint cell harness | `<data>/full-evals` |
+| `SPECTRA_HF_HOME` | HuggingFace cache (set it, or `~/.cache` fills your home volume) | `<data>/huggingface` |
+| `SPECTRA_INPUTS` | local base-model weight dirs, one per gated/converted backbone | `<data>/inputs` |
+| `SPECTRA_CELLS` | per-checkpoint eval cells | `<repo>/cells` |
+| `SPECTRA_PAPER` | LaTeX tree the table/figure generators write into | `<repo>/paper` |
+| `SPECTRA_SNAPSHOTS` / `SPECTRA_BACKUPS` | pinned code snapshots; durable result copies | `<repo>/snapshots`, `<repo>/result_backups` |
+
+A variable set in the real environment always beats `.env`, so a one-off override is
+`SPECTRA_RUNS=/tmp/x ./.venv/bin/python scripts/final_scoreboard.py`. `.env` is
+gitignored because it describes one machine; `.env.example` is committed.
+
+## Adding a backbone
+
+**One entry in `src/waivphaet/models/backbones.py`.** That file is the single source for
+every per-backbone fact -- normalisation override, local weight directory, timm
+construction kwargs, published THUNDER pooling, LoRA target leaves, and the shape facts
+the tests assert. The tables in `models/encoder.py` and `eval/thunder_protocol.py` are
+views over it, so there is no second place to remember.
+
+```python
+"vendor/NewModel": Backbone(
+    repo_id="vendor/NewModel",
+    loader="timm",                    # recorded; dispatch still reads the repo's config.json
+    weights_file="model.safetensors",
+    architecture="vit_large_patch16_224",
+    timm_kwargs={"img_size": 224, "init_values": 1e-5},
+    local_subdir="NewModel",          # under $SPECTRA_INPUTS; omit for hub-served
+    normalization=(IMAGENET_MEAN, IMAGENET_STD),   # None = ask the repo's own config
+    thunder_readout="cls",            # None = no published protocol; scoring it will RAISE
+    lora_target_suffixes=_TIMM_VIT,
+    embed_dim=1024, num_prefix_tokens=1, num_blocks=24, patch_size=16,
+),
+```
+
+Then:
+
+1. `./.venv/bin/python -m pytest tests/test_new_backbones.py` -- builds the model and
+   asserts the shape fields against the real checkpoint, so a wrong kwarg fails as a
+   number rather than drifting silently.
+2. Reproduce the base against a published row **before** training anything
+   (`docs/NEW_MODEL.md` §2). A base that does not reproduce is a harness bug, not a result.
+3. `./.venv/bin/python scripts/check_backbone_registry.py` if you use the eval cells --
+   they are standalone copies of this table (they run outside this repo and hash their own
+   `model.py` for provenance), and this proves a copy has not drifted from the registry.
+
+Leaving `thunder_readout=None` is the safe default for a model that postdates
+arXiv:2607.22861: `default_pooling` then raises instead of guessing a protocol, because a
+guessed pooling produces a number that is not comparable to the leaderboard and looks
+exactly like one that is.
+
 ## Layout
 
 | path | contents |
