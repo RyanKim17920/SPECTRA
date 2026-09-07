@@ -54,10 +54,31 @@
 # misread as "offload does not work".
 #
 # --- PIN ------------------------------------------------------------------------------
-# waiv-snapshots/gemgrid-pinned, which is byte-identical to HEAD for both
-# src/waivphaet/train/contrastive.py and scripts/train_lora.py (verified by diff). It is
-# the ONLY snapshot carrying the pool-head delegation; finalgem-pinned (commit 386283a)
-# still has the old guard that raises unconditionally, so GEM+grid CANNOT run there.
+# Training does NOT run out of the working tree. It runs out of a frozen snapshot under
+# $SPECTRA_SNAPSHOTS (scripts/_env.sh; defaults to <repo>/snapshots), because the results
+# in docs/ were produced by code that HEAD has since moved past. Both defaults are now
+# vendored INTO the repo, so a fresh clone runs with no external directory:
+#
+#   snapshots/falseneg-pinned  -- produced the phikon-v2 / midnight / Virchow2 rows.
+#   snapshots/falseneg-gated   -- produced the H-optimus-0, UNI2-h, Virchow v1 and
+#                                 OpenMidnight rows. It is falseneg-pinned PLUS local-
+#                                 directory backbone loading in models/encoder.py, which
+#                                 is the ONLY file that differs between the two.
+#
+# The pin is chosen BY ARM below, so each row is reproduced by the bytes that produced it.
+# The four gated/local arms genuinely CANNOT run on falseneg-pinned: their hub repos 403,
+# _hub_config swallows that into None, and the run is then misrouted to AutoModel and dies
+# on "Unrecognized model". In the other direction the added code is inert -- it is reached
+# only through BACKBONE_LOCAL_DIRS / WAIV_BACKBONE_LOCAL_DIRS, which are empty for the
+# hub-served backbones -- so the split is about provenance, not capability.
+#
+# Both snapshots carry the pool-head delegation that GEM+grid needs (asserted below);
+# finalgem-pinned (commit 386283a) still has the old guard that raises unconditionally, so
+# GEM+grid CANNOT run there. gemgrid-pinned, the pre-masking fallback this script used to
+# default to, was never in version control and is no longer reachable as a default -- pass
+# SPECTRA_PIN if you still have it on disk.
+#
+# SPECTRA_PIN (or the older WAIV_PIN) overrides the per-arm default with any path.
 #
 #   WAIV_ARM=virchow2 WAIV_SEED=0 WAIV_T=900 sbatch scripts/final5.sbatch
 set -euo pipefail
@@ -76,15 +97,6 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-${WAIV_MASK:+$SPECTRA_SNAPSHOTS/falseneg-pinned}}"
-PIN="${PIN:-$SPECTRA_SNAPSHOTS/gemgrid-pinned}"
-export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
-[ -d "$PIN/src/waivphaet" ]     || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
-[ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
-# The pin MUST carry the pool-head delegation, or GEM+grid dies at step 0.
-grep -q 'delegate rather than refuse' "$PIN/src/waivphaet/train/contrastive.py" \
-  || { echo "PIN LACKS pool-head delegation -- GEM+grid cannot run: $PIN" >&2; exit 3; }
-
 PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow|virchow2|hoptimus|uni2|openmidnight}"
 SEED="${WAIV_SEED:?set WAIV_SEED}"
@@ -120,6 +132,46 @@ case "$ARM" in
 esac
 BACKBONE_ARGS=()
 [ -n "$BACKBONE" ] && BACKBONE_ARGS=(--backbone "$BACKBONE")
+
+# --- pin resolution -------------------------------------------------------------------
+# See the PIN note in the header for why the default differs by arm. $SPECTRA_SNAPSHOTS is
+# repo-relative (scripts/_env.sh), so these defaults resolve inside whatever checkout this
+# job was submitted from -- no absolute path, no machine assumption.
+case "$ARM" in
+  hoptimus|uni2|openmidnight|virchow) DEFAULT_PIN="$SPECTRA_SNAPSHOTS/falseneg-gated" ;;
+  *)                                  DEFAULT_PIN="$SPECTRA_SNAPSHOTS/falseneg-pinned" ;;
+esac
+PIN="${SPECTRA_PIN:-${WAIV_PIN:-$DEFAULT_PIN}}"
+export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
+
+# The package directory is DISCOVERED rather than named, so the checks below keep working
+# across a package rename in the working tree (the snapshots are frozen and still ship the
+# old name; nothing here should encode which name that is).
+PIN_PKG=""
+for _cand in "$PIN"/src/*/; do
+  [ -f "${_cand}train/contrastive.py" ] || continue
+  PIN_PKG="${_cand%/}"
+  break
+done
+
+if [ -z "$PIN_PKG" ] || [ ! -f "$PIN/scripts/train_lora.py" ]; then
+  {
+    echo "pin does not resolve to a runnable snapshot: $PIN"
+    echo "  wanted: \$PIN/src/<package>/train/contrastive.py and \$PIN/scripts/train_lora.py"
+    echo "  arm     $ARM  ->  default pin $DEFAULT_PIN"
+    echo "  roots   SPECTRA_SNAPSHOTS=$SPECTRA_SNAPSHOTS   (from scripts/_env.sh, repo-relative)"
+    echo "          SPECTRA_REPO=$REPO"
+    echo "  This repo vendors snapshots/falseneg-pinned and snapshots/falseneg-gated, so on"
+    echo "  a clean checkout the defaults exist. If they do not, the checkout is partial"
+    echo "  (git lfs / sparse-checkout) or SPECTRA_SNAPSHOTS points somewhere else."
+    echo "  Override with SPECTRA_PIN=/abs/path/to/snapshot (WAIV_PIN is still honoured)."
+  } >&2
+  exit 3
+fi
+
+# The pin MUST carry the pool-head delegation, or GEM+grid dies at step 0.
+grep -q 'delegate rather than refuse' "$PIN_PKG/train/contrastive.py" \
+  || { echo "PIN LACKS pool-head delegation -- GEM+grid cannot run: $PIN" >&2; exit 3; }
 
 # WAIV_TAG: free-form discriminator folded into RUN_NAME. REQUIRED whenever an arm differs
 # from another only by a parameter that RUN_NAME does not otherwise encode -- above all
@@ -175,13 +227,19 @@ echo "pin       $PIN"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv || true
 free -g | head -2 || true
 
-"$PY" - "$PIN" <<'EOF'
+"$PY" - "$PIN" "$PIN_PKG" <<'EOF'
+import importlib
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(sys.argv[1]) / "src"))
-import waivphaet
-assert waivphaet.__file__.startswith(sys.argv[1]), f"PIN LEAK: {waivphaet.__file__}"
-print(f"[pin] waivphaet={waivphaet.__file__}", flush=True)
+
+pin, pkg_dir = Path(sys.argv[1]), Path(sys.argv[2])
+sys.path.insert(0, str(pin / "src"))
+pkg = importlib.import_module(pkg_dir.name)
+# The point of the pin is that NOTHING resolves to the working tree. An installed copy of
+# the same package would shadow it silently and the run would be off-provenance with no
+# symptom, so this is fatal rather than a warning.
+assert Path(pkg.__file__).is_relative_to(pin), f"PIN LEAK: {pkg.__file__}"
+print(f"[pin] {pkg_dir.name}={pkg.__file__}", flush=True)
 EOF
 
 "$PY" - "$PACKED_DIR" "$OUT_DIR" <<'EOF'
