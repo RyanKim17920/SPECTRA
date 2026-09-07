@@ -10,19 +10,19 @@ end to end (`owkin/phikon-v2`, `kaiko-ai/midnight`). This file is the checklist 
 
 De-hardening of the scripts is in flight. Where an exact invocation is not yet settled it is
 marked **TBD** below rather than guessed — an authoritative-looking wrong flag costs more than
-a marked gap. Library-level symbols named here (`src/waivphaet/models/encoder.py`,
-`src/waivphaet/eval/*`) are current; CLI surfaces are the part in motion.
+a marked gap. Library-level symbols named here (`src/spectra/models/encoder.py`,
+`src/spectra/eval/*`) are current; CLI surfaces are the part in motion.
 
 ---
 
 ## 1. Register the backbone
 
 > **SUPERSEDED (2026-09-07).** Registration is now ONE entry in
-> `src/waivphaet/models/backbones.py`; the tables named below are views over it.
+> `src/spectra/models/backbones.py`; the tables named below are views over it.
 > See the "Adding a backbone" section of the top-level `README.md`. The rationale
 > in this section is still why each field exists.
 
-- **Normalization.** `BACKBONE_NORMALIZATION` in `src/waivphaet/models/encoder.py` is
+- **Normalization.** `BACKBONE_NORMALIZATION` in `src/spectra/models/encoder.py` is
   table-driven; `normalization_for()` falls back to the HF preprocessor config and raises on
   a backbone it cannot resolve. Add an explicit entry keyed by the HF id. Do not skip this:
   wrong stats change no shape and throw no error, they only cost base accuracy — the exact

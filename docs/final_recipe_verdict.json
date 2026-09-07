@@ -34,7 +34,7 @@
     "se_source": "per-checkpoint bootstrap SE from ri_curve.json (robustness_index-std/robustness_index_se/ri_se) where present, otherwise the operator-supplied --ri-se",
     "ri_se_supplied": 0.007,
     "se_measured_on_disk": false,
-    "se_unmeasured_note": "PathoROB's bootstrap fields are absent from every checkpoint in this corpus: src/waivphaet/eval/pathorob_adapter.py:161 defaults bootstrap=False and no caller sets it, and scripts/eval_checkpoints.RESULT_KEYS does not copy the fields into ri_curve.json.  Until one of those changes, --ri-se is the ONLY way to run this rule, and it is an operator input, not a measurement."
+    "se_unmeasured_note": "PathoROB's bootstrap fields are absent from every checkpoint in this corpus: src/spectra/eval/pathorob_adapter.py:161 defaults bootstrap=False and no caller sets it, and scripts/eval_checkpoints.RESULT_KEYS does not copy the fields into ri_curve.json.  Until one of those changes, --ri-se is the ONLY way to run this rule, and it is an operator input, not a measurement."
   },
   "cells_not_reportable": {},
   "thunder_cls_roster": {

@@ -9,7 +9,7 @@ or deleted, several stale docs got a short prepended status banner instead.
 
 1. **[`RUNBOOK.md`](RUNBOOK.md)** — current recipe, current commands, current config
    (5 backbones, 50-step checkpoint grid, parameter-free 1-SE stopping rule,
-   `WAIV_BCLS=3.0` / `WAIV_BMEAN=-inf`).
+   `SPECTRA_BCLS=3.0` / `SPECTRA_BMEAN=-inf`).
 2. **[`THUNDER_16DS_2026-08-26.md`](THUNDER_16DS_2026-08-26.md)** — current THUNDER
    protocol/numbers (16-dataset roster, correct transforms).
 3. **[`thunder_seed_floor_12ds.md`](thunder_seed_floor_12ds.md)** — current per-backbone

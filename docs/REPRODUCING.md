@@ -57,7 +57,7 @@ before training: 16,278 tiny HDF5 datasets per slide makes random pair sampling 
 830k–920k tiles/s, page-cache-warm so treat it as an upper bound).
 
 ```bash
-./.venv/bin/python -m waivphaet.data.repack \
+./.venv/bin/python -m spectra.data.repack \
   --h5-dir /data/plism --out-dir /data/plism/repacked --verify --benchmark
 ```
 

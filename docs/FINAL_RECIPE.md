@@ -5,8 +5,8 @@
 >
 > 1. **Scope**: three backbones (phikon-v2, midnight, Virchow2). Production is now **five** —
 >    H-Optimus-0 and UNI2-h were added, and both are GATED hub repos requiring
->    `WAIV_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated` or they 403.
-> 2. **Checkpoint grid**: `WAIV_CKPT_EVERY=125` here; production is **50**. The 1-SE rule can
+>    `SPECTRA_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated` or they 403.
+> 2. **Checkpoint grid**: `SPECTRA_CKPT_EVERY=125` here; production is **50**. The 1-SE rule can
 >    only return a step it actually evaluated, so the grid is part of the selection procedure,
 >    not a detail. On a 50 grid the selected steps are 200/150/100/100/125, and no fixed step
 >    serves all five.
@@ -14,8 +14,8 @@
 >    parameter-free **1-SE rule**, which reproduces its picks 12/12 without the arbitrary
 >    0.75 threshold.
 >
-> The head-bias question left open here is also now settled: keep `WAIV_BCLS=3.0`,
-> `WAIV_BMEAN=-inf`. Symmetric `+3/+3` costs RI ~2.3x its seed floor while its segmentation
+> The head-bias question left open here is also now settled: keep `SPECTRA_BCLS=3.0`,
+> `SPECTRA_BMEAN=-inf`. Symmetric `+3/+3` costs RI ~2.3x its seed floor while its segmentation
 > gain sits below the THUNDER noise floor.
 
 # FINAL RECIPE — one configuration, three backbones, a stopping rule instead of a step
@@ -54,15 +54,15 @@ pass" are different claims; only the first is supported.
 Launcher is `scripts/gentle.sbatch`. The complete invocation:
 
 ```bash
-WAIV_ARM=<phikon|midnight|virchow2> \
-WAIV_SEED=<n> \
-WAIV_T=900 \
-WAIV_LR=1e-4 \
-WAIV_MAX_STEPS=500 \
-WAIV_CKPT_EVERY=125 \
-WAIV_MASK=1 \
-WAIV_BCLS=3.0 \
-WAIV_BMEAN=-inf \
+SPECTRA_ARM=<phikon|midnight|virchow2> \
+SPECTRA_SEED=<n> \
+SPECTRA_T=900 \
+SPECTRA_LR=1e-4 \
+SPECTRA_MAX_STEPS=500 \
+SPECTRA_CKPT_EVERY=125 \
+SPECTRA_MASK=1 \
+SPECTRA_BCLS=3.0 \
+SPECTRA_BMEAN=-inf \
 sbatch scripts/gentle.sbatch
 ```
 
@@ -70,20 +70,20 @@ Everything else is the sbatch's own default and is therefore also fixed:
 
 | knob | value | where set |
 |---|---|---|
-| LoRA rank / alpha | `r=32` / `alpha=64` | `WAIV_RANK` default 32; `LORA_ALPHA=$((RANK*2))` |
-| projection out-dim | 512 | `WAIV_PROJDIM` default |
-| weight decay | 0.05 | `WAIV_WD` default |
-| temperature | 0.07 | `WAIV_TEMP` default |
-| warmup | 200 steps | `WAIV_WARMUP` default |
-| batch geometry | grid, C=2 conditions × T=900 tiles, `--grid-forward-chunk 0` | `WAIV_T=900`, `GRID_COND=2` hardcoded |
+| LoRA rank / alpha | `r=32` / `alpha=64` | `SPECTRA_RANK` default 32; `LORA_ALPHA=$((RANK*2))` |
+| projection out-dim | 512 | `SPECTRA_PROJDIM` default |
+| weight decay | 0.05 | `SPECTRA_WD` default |
+| temperature | 0.07 | `SPECTRA_TEMP` default |
+| warmup | 200 steps | `SPECTRA_WARMUP` default |
+| batch geometry | grid, C=2 conditions × T=900 tiles, `--grid-forward-chunk 0` | `SPECTRA_T=900`, `GRID_COND=2` hardcoded |
 | head | `--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem` | `HEAD_ARGS` |
-| negative policy | `--mask-same-core`, `bias-cls=3.0`, `bias-mean=-inf` | `WAIV_MASK` / `WAIV_BCLS` / `WAIV_BMEAN` |
-| retention KL | 0 (off) | `WAIV_KL` default |
+| negative policy | `--mask-same-core`, `bias-cls=3.0`, `bias-mean=-inf` | `SPECTRA_MASK` / `SPECTRA_BCLS` / `SPECTRA_BMEAN` |
+| retention KL | 0 (off) | `SPECTRA_KL` default |
 | pooling (train) | `clsmean` | hardcoded |
 | memory | `--grad-checkpointing --activation-offload`, `--mem=700G` | hardcoded; the 700G is load-bearing, see the sbatch header |
-| pin | `waiv-snapshots/falseneg-pinned` (selected because `WAIV_MASK` is set) | `PIN` resolution in the sbatch |
+| pin | `waiv-snapshots/falseneg-pinned` (selected because `SPECTRA_MASK` is set) | `PIN` resolution in the sbatch |
 
-**This is byte-identical across the three backbones except `WAIV_ARM` and `WAIV_SEED`.** The
+**This is byte-identical across the three backbones except `SPECTRA_ARM` and `SPECTRA_SEED`.** The
 six runs behind this document are:
 
 | run | backbone | seed | train job |
@@ -175,7 +175,7 @@ Both midnight seeds and virchow2 s1 cross 1.0 by step 500 under this recipe — 
   HEST falls monotonically from the first checkpoint in 6/6 virchow2 runs in the stopping
   dataset, and the single best virchow2 row anywhere is at step **100** (85.8, n=1 against a
   14.2-point SD). The honest statement is "stop earlier than 125", not "125 is optimal".
-  Dropping `WAIV_CKPT_EVERY` to 50 on the next virchow2/midnight run would settle it.
+  Dropping `SPECTRA_CKPT_EVERY` to 50 on the next virchow2/midnight run would settle it.
 - **No internal signal predicts HEST *level*, only step.** Within-run HEST variation is only
   18–39% of across-run variation; the rule recovers the smaller half of the problem. It tells
   you when to stop a run you already started; it cannot rank recipes.
@@ -389,7 +389,7 @@ either direction. There is also a 2-vs-4 dataset support mismatch against Waiv's
 
 3. **Scoring at step 1500 kills the strong backbones.** virchow2 HEST goes to **−4.2** (and as
    low as −30.8 on the lr3e-5 arm). Every three-backbone table read at 1500 is measuring
-   over-specialisation, not the recipe. This is why `WAIV_MAX_STEPS=500` is part of the recipe
+   over-specialisation, not the recipe. This is why `SPECTRA_MAX_STEPS=500` is part of the recipe
    and not an afterthought.
 
 4. **Nobody had scored HEST below step 250 before this session.** That is the whole reason

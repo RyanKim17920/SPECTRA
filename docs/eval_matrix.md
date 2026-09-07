@@ -17,7 +17,7 @@ steps are sensitivity points, not substitutes for it.
 `online` is THUNDER segmentation + PGD; it is a separate row from `thunder` because
 `submit_partial.sh` deliberately skips it (4-4.5 of a ~7 GPU-hour path).
 
-## c50 -- FINAL RECIPE (WAIV_BCLS=3.0 / WAIV_BMEAN=-inf)
+## c50 -- FINAL RECIPE (SPECTRA_BCLS=3.0 / SPECTRA_BMEAN=-inf)
 
 | cell | backbone | step | thunder | online | pathorob | cptac | hest | complete |
 |---|---|---|---|---|---|---|---|---|

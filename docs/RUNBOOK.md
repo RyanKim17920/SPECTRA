@@ -9,40 +9,46 @@ silently prefer one over the other.
 
 ## 1. The recipe: `scripts/gentle.sbatch`
 
-One script, one recipe, only `--backbone` and `--seed` (via `WAIV_ARM` / `WAIV_SEED`) vary
+One script, one recipe, only `--backbone` and `--seed` (via `SPECTRA_ARM` / `SPECTRA_SEED`) vary
 across the 5 supported backbones (`phikon`, `midnight`, `virchow2`, `hoptimus`, `uni2`).
 
 ### 1.1 Environment variables it reads (all optional except where marked required)
 
+The names below are the current `SPECTRA_*` spellings. `scripts/gentle.sbatch` itself still
+reads the pre-rename `WAIV_*` names, because it runs against a frozen pin that does — but it
+sources `scripts/_env.sh` first, and that mirrors every `SPECTRA_X` onto `WAIV_X` and back
+before anything reads either. Setting the names in this table is therefore correct; setting
+the old ones still works too. See README, "Configuration".
+
 | var | default | meaning |
 |---|---|---|
-| `WAIV_ARM` | **required** | `phikon\|midnight\|virchow2\|hoptimus\|uni2`. Maps to `--backbone` (phikon leaves it unset → train_lora.py's own default `owkin/phikon-v2`). `hoptimus`→`bioptimus/H-optimus-0`, `uni2`→`MahmoodLab/UNI2-h` — both **gated** HF repos (see §2.1). |
-| `WAIV_SEED` | **required** | `--seed` |
-| `WAIV_T` | **required** | grid tiles (`GRID_TILES`); `GRID_COND=2` is hardcoded, so batch = `2*T` |
-| `WAIV_LR` | `1e-4` | `--lr` |
-| `WAIV_MAX_STEPS` | `1500` | `--max-steps` |
-| `WAIV_CKPT_EVERY` | `250` | `--ckpt-every` and `--eval-every` (same value) |
-| `WAIV_BCLS` | `-inf` (only applied when `WAIV_MASK` set) | `--same-core-logit-bias-cls` |
-| `WAIV_BMEAN` | `-inf` | `--same-core-logit-bias-mean` |
-| `WAIV_RANK` | `32` | `--lora-rank` |
-| `WAIV_ALPHA` | `2*WAIV_RANK` | `--lora-alpha` |
-| `WAIV_PROJDIM` | `512` | `--proj-out-dim` |
-| `WAIV_WARMUP` | `200` | `--warmup-steps` |
-| `WAIV_WD` | `0.05` | `--weight-decay` |
-| `WAIV_TEMP` | `0.07` | `--temperature` |
-| `WAIV_KL` | `0` | `--retention-kl-weight` |
-| `WAIV_MASK` | unset | if set (any value), turns on `--mask-same-core` and applies `WAIV_BCLS`/`WAIV_BMEAN`; also folds `MASK` into `RUN_NAME` and changes the default pin (see §2.1) |
-| `WAIV_MINTF` | unset | `--min-tissue-frac`, only passed if set |
-| `WAIV_PIN` | see §2.1 | which code snapshot's `src/` and `scripts/train_lora.py` to run |
-| `WAIV_TAG` | unset | free-form string folded into `RUN_NAME`; **required** whenever two runs would otherwise only differ by something `RUN_NAME` doesn't encode (chiefly `WAIV_BCLS`/`WAIV_BMEAN` — those are invisible in the auto-generated name) |
-| `WAIV_RUN_NAME` | unset | replaces the auto-generated `RUN_NAME` wholesale (job id still appended). See §2.2 for why you'll usually need this. |
-| `WAIV_PACKED_DIR` | `/data/plism/repacked` | tile source |
-| `WAIV_REPO` | `/admin/home/ryan.kim/waiv` | repo root |
-| `WAIV_WORKERS` | `10` | dataloader workers |
-| `WAIV_ALLOW_LONG_RUN_NAME` | unset | override the 64-char THUNDER key check (§2.2) — proceeds RI/HEST-only, THUNDER becomes impossible for that run |
-| `WAIV_EVAL_MAX_WAIT_S` | `72000` | RI-eval follower max wait |
-| `WAIV_NO_FOLLOWER` | unset | `1` disables the RI-eval follower — smokes only, never for a real run (no `ri_curve.json`, and RI is the only readout with dynamic range to rank arms) |
-| `WAIV_BACKBONE_LOCAL_DIRS` | unset | overrides the gated-backbone local-path table (`repo_id=/path,...`) if `/data` is swept again |
+| `SPECTRA_ARM` | **required** | `phikon\|midnight\|virchow2\|hoptimus\|uni2`. Maps to `--backbone` (phikon leaves it unset → train_lora.py's own default `owkin/phikon-v2`). `hoptimus`→`bioptimus/H-optimus-0`, `uni2`→`MahmoodLab/UNI2-h` — both **gated** HF repos (see §2.1). |
+| `SPECTRA_SEED` | **required** | `--seed` |
+| `SPECTRA_T` | **required** | grid tiles (`GRID_TILES`); `GRID_COND=2` is hardcoded, so batch = `2*T` |
+| `SPECTRA_LR` | `1e-4` | `--lr` |
+| `SPECTRA_MAX_STEPS` | `1500` | `--max-steps` |
+| `SPECTRA_CKPT_EVERY` | `250` | `--ckpt-every` and `--eval-every` (same value) |
+| `SPECTRA_BCLS` | `-inf` (only applied when `SPECTRA_MASK` set) | `--same-core-logit-bias-cls` |
+| `SPECTRA_BMEAN` | `-inf` | `--same-core-logit-bias-mean` |
+| `SPECTRA_RANK` | `32` | `--lora-rank` |
+| `SPECTRA_ALPHA` | `2*SPECTRA_RANK` | `--lora-alpha` |
+| `SPECTRA_PROJDIM` | `512` | `--proj-out-dim` |
+| `SPECTRA_WARMUP` | `200` | `--warmup-steps` |
+| `SPECTRA_WD` | `0.05` | `--weight-decay` |
+| `SPECTRA_TEMP` | `0.07` | `--temperature` |
+| `SPECTRA_KL` | `0` | `--retention-kl-weight` |
+| `SPECTRA_MASK` | unset | if set (any value), turns on `--mask-same-core` and applies `SPECTRA_BCLS`/`SPECTRA_BMEAN`; also folds `MASK` into `RUN_NAME` and changes the default pin (see §2.1) |
+| `SPECTRA_MINTF` | unset | `--min-tissue-frac`, only passed if set |
+| `SPECTRA_PIN` | see §2.1 | which code snapshot's `src/` and `scripts/train_lora.py` to run |
+| `SPECTRA_TAG` | unset | free-form string folded into `RUN_NAME`; **required** whenever two runs would otherwise only differ by something `RUN_NAME` doesn't encode (chiefly `SPECTRA_BCLS`/`SPECTRA_BMEAN` — those are invisible in the auto-generated name) |
+| `SPECTRA_RUN_NAME` | unset | replaces the auto-generated `RUN_NAME` wholesale (job id still appended). See §2.2 for why you'll usually need this. |
+| `SPECTRA_PACKED_DIR` | `/data/plism/repacked` | tile source |
+| `SPECTRA_REPO` | `/admin/home/ryan.kim/waiv` | repo root |
+| `SPECTRA_WORKERS` | `10` | dataloader workers |
+| `SPECTRA_ALLOW_LONG_RUN_NAME` | unset | override the 64-char THUNDER key check (§2.2) — proceeds RI/HEST-only, THUNDER becomes impossible for that run |
+| `SPECTRA_EVAL_MAX_WAIT_S` | `72000` | RI-eval follower max wait |
+| `SPECTRA_NO_FOLLOWER` | unset | `1` disables the RI-eval follower — smokes only, never for a real run (no `ri_curve.json`, and RI is the only readout with dynamic range to rank arms) |
+| `SPECTRA_BACKBONE_LOCAL_DIRS` | unset | overrides the gated-backbone local-path table (`repo_id=/path,...`) if `/data` is swept again |
 
 Hardcoded, not tunable: `GRID_COND=2`, `GRID_CHUNK=0` (GEM/pool-head forces unchunked —
 `contrastive.py` raises if you try to chunk a non-default pool head), pooling at train time
@@ -53,28 +59,28 @@ pinned host RAM for offloaded activations is not swappable — do not shrink thi
 ### 1.2 The FINAL choice actually in production on this branch
 
 ```bash
-WAIV_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated \
-WAIV_ARM=<phikon|midnight|virchow2|hoptimus|uni2> \
-WAIV_SEED=<n> \
-WAIV_T=900 \
-WAIV_MASK=1 \
-WAIV_BCLS=3.0 \
-WAIV_MAX_STEPS=500 \
-WAIV_CKPT_EVERY=50 \
-WAIV_RUN_NAME=genMASK-c50-ms500-<arm>-s<n>-t900 \
+SPECTRA_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated \
+SPECTRA_ARM=<phikon|midnight|virchow2|hoptimus|uni2> \
+SPECTRA_SEED=<n> \
+SPECTRA_T=900 \
+SPECTRA_MASK=1 \
+SPECTRA_BCLS=3.0 \
+SPECTRA_MAX_STEPS=500 \
+SPECTRA_CKPT_EVERY=50 \
+SPECTRA_RUN_NAME=genMASK-c50-ms500-<arm>-s<n>-t900 \
 sbatch --account=idle --qos=low scripts/gentle.sbatch
 ```
 
-i.e. `WAIV_BMEAN` is left at its default (`-inf`) — the bias is **asymmetric**
-(cls=+3.0, mean=-inf) — `WAIV_LR=1e-4`, `WAIV_WARMUP=200`, `WAIV_RANK=32`,
-`WAIV_PROJDIM=512` are all left at their sbatch defaults. This is exactly what
+i.e. `SPECTRA_BMEAN` is left at its default (`-inf`) — the bias is **asymmetric**
+(cls=+3.0, mean=-inf) — `SPECTRA_LR=1e-4`, `SPECTRA_WARMUP=200`, `SPECTRA_RANK=32`,
+`SPECTRA_PROJDIM=512` are all left at their sbatch defaults. This is exactly what
 `watch/saturate.py`'s priority-3 auto-launcher submits (`saturate.py:307-317`), producing
-the `runs/genMASK-c50-*` grid: 10 checkpoints at `WAIV_CKPT_EVERY=50` from step 50 to 500,
+the `runs/genMASK-c50-*` grid: 10 checkpoints at `SPECTRA_CKPT_EVERY=50` from step 50 to 500,
 2 seeds wanted per arm, 5 arms.
 
 **Note this supersedes `docs/FINAL_RECIPE.md`** (2026-08-25), which documents an earlier
-2-seed, 3-backbone (`phikon`/`midnight`/`virchow2` only) pilot at `WAIV_CKPT_EVERY=125` and
-relied on `WAIV_MASK=1`'s *default* pin resolution (`falseneg-pinned`, no gated-backbone
+2-seed, 3-backbone (`phikon`/`midnight`/`virchow2` only) pilot at `SPECTRA_CKPT_EVERY=125` and
+relied on `SPECTRA_MASK=1`'s *default* pin resolution (`falseneg-pinned`, no gated-backbone
 support — it never needed it, since that pilot didn't cover `hoptimus`/`uni2`). The c50 grid
 above is the current, actively-running production sweep and is the one to cite for the
 5-backbone claim; `FINAL_RECIPE.md`'s numbers are still valid for the 3 ungated backbones
@@ -88,25 +94,25 @@ Verify what pin/eval protocol a given checkpoint was made under by reading the r
 
 ## 2. Two traps that have cost real job failures
 
-### 2.1 `WAIV_MASK=1` alone silently selects the wrong pin for gated backbones
+### 2.1 `SPECTRA_MASK=1` alone silently selects the wrong pin for gated backbones
 
 `gentle.sbatch:78`:
 ```bash
-PIN="${WAIV_PIN:-${WAIV_MASK:+/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned}}"
+PIN="${SPECTRA_PIN:-${SPECTRA_MASK:+/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned}}"
 PIN="${PIN:-/admin/home/ryan.kim/waiv-snapshots/gemgrid-pinned}"
 ```
-So setting only `WAIV_MASK=1` (without `WAIV_PIN`) resolves to `falseneg-pinned`. I checked
+So setting only `SPECTRA_MASK=1` (without `SPECTRA_PIN`) resolves to `falseneg-pinned`. I checked
 that snapshot directly: **`falseneg-pinned/src/waivphaet/models/encoder.py` has no
 `BACKBONE_LOCAL_DIRS`** (grep for it returns nothing), while
 `falseneg-gated/src/waivphaet/models/encoder.py` does (it defines the table and the
-`WAIV_BACKBONE_LOCAL_DIRS` override mechanism, lines ~135-183). `BACKBONE_LOCAL_DIRS` is
+`SPECTRA_BACKBONE_LOCAL_DIRS` override mechanism, lines ~135-183). `BACKBONE_LOCAL_DIRS` is
 what redirects `bioptimus/H-optimus-0` / `MahmoodLab/UNI2-h` (both gated on HF, 403 without
-it) to their local `/data` checkpoints. So `WAIV_MASK=1` with no explicit `WAIV_PIN` trains
+it) to their local `/data` checkpoints. So `SPECTRA_MASK=1` with no explicit `SPECTRA_PIN` trains
 phikon/midnight/virchow2 fine but **403s at backbone load for hoptimus/uni2**.
 
 **Always pass explicitly for any run touching a gated backbone:**
 ```bash
-WAIV_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated
+SPECTRA_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated
 ```
 This is exactly what `saturate.py`'s auto-launcher does (`saturate.py:314`) and what every
 real gated-backbone run in git history used.
@@ -119,17 +125,17 @@ pydantic `run_tags` hard-caps that at 64 — so `RUN_NAME` has a **52-char budge
 -pd...-<arm>-s<seed>-t<T>-<jobid>`) runs ~71 chars and **always exceeds this** — every
 THUNDER job for an un-overridden `gentle.sbatch` run is rejected at validation, silently, as
 a killed sweep rather than a visible error. The sbatch itself checks this at launch time and
-`exit 4`s unless you either shorten the name or pass `WAIV_ALLOW_LONG_RUN_NAME=1` (which
+`exit 4`s unless you either shorten the name or pass `SPECTRA_ALLOW_LONG_RUN_NAME=1` (which
 gives up THUNDER entirely for that run).
 
-**Fix: always set `WAIV_RUN_NAME` to something short**, e.g.
+**Fix: always set `SPECTRA_RUN_NAME` to something short**, e.g.
 `genMASK-<tag>-ms500-<arm>-s<seed>-t900` (the c50 grid literally uses
 `genMASK-c50-ms500-<arm>-s<seed>-t900`, ~35-40 chars). If you override it, the sbatch's own
 comment (and `scoreboard2.py:_parse_run_meta`) says you must keep the tokens the scoreboard
 greps back out: `MASK`, `-lr`, `-kl`, `-ms`, `-s<seed>`, `-t<T>`, a trailing job id, and an
 arm name present in `scoreboard2._BACKBONES = ("phikon","midnight","virchow2","hoptimus","hopt","uni2")`
 — otherwise that run's scoreboard metadata degrades to unknown/None. Note the current c50
-`WAIV_RUN_NAME` scheme (`genMASK-c50-ms500-<arm>-s<seed>-t900`, no explicit `-lr`/`-kl`
+`SPECTRA_RUN_NAME` scheme (`genMASK-c50-ms500-<arm>-s<seed>-t900`, no explicit `-lr`/`-kl`
 tokens) means `scoreboard2._parse_run_meta`'s regex lookups for those fields fall back to
 `None`/default rather than erroring — check `scripts/scoreboard2.py` output for a given run
 if you need those fields reported, don't assume they parsed.
@@ -145,10 +151,10 @@ is specifically long-running and GPU-light, in which case it defaults to `max`/`
 ### 3.1 Training (`scripts/gentle.sbatch`)
 ```bash
 cd /admin/home/ryan.kim/waiv
-WAIV_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated \
-WAIV_ARM=uni2 WAIV_SEED=2 WAIV_T=900 WAIV_MASK=1 WAIV_BCLS=3.0 \
-WAIV_MAX_STEPS=500 WAIV_CKPT_EVERY=50 \
-WAIV_RUN_NAME=genMASK-c50-ms500-uni2-s2-t900 \
+SPECTRA_PIN=/admin/home/ryan.kim/waiv-snapshots/falseneg-gated \
+SPECTRA_ARM=uni2 SPECTRA_SEED=2 SPECTRA_T=900 SPECTRA_MASK=1 SPECTRA_BCLS=3.0 \
+SPECTRA_MAX_STEPS=500 SPECTRA_CKPT_EVERY=50 \
+SPECTRA_RUN_NAME=genMASK-c50-ms500-uni2-s2-t900 \
 sbatch --account=idle --qos=low scripts/gentle.sbatch
 ```
 
@@ -181,7 +187,7 @@ cd /admin/home/ryan.kim/pathfm-full-evals
 ### 3.3 HEST — the OLD per-checkpoint script, still the one in use for HEST specifically
 ```bash
 cd /admin/home/ryan.kim/waiv
-WAIV_RUN=genMASK-c50-ms500-virchow2-s0-t900-396382 WAIV_STEP=0000500 \
+SPECTRA_RUN=genMASK-c50-ms500-virchow2-s0-t900-396382 SPECTRA_STEP=0000500 \
 sbatch --account=idle --qos=low scripts/hest_final5.sbatch
 ```
 Pooling is derived from the run name (never pass it by hand):
@@ -194,7 +200,7 @@ results silently collide on disk. `--num-workers 0` is required (HEST's dataload
 in shared-memory teardown at higher worker counts).
 
 **Why HEST is a separate old script and not folded into `pathfm-full-evals`**: it predates
-that harness and its pooling-protocol logic (`src/waivphaet/eval/thunder_protocol.py` for
+that harness and its pooling-protocol logic (`src/spectra/eval/thunder_protocol.py` for
 THUNDER; `HEST_POOLING`/pooling case statement in `hest_final5.sbatch` for HEST) is specific
 per-backbone and already validated against Waiv's published numbers — see the header
 comment in `hest_final5.sbatch`: phikon-v2 base 0.37470 reproduces published 0.3747 exactly
@@ -207,7 +213,7 @@ it). Don't expect HEST and THUNDER numbers for the same checkpoint to have been 
 under identical preprocessing — that is expected, not a discrepancy to chase.
 
 THUNDER's per-backbone pooling protocol is defined once, dependency-free, in
-`src/waivphaet/eval/thunder_protocol.py`: `THUNDER_CLSMEAN_BACKBONES = {"kaiko-ai/midnight",
+`src/spectra/eval/thunder_protocol.py`: `THUNDER_CLSMEAN_BACKBONES = {"kaiko-ai/midnight",
 "paige-ai/Virchow2"}`, `THUNDER_CLS_BACKBONES = {"owkin/phikon-v2", "bioptimus/H-optimus-0",
 "MahmoodLab/UNI2-h"}`, everything else raises rather than silently defaulting. Note this
 differs from HEST's own pooling table above only in that HEST's case statement is
@@ -273,9 +279,9 @@ in the sbatch is what makes that not a real limit):
 3. **Spare capacity → finish incomplete 50-step training grids.** Only fires once priorities
    1-2 haven't filled the queue to target. Picks the arm (of `TRAIN_ARMS = ("hoptimus",
    "midnight", "virchow2", "phikon", "uni2")`) with the fewest complete grids
-   (`FULL_GRID = 10` checkpoints at `WAIV_CKPT_EVERY=50`, `SEEDS_WANTED = 2` seeds per arm
+   (`FULL_GRID = 10` checkpoints at `SPECTRA_CKPT_EVERY=50`, `SEEDS_WANTED = 2` seeds per arm
    before it stops adding more), and launches `gentle.sbatch` for it with exactly the §1.2
-   final-choice invocation — including `WAIV_PIN=falseneg-gated` explicitly, which is why
+   final-choice invocation — including `SPECTRA_PIN=falseneg-gated` explicitly, which is why
    this auto-launch path does NOT hit trap §2.1.
 
 Backfill logic: once in-flight drops more than 5 below `TARGET_INFLIGHT`, the effective
@@ -322,7 +328,7 @@ that manifest check exists.
 - `/admin/home/ryan.kim/waiv/scripts/gentle.sbatch` — training launcher
 - `/admin/home/ryan.kim/waiv/scripts/hest_final5.sbatch` — HEST launcher (old harness)
 - `/admin/home/ryan.kim/waiv/scripts/scoreboard2.py` — run-name parsing / scoreboard
-- `/admin/home/ryan.kim/waiv/src/waivphaet/eval/thunder_protocol.py` — THUNDER pooling table
+- `/admin/home/ryan.kim/waiv/src/spectra/eval/thunder_protocol.py` — THUNDER pooling table
 - `/admin/home/ryan.kim/waiv/tests/test_invariants.py` — cross-checks HEST/THUNDER pooling agreement, sampler/loss invariants
 - `/admin/home/ryan.kim/waiv/docs/FINAL_RECIPE.md` — earlier 3-backbone/125-step pilot (superseded for the 5-backbone claim, see §1.2)
 - `/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned/` vs `falseneg-gated/` — the two pins in trap §2.1

@@ -32,18 +32,18 @@ in the same (HEST-favouring) direction.
 
 ## Shared config (all arms)
 
-`scripts/gentle.sbatch`, seed 0 unless stated, `WAIV_T=900`, `WAIV_MAX_STEPS=250`.
+`scripts/gentle.sbatch`, seed 0 unless stated, `SPECTRA_T=900`, `SPECTRA_MAX_STEPS=250`.
 Step 250 is the **pre-registered scoring checkpoint** for these backbones. Both backbones
 (`kaiko-ai/midnight`, `paige-ai/Virchow2`) unless stated.
 
 | Arm | Priority | Config delta vs default | Backbones |
 |---|---|---|---|
-| temp-down + mask | P1 | `WAIV_TEMP=0.04`, `WAIV_MASK=1`, biases `-inf` / `-inf` | midnight, Virchow2 |
-| temp-down harder + mask | P2 | `WAIV_TEMP=0.03`, `WAIV_MASK=1`, biases `-inf` / `-inf` | midnight, Virchow2 |
-| partial mask | P3 | `WAIV_MASK=1`, `WAIV_BCLS=2.0`, `WAIV_BMEAN=2.0`, temp 0.07 | midnight, Virchow2 |
-| best-HEST replication | P4 | `WAIV_LR=3e-5`, no mask, temp 0.07, seeds 1 and 2 | midnight only |
+| temp-down + mask | P1 | `SPECTRA_TEMP=0.04`, `SPECTRA_MASK=1`, biases `-inf` / `-inf` | midnight, Virchow2 |
+| temp-down harder + mask | P2 | `SPECTRA_TEMP=0.03`, `SPECTRA_MASK=1`, biases `-inf` / `-inf` | midnight, Virchow2 |
+| partial mask | P3 | `SPECTRA_MASK=1`, `SPECTRA_BCLS=2.0`, `SPECTRA_BMEAN=2.0`, temp 0.07 | midnight, Virchow2 |
+| best-HEST replication | P4 | `SPECTRA_LR=3e-5`, no mask, temp 0.07, seeds 1 and 2 | midnight only |
 
-`WAIV_TEMP=0.05` is the middle dose point. It is the first thing to add if a slot frees
+`SPECTRA_TEMP=0.05` is the middle dose point. It is the first thing to add if a slot frees
 before 0.03 completes; the goal is a CURVE, not a point.
 
 P4 exists because the current best-HEST midnight arm (lr 3e-5, no mask) scored **0.41326 at
@@ -91,8 +91,8 @@ HEST and PathoROB caches are keyed on run name / exp_code ALONE. Two arms that c
 that string silently share results — this has produced fake results before.
 
 `RUN_NAME` in `gentle.sbatch` encodes temp (`t0.04`), mask (`genMASK`), lr, seed, steps,
-arm, and the SLURM job id — but **NOT** `WAIV_BCLS` / `WAIV_BMEAN`. A `WAIV_TAG` hook was
-added to `gentle.sbatch` for this round; P3 MUST set `WAIV_TAG=b2.0` or it is
+arm, and the SLURM job id — but **NOT** `SPECTRA_BCLS` / `SPECTRA_BMEAN`. A `SPECTRA_TAG` hook was
+added to `gentle.sbatch` for this round; P3 MUST set `SPECTRA_TAG=b2.0` or it is
 name-indistinguishable from a total-mask run except by job id.
 
 ---
@@ -106,7 +106,7 @@ name-indistinguishable from a total-mask run except by job id.
 | 391921 | midnight | 0.03 | `genMASK-lr1e-4-r32-kl0-t0.03-wd0.05-ms250-pd512-midnight-s0-t900-391921` |
 | 391922 | Virchow2 | 0.03 | `genMASK-lr1e-4-r32-kl0-t0.03-wd0.05-ms250-pd512-virchow2-s0-t900-391922` |
 
-Still deferred: P3 partial mask (MUST set `WAIV_TAG=b2.0`), P4 midnight lr3e-5 seeds 1/2,
+Still deferred: P3 partial mask (MUST set `SPECTRA_TAG=b2.0`), P4 midnight lr3e-5 seeds 1/2,
 and the temp 0.05 mid-dose point.
 
 ### Note on early loss (do NOT read as a result)
@@ -159,7 +159,7 @@ but trained on a 1500-step LR schedule, so at step 250 the LR is still near peak
 run anneals to ~0 by step 250 and is a DIFFERENT arm. `CKPT_EVERY` is 250 regardless of
 `MAX_STEPS`, so `ms1500` still writes `step_0000250` at ~90 min and the step-250 HEST can be
 scored long before training ends. **The seed replication therefore runs at
-`WAIV_MAX_STEPS=1500` and is scored at step 250.** Scoring an ms250 run against 0.41326
+`SPECTRA_MAX_STEPS=1500` and is scored at step 250.** Scoring an ms250 run against 0.41326
 would be an invalid comparison.
 
 ### Virchow2 replication NOT launched — arm could not be verified

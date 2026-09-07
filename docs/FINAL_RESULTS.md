@@ -110,7 +110,7 @@ Under `clsmean` the base already sits near where fine-tuning lands, because the 
 
 ## 5. Patho-Bench — NOT MEASURABLE
 
-One of the three components of Waiv's Figure-1 composite (`y = (58 − total)/53`, `total` = HEST rank + THUNDER rank + Patho-Bench rank). It cannot be measured for our encoder, for three independent reasons (documented at `src/waivphaet/eval/__init__.py:30-41`):
+One of the three components of Waiv's Figure-1 composite (`y = (58 − total)/53`, `total` = HEST rank + THUNDER rank + Patho-Bench rank). It cannot be measured for our encoder, for three independent reasons (documented at `src/spectra/eval/__init__.py:30-41`):
 
 1. It is **slide-level**; the public precomputed features are **UNI2-h patch embeddings**, useless for scoring a different patch encoder.
 2. A real number needs **~7–8 TB of raw TCGA WSIs** plus a full extraction pass.

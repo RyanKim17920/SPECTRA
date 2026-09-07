@@ -17,7 +17,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from _config import PLISM_PACKED  # noqa: E402
-from waivphaet.models.encoder import EncoderConfig, WaivEncoder  # noqa: E402
+from spectra.models.encoder import EncoderConfig, SpectraEncoder  # noqa: E402
 
 REPACK = PLISM_PACKED
 
@@ -99,7 +99,7 @@ def main():
     )
     assert not enc.get("infer_pool_head", False), "infer_pool_head on -> embed() differs"
     t0 = time.time()
-    model = WaivEncoder(cfg)
+    model = SpectraEncoder(cfg)
     print(json.dumps(model.trainable_parameter_summary(), indent=1), flush=True)
 
     from peft import set_peft_model_state_dict

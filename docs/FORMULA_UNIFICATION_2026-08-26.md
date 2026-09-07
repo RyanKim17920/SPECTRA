@@ -92,7 +92,7 @@ numerator came from `custom_encoder`.
 | **F-F** RI_BASE false provenance | **DONE** | `eval_common.load_ri_base()` reads `third_party/PathoROB/results/robustness_index/<model>/<ds>/-1_0/results_summary.json`. `RI_WAIV` comes from `pathorob_adapter.TARGETS`. Retired literals are asserted against disk and the comparison is printed in the report. |
 | **F-G** `config_ok` gate admitted unreadable configs | **DONE** | `config_ok is not False` → `config_ok is True`; unverifiable runs are excluded and printed in a loud banner. |
 | **F-H** `first_where` sentinel | **DONE** | returns `NEVER` (None); `report()` counts non-firing runs, marks such rules `INCOMPLETE`, and a new eligibility ranking excludes them. Stopping-rule sweep re-run — see §4. |
-| **F-I** scoreboard2 tuned constants | **DONE** | `_THUNDER_MEAN_1SD = 0.0025` replaced by measured per-(backbone,task) `seed_sd_of_task_mean` read from `docs/thunder_seed_floor_12ds.json` (range 0.00189–0.00639, and the offset-2SE floors run to 0.0233). `RI_BUDGET_FLOOR` quarantined behind `WAIV_ENABLE_RI_BUDGET_COLUMN=1`, column prints `off` by default with a provenance warning. |
+| **F-I** scoreboard2 tuned constants | **DONE** | `_THUNDER_MEAN_1SD = 0.0025` replaced by measured per-(backbone,task) `seed_sd_of_task_mean` read from `docs/thunder_seed_floor_12ds.json` (range 0.00189–0.00639, and the offset-2SE floors run to 0.0233). `RI_BUDGET_FLOOR` quarantined behind `SPECTRA_ENABLE_RI_BUDGET_COLUMN=1`, column prints `off` by default with a provenance warning. |
 
 ---
 

@@ -14,7 +14,7 @@ the same backbone are not all at the same step.
 
 Facts below are extracted from `/admin/home/ryan.kim/pathfm-cells/<cell>/model.py`
 (the frozen evaluation cells that produced the paper numbers),
-`/admin/home/ryan.kim/waiv/src/waivphaet/models/encoder.py`, the on-disk
+`/admin/home/ryan.kim/waiv/src/spectra/models/encoder.py`, the on-disk
 `adapter_config.json` files, and the run `config.json` files.
 
 Licence and gating status per backbone is **TODO -- under separate investigation.** No

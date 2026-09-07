@@ -16,7 +16,7 @@ checkpoint, another step, or another arm.
 Source: `scripts/final_recipe_report.py` (`build_report()`), re-run by this
 command; machine-readable copy in `docs/final_recipe_verdict.json`.
 
-Run family: `genMASK-c50-*` -- the FINALISED recipe (WAIV_BCLS=3.0, WAIV_BMEAN=-inf, ms500, warmup 200, lr 1e-4, rank 32, projdim 512, t900,
+Run family: `genMASK-c50-*` -- the FINALISED recipe (SPECTRA_BCLS=3.0, SPECTRA_BMEAN=-inf, ms500, warmup 200, lr 1e-4, rank 32, projdim 512, t900,
 CKPT_EVERY=50, pin `falseneg-gated`), five backbones, 22 runs discovered.
 
 Checkpoint per run is chosen by the **1se rule**: 1-SE (online): B = best avg_robustness_index so far; STOP at the first checkpoint (index >= 2) with R_t - B <= SE; RETURN the EARLIEST checkpoint with RI >= B - SE.

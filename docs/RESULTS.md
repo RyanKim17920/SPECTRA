@@ -645,7 +645,7 @@ Adding one is a method change, not a sweep, and nothing here tests it.
   arms. Future sweeps here should report plateau means with the within-arm scatter alongside,
   and treat a peak-only table as a diagnostic, not a result.
 - The sweep required no fork of the training script. `scripts/train_real.sbatch` reads
-  `WAIV_LORA_RANK` / `WAIV_LORA_ALPHA` (defaults 32 / 64, reproducing 369043 exactly), and the
+  `SPECTRA_LORA_RANK` / `SPECTRA_LORA_ALPHA` (defaults 32 / 64, reproducing 369043 exactly), and the
   same `$LORA_RANK` / `$LORA_ALPHA` are passed to the before-probe (`embed_probe.py`), the eval
   follower (`eval_checkpoints.py`) and `train_lora.py`. Rank must come from the env vars rather
   than through the trailing `"$@"`: appending `--lora-rank` as an extra arg reaches only the
@@ -1745,7 +1745,7 @@ PAAD / LUNG subset of HEST. Nothing in this pipeline touches PathoROB. Summaries
   **Nothing downstream depends on it.** The mechanism argued below — that a feature encoding
   slide-specific identity has no counterpart in a held-out slide and therefore cannot transfer —
   rests **only on slide-disjointness**, which holds at 11/11 folds.
-  The "leave-one-patient-out" claim in the docstring at `src/waivphaet/eval/hest_adapter.py:23`
+  The "leave-one-patient-out" claim in the docstring at `src/spectra/eval/hest_adapter.py:23`
   is wrong and should be read as slide-level.
 - **The 5-task subset was selected on prior effect size — this bounds the magnitudes, not the
   ranks.** `hest_arms.sbatch:28-31` picked these five of the benchmark's nine because they "carry
