@@ -33,6 +33,7 @@ runs/
 _tmp_*
 *.bak
 *.bak.*
+*.bak2
 
 # large output dirs — jobs write here, never committed
 logs/
@@ -49,3 +50,6 @@ results_backup/
 
 # local Claude Code session state
 .claude/
+
+# machine-local path roots (see .env.example, tracked)
+.env
