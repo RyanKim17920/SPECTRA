@@ -9,7 +9,7 @@ feature width, and both produce a number that looks like a result.
 
 So every per-backbone fact lives in :data:`BACKBONES` here, and the tables that used to
 hold them are now views over it.  **To add a backbone, add one ``Backbone`` entry.**
-See ``docs/NEW_MODEL.md`` for the walkthrough and for what each field is proved against.
+See ``docs/archive/NEW_MODEL.md`` for the walkthrough and for what each field is proved against.
 
 What this registry does NOT decide
 ----------------------------------
@@ -190,7 +190,7 @@ BACKBONES: dict[str, Backbone] = {
         # The model card publishes its own H&E-corpus statistics. ImageNet's have the
         # same shapes, raise no warning, and quietly cost accuracy on every row.
         normalization=((0.707223, 0.578729, 0.703617), (0.211883, 0.230117, 0.177517)),
-        # In Waiv Table 2 and NOT in the line-106 clsmean list. The trap is H0-mini,
+        # In Reference Table 2 and NOT in the line-106 clsmean list. The trap is H0-mini,
         # which IS in that list: it is a distillation of this model and a separate row.
         thunder_readout="cls",
         lora_target_suffixes=_TIMM_VIT,
@@ -284,7 +284,7 @@ BACKBONES: dict[str, Backbone] = {
         # local binding is ever repointed. v1 ONLY -- Virchow2 is a separate entry and
         # nothing may be shared between the two.
         normalization=(IMAGENET_MEAN, IMAGENET_STD),
-        thunder_readout=None,            # not a row of Waiv Table 2
+        thunder_readout=None,            # not a row of Reference Table 2
         lora_target_suffixes=_TIMM_VIT,
         embed_dim=1280, num_prefix_tokens=1, num_blocks=32, patch_size=14,
         notes="Virchow **v1**: NO register tokens (1 prefix token / 257 tokens), against "

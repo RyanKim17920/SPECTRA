@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Empirical seed-noise error bars on the AGGREGATE pct_of_waiv criterion.
+"""Empirical seed-noise error bars on the AGGREGATE pct_of_reference criterion.
 
 Reproduces docs/aggregate_criterion_resolvability.md.  Reads only data already on
 disk: docs/thunder_seed_floor_12ds.json (THUNDER per-seed/per-dataset F1),
@@ -58,7 +58,7 @@ def pct_t(b,t,s,cap=True):
 # which all read `hest_perf_per_encoder.custom_encoder` (0.4032685).  Both ends now come
 # off the same field through the same loader.
 HEST_BASE=_c5.HEST_BASE
-WAIV_HEST=_ec.HEST_WAIV
+REFERENCE_HEST=_ec.HEST_REFERENCE
 HRES=_c5.HEST_WORK_DIR/'results'
 POOL={a:_c5.hest_pooling(a) for a in BB}
 H_ours={}
@@ -68,14 +68,14 @@ for b in BB:
         assert len(g)==1,(b,s,g)
         H_ours[(b,s)]=_c5._hest_read_metric(g[0])          # F-E: custom_encoder, not results.avg
 def pct_h(b,s,cap=True):
-    v=(H_ours[(b,s)]-HEST_BASE[b])/(WAIV_HEST[b]-HEST_BASE[b])*100.0
+    v=(H_ours[(b,s)]-HEST_BASE[b])/(REFERENCE_HEST[b]-HEST_BASE[b])*100.0
     return min(v,100.0) if cap else v
 
 # ---------------- RI ----------------
 # F-F fix: read from PathoROB results on disk; the literals' cited provenance
 # (probe_before.json) had no such field.
 RI_BASE=_c5.RI_BASE
-WAIV_RI=_c5.RI_WAIV
+REFERENCE_RI=_c5.RI_REFERENCE
 R_ours={}
 for b in BB:
     for s in SEEDS:
@@ -86,7 +86,7 @@ for b in BB:
         assert len(v)==1
         R_ours[(b,s)]=v[0]['avg_robustness_index']
 def pct_r(b,s,cap=True):
-    v=(R_ours[(b,s)]-RI_BASE[b])/(WAIV_RI[b]-RI_BASE[b])*100.0
+    v=(R_ours[(b,s)]-RI_BASE[b])/(REFERENCE_RI[b]-RI_BASE[b])*100.0
     return min(v,100.0) if cap else v
 
 # ================= reporting helpers =================
@@ -97,7 +97,7 @@ def show(title,rows):
     print('\n### '+title)
     for r in rows: print(r)
 
-print('='*70); print('RAW PER-SEED pct_of_waiv (uncapped)')
+print('='*70); print('RAW PER-SEED pct_of_reference (uncapped)')
 for b in BB:
     for t in TASKS:
         vs=[pct_t(b,t,s,cap=False) for s in SEEDS]
@@ -114,13 +114,13 @@ print('\nRAW underlying (12ds f1 / hest avg / ri) per seed')
 for b in BB:
     for t in TASKS:
         vs=[T_ours[(b,t,s)] for s in SEEDS]
-        print(f'  T {b:9s} {t:15s} base={OUR_BASE_T[(b,t)]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} waivgain={(SPECTRA_T[b]["ft"][t]-SPECTRA_T[b]["base"][t])/100:.4f}')
+        print(f'  T {b:9s} {t:15s} base={OUR_BASE_T[(b,t)]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} referencegain={(SPECTRA_T[b]["ft"][t]-SPECTRA_T[b]["base"][t])/100:.4f}')
 for b in BB:
     vs=[H_ours[(b,s)] for s in SEEDS]
-    print(f'  H {b:9s} base={HEST_BASE[b]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} waivgain={WAIV_HEST[b]-HEST_BASE[b]:.4f}')
+    print(f'  H {b:9s} base={HEST_BASE[b]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} referencegain={REFERENCE_HEST[b]-HEST_BASE[b]:.4f}')
 for b in BB:
     vs=[R_ours[(b,s)] for s in SEEDS]
-    print(f'  R {b:9s} base={RI_BASE[b]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} waivgain={WAIV_RI[b]-RI_BASE[b]:.4f}')
+    print(f'  R {b:9s} base={RI_BASE[b]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} referencegain={REFERENCE_RI[b]-RI_BASE[b]:.4f}')
 
 # ============ AGGREGATES ============
 DEGEN = [('midnight','linear_probing'),('virchow2','knn'),('virchow2','linear_probing')]

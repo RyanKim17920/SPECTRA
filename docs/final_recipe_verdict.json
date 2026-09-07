@@ -58,12 +58,12 @@
       "spider_skin",
       "spider_thorax"
     ],
-    "why": "Waiv average THUNDER classification over 16 datasets (the THUNDER paper's 12 + the 4 SPIDER organ subsets, which postdate that paper). Averaging over 12 while comparing to their 16-set figures is a roster mismatch that biases every pct_of_waiv numerator.",
+    "why": "Reference average THUNDER classification over 16 datasets (the THUNDER paper's 12 + the 4 SPIDER organ subsets, which postdate that paper). Averaging over 12 while comparing to their 16-set figures is a roster mismatch that biases every pct_of_reference numerator.",
     "seed_floor_caveat": "THUNDER_FLOOR / THUNDER_SEED_SD were measured on the 12-dataset task mean (n=5 seeds).  A 16-dataset mean is LESS noisy, so reusing the 12ds SD OVER-states the error bar -- the safe direction.  No 5-seed SPIDER cohort exists to remeasure with, so it is reused, not rescaled.",
     "segmentation": "still 0/4 -- no SPIDER segmentation task exists and the two segpath cells are not run on this cohort.  'THUNDER' in this report means CLASSIFICATION ONLY."
   },
   "thunder_base_gap_validation": {
-    "waiv_source": "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24, read from docs/waiv_published.json",
+    "reference_source": "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24, read from docs/reference_published.json",
     "rosters": {
       "12": {
         "n_datasets": 12,
@@ -85,91 +85,91 @@
           "phikon/knn": {
             "our_base_pct": 70.28067580770599,
             "coverage": "12/12",
-            "waiv_published_base_pct": 74.0,
+            "reference_published_base_pct": 74.0,
             "gap_pct_points": -3.7193241922940103
           },
           "phikon/linear_probing": {
             "our_base_pct": 76.54134679125492,
             "coverage": "12/12",
-            "waiv_published_base_pct": 79.3,
+            "reference_published_base_pct": 79.3,
             "gap_pct_points": -2.7586532087450735
           },
           "phikon/simple_shot": {
             "our_base_pct": 69.3297639657079,
             "coverage": "12/12",
-            "waiv_published_base_pct": 71.8,
+            "reference_published_base_pct": 71.8,
             "gap_pct_points": -2.4702360342920997
           },
           "midnight/knn": {
             "our_base_pct": 78.25353757244123,
             "coverage": "12/12",
-            "waiv_published_base_pct": 80.0,
+            "reference_published_base_pct": 80.0,
             "gap_pct_points": -1.7464624275587681
           },
           "midnight/linear_probing": {
             "our_base_pct": 82.87964739477836,
             "coverage": "12/12",
-            "waiv_published_base_pct": 84.4,
+            "reference_published_base_pct": 84.4,
             "gap_pct_points": -1.520352605221646
           },
           "midnight/simple_shot": {
             "our_base_pct": 70.6387745755255,
             "coverage": "12/12",
-            "waiv_published_base_pct": 71.5,
+            "reference_published_base_pct": 71.5,
             "gap_pct_points": -0.8612254244744975
           },
           "virchow2/knn": {
             "our_base_pct": 80.87398563453861,
             "coverage": "12/12",
-            "waiv_published_base_pct": 82.9,
+            "reference_published_base_pct": 82.9,
             "gap_pct_points": -2.0260143654613927
           },
           "virchow2/linear_probing": {
             "our_base_pct": 83.2528721606102,
             "coverage": "12/12",
-            "waiv_published_base_pct": 84.8,
+            "reference_published_base_pct": 84.8,
             "gap_pct_points": -1.5471278393898018
           },
           "virchow2/simple_shot": {
             "our_base_pct": 72.7492572828019,
             "coverage": "12/12",
-            "waiv_published_base_pct": 73.9,
+            "reference_published_base_pct": 73.9,
             "gap_pct_points": -1.1507427171980993
           },
           "hoptimus/knn": {
             "our_base_pct": 80.06880510426139,
             "coverage": "12/12",
-            "waiv_published_base_pct": 81.5,
+            "reference_published_base_pct": 81.5,
             "gap_pct_points": -1.4311948957386136
           },
           "hoptimus/linear_probing": {
             "our_base_pct": 81.52937426856259,
             "coverage": "12/12",
-            "waiv_published_base_pct": 83.7,
+            "reference_published_base_pct": 83.7,
             "gap_pct_points": -2.1706257314374113
           },
           "hoptimus/simple_shot": {
             "our_base_pct": 74.1285419208535,
             "coverage": "12/12",
-            "waiv_published_base_pct": 76.2,
+            "reference_published_base_pct": 76.2,
             "gap_pct_points": -2.0714580791465096
           },
           "uni2/knn": {
             "our_base_pct": 81.72330461348578,
             "coverage": "12/12",
-            "waiv_published_base_pct": 83.3,
+            "reference_published_base_pct": 83.3,
             "gap_pct_points": -1.576695386514217
           },
           "uni2/linear_probing": {
             "our_base_pct": 83.92482473471229,
             "coverage": "12/12",
-            "waiv_published_base_pct": 86.3,
+            "reference_published_base_pct": 86.3,
             "gap_pct_points": -2.3751752652877087
           },
           "uni2/simple_shot": {
             "our_base_pct": 78.40707803750456,
             "coverage": "12/12",
-            "waiv_published_base_pct": 79.8,
+            "reference_published_base_pct": 79.8,
             "gap_pct_points": -1.3929219624954357
           }
         },
@@ -201,91 +201,91 @@
           "phikon/knn": {
             "our_base_pct": 74.0514352251981,
             "coverage": "16/16",
-            "waiv_published_base_pct": 74.0,
+            "reference_published_base_pct": 74.0,
             "gap_pct_points": 0.05143522519810517
           },
           "phikon/linear_probing": {
             "our_base_pct": 79.73474836171492,
             "coverage": "16/16",
-            "waiv_published_base_pct": 79.3,
+            "reference_published_base_pct": 79.3,
             "gap_pct_points": 0.4347483617149237
           },
           "phikon/simple_shot": {
             "our_base_pct": 71.19477783536595,
             "coverage": "16/16",
-            "waiv_published_base_pct": 71.8,
+            "reference_published_base_pct": 71.8,
             "gap_pct_points": -0.6052221646340428
           },
           "midnight/knn": {
             "our_base_pct": 80.00290132488554,
             "coverage": "16/16",
-            "waiv_published_base_pct": 80.0,
+            "reference_published_base_pct": 80.0,
             "gap_pct_points": 0.002901324885542067
           },
           "midnight/linear_probing": {
             "our_base_pct": 84.72720337790962,
             "coverage": "16/16",
-            "waiv_published_base_pct": 84.4,
+            "reference_published_base_pct": 84.4,
             "gap_pct_points": 0.32720337790961196
           },
           "midnight/simple_shot": {
             "our_base_pct": 71.51129110477319,
             "coverage": "16/16",
-            "waiv_published_base_pct": 71.5,
+            "reference_published_base_pct": 71.5,
             "gap_pct_points": 0.011291104773192728
           },
           "virchow2/knn": {
             "our_base_pct": 82.65541610965926,
             "coverage": "16/16",
-            "waiv_published_base_pct": 82.9,
+            "reference_published_base_pct": 82.9,
             "gap_pct_points": -0.24458389034074912
           },
           "virchow2/linear_probing": {
             "our_base_pct": 85.18170492885834,
             "coverage": "16/16",
-            "waiv_published_base_pct": 84.8,
+            "reference_published_base_pct": 84.8,
             "gap_pct_points": 0.3817049288583405
           },
           "virchow2/simple_shot": {
             "our_base_pct": 74.05246642685483,
             "coverage": "16/16",
-            "waiv_published_base_pct": 73.9,
+            "reference_published_base_pct": 73.9,
             "gap_pct_points": 0.15246642685482925
           },
           "hoptimus/knn": {
             "our_base_pct": 82.10947028114344,
             "coverage": "16/16",
-            "waiv_published_base_pct": 81.5,
+            "reference_published_base_pct": 81.5,
             "gap_pct_points": 0.6094702811434445
           },
           "hoptimus/linear_probing": {
             "our_base_pct": 84.00470059063487,
             "coverage": "16/16",
-            "waiv_published_base_pct": 83.7,
+            "reference_published_base_pct": 83.7,
             "gap_pct_points": 0.3047005906348659
           },
           "hoptimus/simple_shot": {
             "our_base_pct": 76.82897120436036,
             "coverage": "16/16",
-            "waiv_published_base_pct": 76.2,
+            "reference_published_base_pct": 76.2,
             "gap_pct_points": 0.6289712043603544
           },
           "uni2/knn": {
             "our_base_pct": 83.33879184706913,
             "coverage": "16/16",
-            "waiv_published_base_pct": 83.3,
+            "reference_published_base_pct": 83.3,
             "gap_pct_points": 0.03879184706913463
           },
           "uni2/linear_probing": {
             "our_base_pct": 85.74740814760217,
             "coverage": "16/16",
-            "waiv_published_base_pct": 86.3,
+            "reference_published_base_pct": 86.3,
             "gap_pct_points": -0.5525918523978248
           },
           "uni2/simple_shot": {
             "our_base_pct": 79.79525122241353,
             "coverage": "16/16",
-            "waiv_published_base_pct": 79.8,
+            "reference_published_base_pct": 79.8,
             "gap_pct_points": -0.004748777586470965
           }
         },
@@ -299,13 +299,13 @@
     "pass_bar_per_cell": 70.0,
     "overall_average_bar": 80.0,
     "pct_capped_at": 100,
-    "cap_is_presentation_only": "F-C (2026-08-26): the 100 cap no longer enters ANY arithmetic.  The >=70 per-cell test, the benchmark means, the overall average and the worst-cell search all run on the UNCAPPED pct_of_waiv.  pct_capped is printed beside it so the old convention stays legible.",
-    "graded_quantity": "pct_of_waiv, UNCAPPED, identical for the >=70 test and for every average",
+    "cap_is_presentation_only": "F-C (2026-08-26): the 100 cap no longer enters ANY arithmetic.  The >=70 per-cell test, the benchmark means, the overall average and the worst-cell search all run on the UNCAPPED pct_of_reference.  pct_capped is printed beside it so the old convention stays legible.",
+    "graded_quantity": "pct_of_reference, UNCAPPED, identical for the >=70 test and for every average",
     "scored_by": "worst (backbone, benchmark) cell"
   },
   "stopping_rule": "1-SE on avg_robustness_index (earliest checkpoint within one SE of the best seen so far)",
   "sources": {
-    "waiv_thunder": "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24, read from docs/waiv_published.json",
+    "reference_thunder": "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24, read from docs/reference_published.json",
     "thunder_floors": "docs/thunder_seed_floor_12ds.md, offset-2SE, 12/12 coverage; phikon/midnight/virchow2 n=5 training seeds (old corpus), hoptimus/uni2 n=2 (single c3s seed pair, pathfm-full-evals corpus)",
     "hest_seed_sd": "docs/hest_seed_sd.json (estimator: pooled WITHIN-RECIPE-FAMILY across-seed SD of the HEST scalar, sqrt(sum_f df_f * sd_f^2 / sum_f df_f), df_f = n_f - 1)",
     "ri_base": {
@@ -315,12 +315,12 @@
       "uni2": "third_party/PathoROB/results/robustness_index/uni2h_clsmean/<tcga|camelyon|tolkach_esca>/-1_0/results_summary.json",
       "hoptimus": "third_party/PathoROB/results/robustness_index/hoptimus_clsmean/<tcga|camelyon|tolkach_esca>/-1_0/results_summary.json"
     },
-    "ri_waiv": "docs/waiv_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24) -> models[<ft row>].ri.avg (Waiv Table 1)",
-    "hest_waiv": "docs/waiv_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24) -> models[<ft row>].hest_avg (Waiv Table 1 HEST column)",
-    "aggregation": "eval_common.pool_cells -- RATIO OF MEANS: aggregate the numerator (our raw delta) and the denominator (Waiv's raw gain) over the group, then divide ONCE.  Per-cell percentages are never averaged.  Applied at both levels: 3 tasks -> backbone/THUNDER, 3 backbones -> benchmark.",
+    "ri_reference": "docs/reference_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24) -> models[<ft row>].ri.avg (Reference Table 1)",
+    "hest_reference": "docs/reference_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24) -> models[<ft row>].hest_avg (Reference Table 1 HEST column)",
+    "aggregation": "eval_common.pool_cells -- RATIO OF MEANS: aggregate the numerator (our raw delta) and the denominator (Reference's raw gain) over the group, then divide ONCE.  Per-cell percentages are never averaged.  Applied at both levels: 3 tasks -> backbone/THUNDER, 3 backbones -> benchmark.",
     "pooling_completeness": "all-or-nothing: a pooled number requires EVERY cell of its group; a subset is withheld",
-    "denominator_gate": "eval_common.pooled_denominator_unresolvable, applied to the POOLED denominator (not per cell): |pooled waiv gain| > 2 * SD(pooled waiv gain) -- the denominator's sign/scale must be determined for the ratio to be a measurement",
-    "denominator_gate_change_2026_08_26": "F-P: the per-cell 'one seed-SD > 10 pct_of_waiv points' veto is RETIRED as a gate and kept as a diagnostic. It was a PRECISION test (is Waiv's gain known to better than +/-20% relative), not the is-the-denominator-real test its own docstring described, and it rejected cells whose denominators are unambiguously real -- phikon/knn's Waiv gain is 5.8 seed-SD. Denominator imprecision is now PROPAGATED into the interval (delta method on both terms) instead of vetoing the cell.",
+    "denominator_gate": "eval_common.pooled_denominator_unresolvable, applied to the POOLED denominator (not per cell): |pooled reference gain| > 2 * SD(pooled reference gain) -- the denominator's sign/scale must be determined for the ratio to be a measurement",
+    "denominator_gate_change_2026_08_26": "F-P: the per-cell 'one seed-SD > 10 pct_of_reference points' veto is RETIRED as a gate and kept as a diagnostic. It was a PRECISION test (is Reference's gain known to better than +/-20% relative), not the is-the-denominator-real test its own docstring described, and it rejected cells whose denominators are unambiguously real -- phikon/knn's Reference gain is 5.8 seed-SD. Denominator imprecision is now PROPAGATED into the interval (delta method on both terms) instead of vetoing the cell.",
     "ci_construction": "per-cell: eval_common.ci95 -- max(empirical 2*SD/sqrt(n), measured seed floor 2*SD/sqrt(n)).  Pooled: eval_common.pool_cells delta method, SE_agg = sqrt(sum SE_cell^2)/k on the numerator and the same on the denominator, carried onto the ratio.",
     "thunder_seed_sd": "docs/thunder_seed_floor_12ds.json cells[bb/task].12ds.seed_sd_of_task_mean (n=5 seeds, 12/12)",
     "thunder_seed_sd_path": "docs/thunder_seed_floor_12ds.json -> cells[<backbone>/<task>].12ds.seed_sd_of_task_mean",
@@ -329,7 +329,9 @@
       "midnight": "/data/ryan.kim/hest_work/results/midnight_base_cls_9task_v1_summary.json",
       "virchow2": "/data/ryan.kim/hest_work/results/vbase_clsmean_summary.json",
       "hoptimus": "/data/ryan.kim/hest_work/results/hoptimus_base_cls_9task_v1_summary.json",
-      "uni2": "/data/ryan.kim/hest_work/results/uni2_base_cls_9task_v1_summary.json"
+      "uni2": "/data/ryan.kim/hest_work/results/uni2_base_cls_9task_v1_summary.json",
+      "openmidnight": "/data/ryan.kim/hest_work/results/openmidnight_base_cls_9task_v1_summary.json",
+      "virchow1": "/data/ryan.kim/hest_work/results/virchow1_base_clsmean_9task_v1_summary.json"
     }
   },
   "min_n_for_verdict": 2,
@@ -353,19 +355,19 @@
       "delta": 3.998775823332856e-05,
       "agrees_to_4dp": true
     },
-    "RI_WAIV/phikon": {
+    "RI_REFERENCE/phikon": {
       "retired_literal": 0.806,
       "from_disk": 0.806,
       "delta": 0.0,
       "agrees_to_4dp": true
     },
-    "RI_WAIV/midnight": {
+    "RI_REFERENCE/midnight": {
       "retired_literal": 0.924,
       "from_disk": 0.924,
       "delta": 0.0,
       "agrees_to_4dp": true
     },
-    "RI_WAIV/virchow2": {
+    "RI_REFERENCE/virchow2": {
       "retired_literal": 0.918,
       "from_disk": 0.918,
       "delta": 0.0,
@@ -549,6 +551,30 @@
           "se_used": 0.007,
           "delta_vs_best": 0.0035183144108807962,
           "verdict": "STOP"
+        },
+        {
+          "step": 200,
+          "ri": 0.9092030393731534,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
+        },
+        {
+          "step": 250,
+          "ri": 0.9090629865956843,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
+        },
+        {
+          "step": 300,
+          "ri": 0.9087037531653758,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
         }
       ],
       "se_used": 0.007,
@@ -851,7 +877,7 @@
       "backbone": "midnight",
       "seed": 1,
       "train_jobid": "407566",
-      "selected_step": null,
+      "selected_step": 100,
       "rule": "1se",
       "ci_trace": [
         {
@@ -863,12 +889,115 @@
           "skip_reason": null,
           "se_used": 0.007,
           "delta_vs_best": 0.0,
-          "verdict": "UNTERMINATED"
+          "verdict": "SEED"
+        },
+        {
+          "step": 100,
+          "ri": 0.9062376309190743,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.10198220797590529,
+          "verdict": "CONTINUE|RETURNED"
+        },
+        {
+          "step": 150,
+          "ri": 0.9101591723801598,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.003921541461085476,
+          "verdict": "STOP"
         }
       ],
       "se_used": 0.007,
-      "note": "1-SE rule UNTERMINATED: RI is still improving by more than one SE at the last measured checkpoint ([50]), so the run has not plateaued.  Returning the last checkpoint here would be the stop-at-last rule under this rule's name.",
-      "has_ri_curve": true
+      "ri": 0.9062376309190743,
+      "hest": 0.412237962962963,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s1-t900-407566_s0000100_cls_summary.json",
+      "thunder_model": "f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s1-t900-407566_s0000100",
+      "thunder_model_candidates": [
+        "f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s1-t900-407566_s0000100",
+        "f5_ci-midnight-s1-407566_s0000100"
+      ],
+      "thunder_root": "/data/ryan.kim/thunder/outputs/res",
+      "thunder": {
+        "knn": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        }
+      }
     },
     {
       "run": "genMASK-c50-lr1e-4-kl0-ms500-midnight-s2-t900-407569",
@@ -1257,7 +1386,7 @@
       "backbone": "phikon",
       "seed": 2,
       "train_jobid": "407568",
-      "selected_step": null,
+      "selected_step": 200,
       "rule": "1se",
       "ci_trace": [
         {
@@ -1269,12 +1398,169 @@
           "skip_reason": null,
           "se_used": 0.007,
           "delta_vs_best": 0.0,
-          "verdict": "UNTERMINATED"
+          "verdict": "SEED"
+        },
+        {
+          "step": 100,
+          "ri": 0.6547554006946732,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.17294966943229978,
+          "verdict": "CONTINUE"
+        },
+        {
+          "step": 150,
+          "ri": 0.813499215649122,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.15874381495444878,
+          "verdict": "CONTINUE"
+        },
+        {
+          "step": 200,
+          "ri": 0.8281809993730449,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.014681783723922925,
+          "verdict": "CONTINUE|RETURNED"
+        },
+        {
+          "step": 250,
+          "ri": 0.8300758233462542,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.0018948239732092809,
+          "verdict": "STOP"
+        },
+        {
+          "step": 300,
+          "ri": 0.8347489706009829,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
+        },
+        {
+          "step": 350,
+          "ri": 0.835335534624272,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
+        },
+        {
+          "step": 400,
+          "ri": 0.8352585489582468,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
+        },
+        {
+          "step": 450,
+          "ri": 0.8320615248343907,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
         }
       ],
       "se_used": 0.007,
-      "note": "1-SE rule UNTERMINATED: RI is still improving by more than one SE at the last measured checkpoint ([50]), so the run has not plateaued.  Returning the last checkpoint here would be the stop-at-last rule under this rule's name.",
-      "has_ri_curve": true
+      "ri": 0.8281809993730449,
+      "hest": 0.3907777777777778,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s2-t900-407568_s0000200_cls_summary.json",
+      "thunder_model": "f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s2-t900-407568_s0000200",
+      "thunder_model_candidates": [
+        "f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s2-t900-407568_s0000200",
+        "f5_ci-phikon-s2-407568_s0000200"
+      ],
+      "thunder_root": "/data/ryan.kim/thunder/outputs/res",
+      "thunder": {
+        "knn": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        }
+      }
     },
     {
       "run": "genMASK-c50-lr1e-4-kl0-ms500-uni2-s0-t900-395390",
@@ -1793,7 +2079,7 @@
       "backbone": "virchow2",
       "seed": 1,
       "train_jobid": "407567",
-      "selected_step": null,
+      "selected_step": 150,
       "rule": "1se",
       "ci_trace": [
         {
@@ -1816,12 +2102,139 @@
           "skip_reason": null,
           "se_used": 0.007,
           "delta_vs_best": 0.025458642735453396,
-          "verdict": "UNTERMINATED"
+          "verdict": "CONTINUE"
+        },
+        {
+          "step": 150,
+          "ri": 0.9126226294080185,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.009246353733488477,
+          "verdict": "CONTINUE|RETURNED"
+        },
+        {
+          "step": 200,
+          "ri": 0.9078902589562432,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": -0.004732370451775325,
+          "verdict": "STOP"
+        },
+        {
+          "step": 250,
+          "ri": 0.9051643136801805,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
+        },
+        {
+          "step": 300,
+          "ri": 0.9014351398097036,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
+        },
+        {
+          "step": 350,
+          "ri": 0.9012999526552012,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null
         }
       ],
       "se_used": 0.007,
-      "note": "1-SE rule UNTERMINATED: RI is still improving by more than one SE at the last measured checkpoint ([100]), so the run has not plateaued.  Returning the last checkpoint here would be the stop-at-last rule under this rule's name.",
-      "has_ri_curve": true
+      "ri": 0.9126226294080185,
+      "hest": 0.41015277777777776,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s1-t900-407567_s0000150_clsmean_summary.json",
+      "thunder_model": "f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s1-t900-407567_s0000150",
+      "thunder_model_candidates": [
+        "f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s1-t900-407567_s0000150",
+        "f5_ci-virchow2-s1-407567_s0000150"
+      ],
+      "thunder_root": "/data/ryan.kim/thunder/outputs/res",
+      "thunder": {
+        "knn": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        }
+      }
     },
     {
       "run": "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s2-t900-407570",
@@ -1888,7 +2301,7 @@
       "backbone": "virchow2",
       "seed": 3,
       "train_jobid": "436610",
-      "selected_step": null,
+      "selected_step": 100,
       "rule": "1se",
       "ci_trace": [
         {
@@ -1900,29 +2313,132 @@
           "skip_reason": null,
           "se_used": 0.007,
           "delta_vs_best": 0.0,
-          "verdict": "UNTERMINATED"
+          "verdict": "SEED"
+        },
+        {
+          "step": 100,
+          "ri": 0.9076354295365938,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.030461758333768074,
+          "verdict": "CONTINUE|RETURNED"
+        },
+        {
+          "step": 150,
+          "ri": 0.9130163028526929,
+          "n_datasets": 3,
+          "eligible": true,
+          "measured_se": null,
+          "skip_reason": null,
+          "se_used": 0.007,
+          "delta_vs_best": 0.005380873316099044,
+          "verdict": "STOP"
         }
       ],
       "se_used": 0.007,
-      "note": "1-SE rule UNTERMINATED: RI is still improving by more than one SE at the last measured checkpoint ([50]), so the run has not plateaued.  Returning the last checkpoint here would be the stop-at-last rule under this rule's name.",
-      "has_ri_curve": true
+      "ri": 0.9076354295365938,
+      "hest": 0.40695092592592597,
+      "hest_path": "/data/ryan.kim/hest_work/results/f5_genMASK-c50-ms500-virchow2-s3-t900-436610_s0000100_clsmean_summary.json",
+      "thunder_model": "f5_genMASK-c50-ms500-virchow2-s3-t900-436610_s0000100",
+      "thunder_model_candidates": [
+        "f5_genMASK-c50-ms500-virchow2-s3-t900-436610_s0000100",
+        "f5_ci-virchow2-s3-436610_s0000100"
+      ],
+      "thunder_root": "/data/ryan.kim/thunder/outputs/res",
+      "thunder": {
+        "knn": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        },
+        "linear_probing": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        },
+        "simple_shot": {
+          "coverage": 0,
+          "mean": null,
+          "partial_mean": null,
+          "datasets_present": [],
+          "datasets_missing": [
+            "bach",
+            "bracs",
+            "break_his",
+            "ccrcc",
+            "crc",
+            "esca",
+            "mhist",
+            "patch_camelyon",
+            "tcga_crc_msi",
+            "tcga_tils",
+            "tcga_uniform",
+            "wilds",
+            "spider_breast",
+            "spider_colorectal",
+            "spider_skin",
+            "spider_thorax"
+          ]
+        }
+      }
     }
   ],
   "cells": {
     "phikon": {
       "RI": {
-        "pct": 109.81052920657334,
+        "pct": 108.73179142835885,
         "pct_capped": 100.0,
-        "pct_uncapped": 109.81052920657334,
-        "ci": 1.966294738790978,
-        "lower_uncapped": 107.84423446778236,
-        "upper_uncapped": 111.77682394536431,
+        "pct_uncapped": 108.73179142835885,
+        "ci": 2.4379237976580677,
+        "lower_uncapped": 106.29386763070077,
+        "upper_uncapped": 111.16971522601692,
         "was_capped": true,
         "status": "PASS",
-        "n": 2,
-        "raw_mean": 0.8390996177274281,
+        "n": 3,
+        "raw_mean": 0.835460078275967,
         "base": 0.4686112921079694,
-        "waiv": 0.806,
+        "reference": 0.806,
         "selected_step": "200",
         "selected_steps": [
           200
@@ -1930,53 +2446,57 @@
         "steps_mixed": false,
         "per_run_step": {
           "genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165": 200,
-          "genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565": 200
+          "genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565": 200,
+          "genMASK-c50-lr1e-4-kl0-ms500-phikon-s2-t900-407568": 200
         },
         "per_seed_pct": [
           110.79367657596882,
-          108.82738183717784
+          108.82738183717784,
+          106.57431587192987
         ],
         "per_seed_pct_uncapped": [
           110.79367657596882,
-          108.82738183717784
+          108.82738183717784,
+          106.57431587192987
         ],
         "per_seed_pct_capped": [
+          100.0,
           100.0,
           100.0
         ],
         "seed_sd_raw": 0.00453,
         "seed_sd_pct_points": 1.3426649718963526,
-        "empirical_ci": 1.966294738790978,
-        "floor_ci": 1.8988150129791121,
-        "ci_source": "max(empirical 2*SD/sqrt(n)=2.0, measured seed floor=1.9) [floor no floor measured at step 200; conservative max over measured steps [500]]; 2/2 seeds exceed Waiv (uncapped values are used, so the spread is NOT censored)",
-        "our_delta": 0.3704883256194587,
-        "waiv_gain": 0.3373887078920306,
-        "se_our_delta": 0.0032031937187750603,
-        "sd_waiv_gain": 0.00453,
+        "empirical_ci": 2.4379237976580677,
+        "floor_ci": 1.5503759659116811,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=2.4, measured seed floor=1.6) [floor no floor measured at step 200; conservative max over measured steps [500]]; 3/3 seeds exceed Reference (uncapped values are used, so the spread is NOT censored)",
+        "our_delta": 0.3668487861679976,
+        "reference_gain": 0.3373887078920306,
+        "se_our_delta": 0.002615396719429005,
+        "sd_reference_gain": 0.00453,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.3373887078920306,
+          "reference_gain": 0.3373887078920306,
           "seed_sd": 0.00453,
           "seed_sd_pct_points": 1.3426649718963526,
-          "waiv_gain_over_1sd": 74.47874346402442,
+          "reference_gain_over_1sd": 74.47874346402442,
           "percell_precision_flag": false,
           "percell_precision_note": null,
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
           "sd_note": "no floor measured at step 200; conservative max over measured steps [500]"
         }
       },
       "HEST": {
-        "pct": 80.5971559503001,
-        "pct_capped": 80.5971559503001,
-        "pct_uncapped": 80.5971559503001,
-        "ci": 10.746969596186565,
-        "lower_uncapped": 69.85018635411355,
-        "upper_uncapped": 91.34412554648667,
+        "pct": 81.07431379033413,
+        "pct_capped": 81.07431379033413,
+        "pct_uncapped": 81.07431379033413,
+        "ci": 8.774863930620556,
+        "lower_uncapped": 72.29944985971358,
+        "upper_uncapped": 89.84917772095469,
         "was_capped": false,
-        "status": "NOT RESOLVED",
-        "n": 2,
-        "raw_mean": 0.3904972222222222,
+        "status": "PASS",
+        "n": 3,
+        "raw_mean": 0.39059074074074074,
         "base": 0.37470092592592585,
-        "waiv": 0.3943,
+        "reference": 0.3943,
         "selected_step": "200",
         "selected_steps": [
           200
@@ -1984,40 +2504,44 @@
         "steps_mixed": false,
         "per_run_step": {
           "genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165": 200,
-          "genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565": 200
+          "genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565": 200,
+          "genMASK-c50-lr1e-4-kl0-ms500-phikon-s2-t900-407568": 200
         },
         "per_seed_pct": [
           79.0428497189022,
-          82.15146218169802
+          82.15146218169802,
+          82.02862947040218
         ],
         "per_seed_pct_uncapped": [
           79.0428497189022,
-          82.15146218169802
+          82.15146218169802,
+          82.02862947040218
         ],
         "per_seed_pct_capped": [
           79.0428497189022,
-          82.15146218169802
+          82.15146218169802,
+          82.02862947040218
         ],
         "pooling": "cls",
         "step_source": "stopping rule",
         "seed_sd_raw": 0.0014893836319462114,
         "seed_sd_pct_points": 7.599255078669173,
         "seed_sd_df": 0,
-        "empirical_ci": 3.108612462795818,
-        "floor_ci": 10.746969596186565,
-        "ci_source": "max(empirical 2*SD/sqrt(n)=3.1, measured seed floor=10.7) [floor no floor measured at step 200; conservative max over measured steps [125, 250, 375, 500, 750, 1500]]",
-        "our_delta": 0.015796296296296364,
-        "waiv_gain": 0.01959907407407413,
-        "se_our_delta": 0.0010531532659374151,
-        "sd_waiv_gain": 0.0014893836319462114,
+        "empirical_ci": 2.03270154355566,
+        "floor_ci": 8.774863930620556,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=2.0, measured seed floor=8.8) [floor no floor measured at step 200; conservative max over measured steps [125, 250, 375, 500, 750, 1500]]",
+        "our_delta": 0.015889814814814884,
+        "reference_gain": 0.01959907407407413,
+        "se_our_delta": 0.0008598960408307678,
+        "sd_reference_gain": 0.0014893836319462114,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.01959907407407413,
+          "reference_gain": 0.01959907407407413,
           "seed_sd": 0.0014893836319462114,
           "seed_sd_pct_points": 7.599255078669173,
-          "waiv_gain_over_1sd": 13.1591845470086,
+          "reference_gain_over_1sd": 13.1591845470086,
           "percell_precision_flag": false,
           "percell_precision_note": null,
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
           "sd_note": "no floor measured at step 200; conservative max over measured steps [125, 250, 375, 500, 750, 1500]"
         }
       },
@@ -2032,7 +2556,7 @@
         "n": 0,
         "tasks": {
           "knn": {
-            "waiv_gain": 0.037000000000000026,
+            "reference_gain": 0.037000000000000026,
             "floor": 0.0233,
             "our_base": 0.740514352251981,
             "our_base_coverage": "16/16",
@@ -2046,22 +2570,22 @@
             "resolvability_floor_offset_2se": 0.0233,
             "seed_sd_of_task_mean": 0.006390496947880815,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.037000000000000026,
+              "reference_gain": 0.037000000000000026,
               "seed_sd": 0.006390496947880815,
               "seed_sd_pct_points": 17.27161337265084,
-              "waiv_gain_over_1sd": 5.789847065378817,
+              "reference_gain_over_1sd": 5.789847065378817,
               "percell_precision_flag": true,
-              "percell_precision_note": "one seed-SD is 17.3 pct_of_waiv points (> 10); waiv gain +0.0370 is within 5.8x the instrument's seed noise 0.0064 -- denominator is noise",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_precision_note": "one seed-SD is 17.3 pct_of_reference points (> 10); reference gain +0.0370 is within 5.8x the instrument's seed noise 0.0064 -- denominator is noise",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.006390496947880815,
+            "sd_reference_gain": 0.006390496947880815,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-phikon-s0-399165_s0000200, f5_ci-phikon-s1-407565_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565_s0000200"
+            "reason": "coverage 0,0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-phikon-s0-399165_s0000200, f5_ci-phikon-s1-407565_s0000200, f5_ci-phikon-s2-407568_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s2-t900-407568_s0000200"
           },
           "linear_probing": {
-            "waiv_gain": 0.014000000000000058,
+            "reference_gain": 0.014000000000000058,
             "floor": 0.0097,
             "our_base": 0.7973474836171492,
             "our_base_coverage": "16/16",
@@ -2075,22 +2599,22 @@
             "resolvability_floor_offset_2se": 0.0097,
             "seed_sd_of_task_mean": 0.0018875363781403606,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.014000000000000058,
+              "reference_gain": 0.014000000000000058,
               "seed_sd": 0.0018875363781403606,
               "seed_sd_pct_points": 13.482402701002522,
-              "waiv_gain_over_1sd": 7.417075592361904,
+              "reference_gain_over_1sd": 7.417075592361904,
               "percell_precision_flag": true,
-              "percell_precision_note": "one seed-SD is 13.5 pct_of_waiv points (> 10); waiv gain +0.0140 is within 7.4x the instrument's seed noise 0.0019 -- denominator is noise",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_precision_note": "one seed-SD is 13.5 pct_of_reference points (> 10); reference gain +0.0140 is within 7.4x the instrument's seed noise 0.0019 -- denominator is noise",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.0018875363781403606,
+            "sd_reference_gain": 0.0018875363781403606,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-phikon-s0-399165_s0000200, f5_ci-phikon-s1-407565_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565_s0000200"
+            "reason": "coverage 0,0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-phikon-s0-399165_s0000200, f5_ci-phikon-s1-407565_s0000200, f5_ci-phikon-s2-407568_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s2-t900-407568_s0000200"
           },
           "simple_shot": {
-            "waiv_gain": 0.015,
+            "reference_gain": 0.015,
             "floor": 0.0087,
             "our_base": 0.7119477783536595,
             "our_base_coverage": "16/16",
@@ -2104,24 +2628,24 @@
             "resolvability_floor_offset_2se": 0.0087,
             "seed_sd_of_task_mean": 0.0026369291166963645,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.015,
+              "reference_gain": 0.015,
               "seed_sd": 0.0026369291166963645,
               "seed_sd_pct_points": 17.57952744464243,
-              "waiv_gain_over_1sd": 5.68843504553225,
+              "reference_gain_over_1sd": 5.68843504553225,
               "percell_precision_flag": true,
-              "percell_precision_note": "one seed-SD is 17.6 pct_of_waiv points (> 10); waiv gain +0.0150 is within 5.7x the instrument's seed noise 0.0026 -- denominator is noise",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_precision_note": "one seed-SD is 17.6 pct_of_reference points (> 10); reference gain +0.0150 is within 5.7x the instrument's seed noise 0.0026 -- denominator is noise",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.0026369291166963645,
+            "sd_reference_gain": 0.0026369291166963645,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-phikon-s0-399165_s0000200, f5_ci-phikon-s1-407565_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565_s0000200"
+            "reason": "coverage 0,0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-phikon-s0-399165_s0000200, f5_ci-phikon-s1-407565_s0000200, f5_ci-phikon-s2-407568_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s2-t900-407568_s0000200"
           }
         },
         "pooled": {
           "group": "phikon/THUNDER (3 tasks)",
-          "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+          "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
           "n_cells": 3,
           "cells": [
             {
@@ -2166,108 +2690,116 @@
     },
     "midnight": {
       "RI": {
-        "pct": null,
-        "pct_capped": null,
-        "pct_uncapped": 92.01813119570792,
-        "ci": 5.837494463332106,
-        "lower_uncapped": null,
-        "upper_uncapped": null,
+        "pct": 90.6310712427935,
+        "pct_capped": 90.6310712427935,
+        "pct_uncapped": 90.6310712427935,
+        "ci": 4.127731920161058,
+        "lower_uncapped": 86.50333932263244,
+        "upper_uncapped": 94.75880316295455,
         "was_capped": false,
-        "n": 1,
-        "status": "UNDERPOWERED",
-        "reason": "n=1 < MIN_N_FOR_VERDICT=2",
-        "raw_mean": 0.9108187943034974,
+        "status": "PASS",
+        "n": 2,
+        "raw_mean": 0.9085282126112859,
         "base": 0.7588606570755122,
-        "waiv": 0.924,
-        "selected_step": "150",
+        "reference": 0.924,
+        "selected_step": "100/150",
         "selected_steps": [
+          100,
           150
         ],
-        "steps_mixed": false,
+        "steps_mixed": true,
         "per_run_step": {
-          "genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166": 150
+          "genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166": 150,
+          "genMASK-c50-lr1e-4-kl0-ms500-midnight-s1-t900-407566": 100
         },
         "per_seed_pct": [
-          92.01813119570792
+          92.01813119570792,
+          89.24401128987908
         ],
         "per_seed_pct_uncapped": [
-          92.01813119570792
+          92.01813119570792,
+          89.24401128987908
         ],
         "per_seed_pct_capped": [
-          92.01813119570792
+          92.01813119570792,
+          89.24401128987908
         ],
         "seed_sd_raw": 0.00482,
         "seed_sd_pct_points": 2.918747231666053,
-        "empirical_ci": null,
-        "floor_ci": 5.837494463332106,
-        "ci_source": "max(empirical 2*SD/sqrt(n)=n/a, measured seed floor=5.8) [floor no floor measured at step 150; conservative max over measured steps [250, 500]]",
-        "our_delta": 0.15195813722798523,
-        "waiv_gain": 0.16513934292448784,
-        "se_our_delta": 0.00482,
-        "sd_waiv_gain": 0.00482,
+        "empirical_ci": 2.7741199058288397,
+        "floor_ci": 4.127731920161058,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=2.8, measured seed floor=4.1) [floor max over the 2 selected steps [100, 150] -> step 100: no floor measured at step 100; conservative max over measured steps [250, 500]]",
+        "our_delta": 0.1496675555357737,
+        "reference_gain": 0.16513934292448784,
+        "se_our_delta": 0.0034082546853191585,
+        "sd_reference_gain": 0.00482,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.16513934292448784,
+          "reference_gain": 0.16513934292448784,
           "seed_sd": 0.00482,
           "seed_sd_pct_points": 2.918747231666053,
-          "waiv_gain_over_1sd": 34.26127446566138,
+          "reference_gain_over_1sd": 34.26127446566138,
           "percell_precision_flag": false,
           "percell_precision_note": null,
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
-          "sd_note": "no floor measured at step 150; conservative max over measured steps [250, 500]"
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "sd_note": "max over the 2 selected steps [100, 150] -> step 100: no floor measured at step 100; conservative max over measured steps [250, 500]"
         }
       },
       "HEST": {
-        "pct": null,
-        "pct_capped": null,
-        "pct_uncapped": 83.78646214830428,
-        "ci": 23.605770781305583,
-        "lower_uncapped": null,
-        "upper_uncapped": null,
+        "pct": 81.51148261450294,
+        "pct_capped": 81.51148261450294,
+        "pct_uncapped": 81.51148261450294,
+        "ci": 16.691800594596444,
+        "lower_uncapped": 64.8196820199065,
+        "upper_uncapped": 98.20328320909938,
         "was_capped": false,
-        "n": 1,
-        "status": "UNDERPOWERED",
-        "reason": "n=1 < MIN_N_FOR_VERDICT=2",
-        "raw_mean": 0.4132157407407407,
+        "status": "NOT RESOLVED",
+        "n": 2,
+        "raw_mean": 0.4127268518518519,
         "base": 0.39521018518518514,
-        "waiv": 0.4167,
-        "selected_step": "150",
+        "reference": 0.4167,
+        "selected_step": "100/150",
         "selected_steps": [
+          100,
           150
         ],
-        "steps_mixed": false,
+        "steps_mixed": true,
         "per_run_step": {
-          "genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166": 150
+          "genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166": 150,
+          "genMASK-c50-lr1e-4-kl0-ms500-midnight-s1-t900-407566": 100
         },
         "per_seed_pct": [
-          83.78646214830428
+          83.78646214830428,
+          79.23650308070161
         ],
         "per_seed_pct_uncapped": [
-          83.78646214830428
+          83.78646214830428,
+          79.23650308070161
         ],
         "per_seed_pct_capped": [
-          83.78646214830428
+          83.78646214830428,
+          79.23650308070161
         ],
         "pooling": "cls",
         "step_source": "stopping rule",
         "seed_sd_raw": 0.0025364182132561245,
         "seed_sd_pct_points": 11.802885390652792,
-        "seed_sd_df": 0,
-        "empirical_ci": null,
-        "floor_ci": 23.605770781305583,
-        "ci_source": "max(empirical 2*SD/sqrt(n)=n/a, measured seed floor=23.6) [floor no floor measured at step 150; conservative max over measured steps [125, 250, 375, 500, 1500]]",
-        "our_delta": 0.018005555555555552,
-        "waiv_gain": 0.021489814814814878,
-        "se_our_delta": 0.0025364182132561245,
-        "sd_waiv_gain": 0.0025364182132561245,
+        "seed_sd_df": null,
+        "empirical_ci": 4.54995906760267,
+        "floor_ci": 16.691800594596444,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=4.5, measured seed floor=16.7) [floor max over the 2 selected steps [100, 150] -> step 100: no floor measured at step 100; conservative max over measured steps [125, 250, 375, 500, 1500]]",
+        "our_delta": 0.017516666666666736,
+        "reference_gain": 0.021489814814814878,
+        "se_our_delta": 0.001793518518518472,
+        "sd_reference_gain": 0.0025364182132561245,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.021489814814814878,
+          "reference_gain": 0.021489814814814878,
           "seed_sd": 0.0025364182132561245,
           "seed_sd_pct_points": 11.802885390652792,
-          "waiv_gain_over_1sd": 8.47250453513632,
+          "reference_gain_over_1sd": 8.47250453513632,
           "percell_precision_flag": true,
-          "percell_precision_note": "one seed-SD is 11.8 pct_of_waiv points (> 10); waiv gain +0.0215 is within 8.5x the instrument's seed noise 0.0025 -- denominator is noise",
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
-          "sd_note": "no floor measured at step 150; conservative max over measured steps [125, 250, 375, 500, 1500]"
+          "percell_precision_note": "one seed-SD is 11.8 pct_of_reference points (> 10); reference gain +0.0215 is within 8.5x the instrument's seed noise 0.0025 -- denominator is noise",
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "sd_note": "max over the 2 selected steps [100, 150] -> step 100: no floor measured at step 100; conservative max over measured steps [125, 250, 375, 500, 1500]"
         }
       },
       "THUNDER": {
@@ -2281,7 +2813,7 @@
         "n": 0,
         "tasks": {
           "knn": {
-            "waiv_gain": 0.01700000000000003,
+            "reference_gain": 0.01700000000000003,
             "floor": 0.01,
             "our_base": 0.8000290132488554,
             "our_base_coverage": "16/16",
@@ -2295,22 +2827,22 @@
             "resolvability_floor_offset_2se": 0.01,
             "seed_sd_of_task_mean": 0.0024413808711195614,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.01700000000000003,
+              "reference_gain": 0.01700000000000003,
               "seed_sd": 0.0024413808711195614,
               "seed_sd_pct_points": 14.361063947762101,
-              "waiv_gain_over_1sd": 6.963272384535485,
+              "reference_gain_over_1sd": 6.963272384535485,
               "percell_precision_flag": true,
-              "percell_precision_note": "one seed-SD is 14.4 pct_of_waiv points (> 10); waiv gain +0.0170 is within 7.0x the instrument's seed noise 0.0024 -- denominator is noise",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_precision_note": "one seed-SD is 14.4 pct_of_reference points (> 10); reference gain +0.0170 is within 7.0x the instrument's seed noise 0.0024 -- denominator is noise",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.0024413808711195614,
+            "sd_reference_gain": 0.0024413808711195614,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-midnight-s0-399166_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166_s0000150"
+            "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-midnight-s0-399166_s0000150, f5_ci-midnight-s1-407566_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s1-t900-407566_s0000100"
           },
           "linear_probing": {
-            "waiv_gain": 0.0019999999999998864,
+            "reference_gain": 0.0019999999999998864,
             "floor": 0.0087,
             "our_base": 0.8472720337790962,
             "our_base_coverage": "16/16",
@@ -2324,22 +2856,22 @@
             "resolvability_floor_offset_2se": 0.0087,
             "seed_sd_of_task_mean": 0.0021262957519919998,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.0019999999999998864,
+              "reference_gain": 0.0019999999999998864,
               "seed_sd": 0.0021262957519919998,
               "seed_sd_pct_points": 106.31478759960602,
-              "waiv_gain_over_1sd": 0.9406029232416072,
+              "reference_gain_over_1sd": 0.9406029232416072,
               "percell_precision_flag": true,
-              "percell_precision_note": "one seed-SD is 106.3 pct_of_waiv points (> 10); waiv gain +0.0020 is within 0.9x the instrument's seed noise 0.0021 -- denominator is noise",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_precision_note": "one seed-SD is 106.3 pct_of_reference points (> 10); reference gain +0.0020 is within 0.9x the instrument's seed noise 0.0021 -- denominator is noise",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.0021262957519919998,
+            "sd_reference_gain": 0.0021262957519919998,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-midnight-s0-399166_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166_s0000150"
+            "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-midnight-s0-399166_s0000150, f5_ci-midnight-s1-407566_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s1-t900-407566_s0000100"
           },
           "simple_shot": {
-            "waiv_gain": 0.037000000000000026,
+            "reference_gain": 0.037000000000000026,
             "floor": 0.0104,
             "our_base": 0.7151129110477319,
             "our_base_coverage": "16/16",
@@ -2353,24 +2885,24 @@
             "resolvability_floor_offset_2se": 0.0104,
             "seed_sd_of_task_mean": 0.0025407807032855946,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.037000000000000026,
+              "reference_gain": 0.037000000000000026,
               "seed_sd": 0.0025407807032855946,
               "seed_sd_pct_points": 6.866974873744845,
-              "waiv_gain_over_1sd": 14.562453167309446,
+              "reference_gain_over_1sd": 14.562453167309446,
               "percell_precision_flag": false,
               "percell_precision_note": null,
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.0025407807032855946,
+            "sd_reference_gain": 0.0025407807032855946,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-midnight-s0-399166_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166_s0000150"
+            "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-midnight-s0-399166_s0000150, f5_ci-midnight-s1-407566_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s1-t900-407566_s0000100"
           }
         },
         "pooled": {
           "group": "midnight/THUNDER (3 tasks)",
-          "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+          "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
           "n_cells": 3,
           "cells": [
             {
@@ -2415,108 +2947,124 @@
     },
     "virchow2": {
       "RI": {
-        "pct": null,
-        "pct_capped": null,
-        "pct_uncapped": 77.06901958350538,
-        "ci": 15.896917760937765,
-        "lower_uncapped": null,
-        "upper_uncapped": null,
+        "pct": 83.57569626976395,
+        "pct_capped": 83.57569626976395,
+        "pct_uncapped": 83.57569626976395,
+        "ci": 9.178089748562762,
+        "lower_uncapped": 74.3976065212012,
+        "upper_uncapped": 92.75378601832671,
         "was_capped": false,
-        "n": 1,
-        "status": "UNDERPOWERED",
-        "reason": "n=1 < MIN_N_FOR_VERDICT=2",
-        "raw_mean": 0.9042964432959457,
+        "status": "PASS",
+        "n": 3,
+        "raw_mean": 0.908184834080186,
         "base": 0.8582399877582333,
-        "waiv": 0.918,
-        "selected_step": "100",
+        "reference": 0.918,
+        "selected_step": "100/150",
         "selected_steps": [
-          100
+          100,
+          150
         ],
-        "steps_mixed": false,
+        "steps_mixed": true,
         "per_run_step": {
-          "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167": 100
+          "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167": 100,
+          "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s1-t900-407567": 150,
+          "genMASK-c50-ms500-virchow2-s3-t900-436610": 100
         },
         "per_seed_pct": [
-          77.06901958350538
+          77.06901958350538,
+          91.00172441359838,
+          82.65634481218808
         ],
         "per_seed_pct_uncapped": [
-          77.06901958350538
+          77.06901958350538,
+          91.00172441359838,
+          82.65634481218808
         ],
         "per_seed_pct_capped": [
-          77.06901958350538
+          77.06901958350538,
+          91.00172441359838,
+          82.65634481218808
         ],
         "seed_sd_raw": 0.00475,
         "seed_sd_pct_points": 7.948458880468882,
-        "empirical_ci": null,
-        "floor_ci": 15.896917760937765,
-        "ci_source": "max(empirical 2*SD/sqrt(n)=n/a, measured seed floor=15.9) [floor no floor measured at step 100; conservative max over measured steps [250, 500]]",
-        "our_delta": 0.046056455537712426,
-        "waiv_gain": 0.05976001224176675,
-        "se_our_delta": 0.00475,
-        "sd_waiv_gain": 0.00475,
+        "empirical_ci": 8.096416598103499,
+        "floor_ci": 9.178089748562762,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=8.1, measured seed floor=9.2) [floor max over the 2 selected steps [100, 150] -> step 100: no floor measured at step 100; conservative max over measured steps [250, 500]]",
+        "our_delta": 0.04994484632195273,
+        "reference_gain": 0.05976001224176675,
+        "se_our_delta": 0.0027424137786507224,
+        "sd_reference_gain": 0.00475,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.05976001224176675,
+          "reference_gain": 0.05976001224176675,
           "seed_sd": 0.00475,
           "seed_sd_pct_points": 7.948458880468882,
-          "waiv_gain_over_1sd": 12.581055208793,
+          "reference_gain_over_1sd": 12.581055208793,
           "percell_precision_flag": false,
           "percell_precision_note": null,
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
-          "sd_note": "no floor measured at step 100; conservative max over measured steps [250, 500]"
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "sd_note": "max over the 2 selected steps [100, 150] -> step 100: no floor measured at step 100; conservative max over measured steps [250, 500]"
         }
       },
       "HEST": {
-        "pct": null,
-        "pct_capped": null,
-        "pct_uncapped": 60.769230769230816,
-        "ci": 35.134356130324214,
-        "lower_uncapped": null,
-        "upper_uncapped": null,
+        "pct": 54.68174962292621,
+        "pct_capped": 54.68174962292621,
+        "pct_uncapped": 54.68174962292621,
+        "ci": 20.284829969646864,
+        "lower_uncapped": 34.39691965327935,
+        "upper_uncapped": 74.96657959257308,
         "was_capped": false,
-        "n": 1,
-        "status": "UNDERPOWERED",
-        "reason": "n=1 < MIN_N_FOR_VERDICT=2",
-        "raw_mean": 0.4094861111111111,
+        "status": "NOT RESOLVED",
+        "n": 3,
+        "raw_mean": 0.4088632716049383,
         "base": 0.4032685185185185,
-        "waiv": 0.4135,
-        "selected_step": "100",
+        "reference": 0.4135,
+        "selected_step": "100/150",
         "selected_steps": [
-          100
+          100,
+          150
         ],
-        "steps_mixed": false,
+        "steps_mixed": true,
         "per_run_step": {
-          "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167": 100
+          "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167": 100,
+          "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s1-t900-407567": 150,
+          "genMASK-c50-ms500-virchow2-s3-t900-436610": 100
         },
         "per_seed_pct": [
-          60.769230769230816
+          60.769230769230816,
+          67.28506787330306,
+          35.99095022624476
         ],
         "per_seed_pct_uncapped": [
-          60.769230769230816
+          60.769230769230816,
+          67.28506787330306,
+          35.99095022624476
         ],
         "per_seed_pct_capped": [
-          60.769230769230816
+          60.769230769230816,
+          67.28506787330306,
+          35.99095022624476
         ],
         "pooling": "clsmean",
         "step_source": "stopping rule",
         "seed_sd_raw": 0.0017973825705559327,
         "seed_sd_pct_points": 17.567178065162107,
-        "seed_sd_df": 0,
-        "empirical_ci": null,
-        "floor_ci": 35.134356130324214,
-        "ci_source": "max(empirical 2*SD/sqrt(n)=n/a, measured seed floor=35.1) [floor no floor measured at step 100; conservative max over measured steps [50, 125, 250, 375, 500]]",
-        "our_delta": 0.00621759259259258,
-        "waiv_gain": 0.010231481481481453,
-        "se_our_delta": 0.0017973825705559327,
-        "sd_waiv_gain": 0.0017973825705559327,
+        "seed_sd_df": null,
+        "empirical_ci": 19.06562420892436,
+        "floor_ci": 20.284829969646864,
+        "ci_source": "max(empirical 2*SD/sqrt(n)=19.1, measured seed floor=20.3) [floor max over the 2 selected steps [100, 150] -> step 100: no floor measured at step 100; conservative max over measured steps [50, 125, 250, 375, 500]]",
+        "our_delta": 0.005594753086419768,
+        "reference_gain": 0.010231481481481453,
+        "se_our_delta": 0.0010377193109472093,
+        "sd_reference_gain": 0.0017973825705559327,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.010231481481481453,
+          "reference_gain": 0.010231481481481453,
           "seed_sd": 0.0017973825705559327,
           "seed_sd_pct_points": 17.567178065162107,
-          "waiv_gain_over_1sd": 5.692433903104358,
+          "reference_gain_over_1sd": 5.692433903104358,
           "percell_precision_flag": true,
-          "percell_precision_note": "one seed-SD is 17.6 pct_of_waiv points (> 10); waiv gain +0.0102 is within 5.7x the instrument's seed noise 0.0018 -- denominator is noise",
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
-          "sd_note": "no floor measured at step 100; conservative max over measured steps [50, 125, 250, 375, 500]"
+          "percell_precision_note": "one seed-SD is 17.6 pct_of_reference points (> 10); reference gain +0.0102 is within 5.7x the instrument's seed noise 0.0018 -- denominator is noise",
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "sd_note": "max over the 2 selected steps [100, 150] -> step 100: no floor measured at step 100; conservative max over measured steps [50, 125, 250, 375, 500]"
         }
       },
       "THUNDER": {
@@ -2530,7 +3078,7 @@
         "n": 0,
         "tasks": {
           "knn": {
-            "waiv_gain": -0.0030000000000001137,
+            "reference_gain": -0.0030000000000001137,
             "floor": 0.0083,
             "our_base": 0.8265541610965926,
             "our_base_coverage": "16/16",
@@ -2544,22 +3092,22 @@
             "resolvability_floor_offset_2se": 0.0083,
             "seed_sd_of_task_mean": 0.002108246529702873,
             "percell_denominator_diagnostic": {
-              "waiv_gain": -0.0030000000000001137,
+              "reference_gain": -0.0030000000000001137,
               "seed_sd": 0.002108246529702873,
               "seed_sd_pct_points": 70.27488432342643,
-              "waiv_gain_over_1sd": 1.4229834878100904,
+              "reference_gain_over_1sd": 1.4229834878100904,
               "percell_precision_flag": true,
-              "percell_precision_note": "one seed-SD is 70.3 pct_of_waiv points (> 10); waiv gain -0.0030 is within 1.4x the instrument's seed noise 0.0021 -- denominator is noise",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_precision_note": "one seed-SD is 70.3 pct_of_reference points (> 10); reference gain -0.0030 is within 1.4x the instrument's seed noise 0.0021 -- denominator is noise",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.002108246529702873,
+            "sd_reference_gain": 0.002108246529702873,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-virchow2-s0-399167_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167_s0000100"
+            "reason": "coverage 0,0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-virchow2-s0-399167_s0000100, f5_ci-virchow2-s1-407567_s0000150, f5_ci-virchow2-s3-436610_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s1-t900-407567_s0000150, f5_genMASK-c50-ms500-virchow2-s3-t900-436610_s0000100"
           },
           "linear_probing": {
-            "waiv_gain": 0.0029999999999999714,
+            "reference_gain": 0.0029999999999999714,
             "floor": 0.0088,
             "our_base": 0.8518170492885834,
             "our_base_coverage": "16/16",
@@ -2573,22 +3121,22 @@
             "resolvability_floor_offset_2se": 0.0088,
             "seed_sd_of_task_mean": 0.0023805170198752394,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.0029999999999999714,
+              "reference_gain": 0.0029999999999999714,
               "seed_sd": 0.0023805170198752394,
               "seed_sd_pct_points": 79.3505673291754,
-              "waiv_gain_over_1sd": 1.2602304352174716,
+              "reference_gain_over_1sd": 1.2602304352174716,
               "percell_precision_flag": true,
-              "percell_precision_note": "one seed-SD is 79.4 pct_of_waiv points (> 10); waiv gain +0.0030 is within 1.3x the instrument's seed noise 0.0024 -- denominator is noise",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_precision_note": "one seed-SD is 79.4 pct_of_reference points (> 10); reference gain +0.0030 is within 1.3x the instrument's seed noise 0.0024 -- denominator is noise",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.0023805170198752394,
+            "sd_reference_gain": 0.0023805170198752394,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-virchow2-s0-399167_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167_s0000100"
+            "reason": "coverage 0,0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-virchow2-s0-399167_s0000100, f5_ci-virchow2-s1-407567_s0000150, f5_ci-virchow2-s3-436610_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s1-t900-407567_s0000150, f5_genMASK-c50-ms500-virchow2-s3-t900-436610_s0000100"
           },
           "simple_shot": {
-            "waiv_gain": 0.026999999999999885,
+            "reference_gain": 0.026999999999999885,
             "floor": 0.0066,
             "our_base": 0.7405246642685483,
             "our_base_coverage": "16/16",
@@ -2602,24 +3150,24 @@
             "resolvability_floor_offset_2se": 0.0066,
             "seed_sd_of_task_mean": 0.0019783444822912,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.026999999999999885,
+              "reference_gain": 0.026999999999999885,
               "seed_sd": 0.0019783444822912,
               "seed_sd_pct_points": 7.327201786263735,
-              "waiv_gain_over_1sd": 13.647774814591493,
+              "reference_gain_over_1sd": 13.647774814591493,
               "percell_precision_flag": false,
               "percell_precision_note": null,
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": 0.0019783444822912,
+            "sd_reference_gain": 0.0019783444822912,
             "n": 0,
             "status": "PARTIAL",
-            "reason": "coverage 0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-virchow2-s0-399167_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167_s0000100"
+            "reason": "coverage 0,0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-virchow2-s0-399167_s0000100, f5_ci-virchow2-s1-407567_s0000150, f5_ci-virchow2-s3-436610_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s1-t900-407567_s0000150, f5_genMASK-c50-ms500-virchow2-s3-t900-436610_s0000100"
           }
         },
         "pooled": {
           "group": "virchow2/THUNDER (3 tasks)",
-          "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+          "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
           "n_cells": 3,
           "cells": [
             {
@@ -2675,7 +3223,7 @@
         "n": 2,
         "raw_mean": 0.9079198290674807,
         "base": 0.8116535052798081,
-        "waiv": 0.917,
+        "reference": 0.917,
         "selected_step": "100",
         "selected_steps": [
           100
@@ -2703,17 +3251,17 @@
         "floor_ci": null,
         "ci_source": "max(empirical 2*SD/sqrt(n)=1.4, measured seed floor=n/a) [floor no measured seed SD at any step for this backbone]",
         "our_delta": 0.09626632378767264,
-        "waiv_gain": 0.10534649472019197,
+        "reference_gain": 0.10534649472019197,
         "se_our_delta": null,
-        "sd_waiv_gain": null,
+        "sd_reference_gain": null,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.10534649472019197,
+          "reference_gain": 0.10534649472019197,
           "seed_sd": null,
           "seed_sd_pct_points": null,
-          "waiv_gain_over_1sd": null,
+          "reference_gain_over_1sd": null,
           "percell_precision_flag": true,
           "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
           "sd_note": "no measured seed SD at any step for this backbone"
         }
       },
@@ -2729,7 +3277,7 @@
         "n": 2,
         "raw_mean": 0.4222513888888889,
         "base": 0.4150009259259259,
-        "waiv": 0.429,
+        "reference": 0.429,
         "selected_step": "100",
         "selected_steps": [
           100
@@ -2760,17 +3308,17 @@
         "floor_ci": null,
         "ci_source": "max(empirical 2*SD/sqrt(n)=10.9, measured seed floor=n/a) [floor no measured seed SD at any step for this backbone]",
         "our_delta": 0.007250462962963,
-        "waiv_gain": 0.01399907407407408,
+        "reference_gain": 0.01399907407407408,
         "se_our_delta": null,
-        "sd_waiv_gain": null,
+        "sd_reference_gain": null,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.01399907407407408,
+          "reference_gain": 0.01399907407407408,
           "seed_sd": null,
           "seed_sd_pct_points": null,
-          "waiv_gain_over_1sd": null,
+          "reference_gain_over_1sd": null,
           "percell_precision_flag": true,
           "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
           "sd_note": "no measured seed SD at any step for this backbone"
         }
       },
@@ -2785,7 +3333,7 @@
         "n": 0,
         "tasks": {
           "knn": {
-            "waiv_gain": 0.0040000000000000565,
+            "reference_gain": 0.0040000000000000565,
             "floor": 0.017,
             "our_base": 0.8210947028114344,
             "our_base_coverage": "16/16",
@@ -2799,22 +3347,22 @@
             "resolvability_floor_offset_2se": 0.017,
             "seed_sd_of_task_mean": null,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.0040000000000000565,
+              "reference_gain": 0.0040000000000000565,
               "seed_sd": null,
               "seed_sd_pct_points": null,
-              "waiv_gain_over_1sd": null,
+              "reference_gain_over_1sd": null,
               "percell_precision_flag": true,
               "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": null,
+            "sd_reference_gain": null,
             "n": 0,
             "status": "PARTIAL",
             "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-hoptimus-s0-395391_s0000100, f5_ci-hoptimus-s1-395870_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-hoptimus-s0-t900-395391_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-hoptimus-s1-t900-395870_s0000100"
           },
           "linear_probing": {
-            "waiv_gain": 0.0029999999999999714,
+            "reference_gain": 0.0029999999999999714,
             "floor": 0.0226,
             "our_base": 0.8400470059063487,
             "our_base_coverage": "16/16",
@@ -2828,22 +3376,22 @@
             "resolvability_floor_offset_2se": 0.0226,
             "seed_sd_of_task_mean": null,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.0029999999999999714,
+              "reference_gain": 0.0029999999999999714,
               "seed_sd": null,
               "seed_sd_pct_points": null,
-              "waiv_gain_over_1sd": null,
+              "reference_gain_over_1sd": null,
               "percell_precision_flag": true,
               "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": null,
+            "sd_reference_gain": null,
             "n": 0,
             "status": "PARTIAL",
             "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-hoptimus-s0-395391_s0000100, f5_ci-hoptimus-s1-395870_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-hoptimus-s0-t900-395391_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-hoptimus-s1-t900-395870_s0000100"
           },
           "simple_shot": {
-            "waiv_gain": 0.012000000000000028,
+            "reference_gain": 0.012000000000000028,
             "floor": 0.012,
             "our_base": 0.7682897120436036,
             "our_base_coverage": "16/16",
@@ -2857,16 +3405,16 @@
             "resolvability_floor_offset_2se": 0.012,
             "seed_sd_of_task_mean": null,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.012000000000000028,
+              "reference_gain": 0.012000000000000028,
               "seed_sd": null,
               "seed_sd_pct_points": null,
-              "waiv_gain_over_1sd": null,
+              "reference_gain_over_1sd": null,
               "percell_precision_flag": true,
               "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": null,
+            "sd_reference_gain": null,
             "n": 0,
             "status": "PARTIAL",
             "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-hoptimus-s0-395391_s0000100, f5_ci-hoptimus-s1-395870_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-hoptimus-s0-t900-395391_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-hoptimus-s1-t900-395870_s0000100"
@@ -2874,7 +3422,7 @@
         },
         "pooled": {
           "group": "hoptimus/THUNDER (3 tasks)",
-          "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+          "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
           "n_cells": 3,
           "cells": [
             {
@@ -2930,7 +3478,7 @@
         "n": 2,
         "raw_mean": 0.908286005423731,
         "base": 0.7566697387699519,
-        "waiv": 0.908,
+        "reference": 0.908,
         "selected_step": "100/150",
         "selected_steps": [
           100,
@@ -2957,19 +3505,19 @@
         "seed_sd_pct_points": null,
         "empirical_ci": 4.149863626125351,
         "floor_ci": null,
-        "ci_source": "max(empirical 2*SD/sqrt(n)=4.1, measured seed floor=n/a) [floor no measured seed SD at any step for this backbone]; 1/2 seeds exceed Waiv (uncapped values are used, so the spread is NOT censored)",
+        "ci_source": "max(empirical 2*SD/sqrt(n)=4.1, measured seed floor=n/a) [floor no measured seed SD at any step for this backbone]; 1/2 seeds exceed Reference (uncapped values are used, so the spread is NOT censored)",
         "our_delta": 0.15161626665377903,
-        "waiv_gain": 0.1513302612300481,
+        "reference_gain": 0.1513302612300481,
         "se_our_delta": null,
-        "sd_waiv_gain": null,
+        "sd_reference_gain": null,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.1513302612300481,
+          "reference_gain": 0.1513302612300481,
           "seed_sd": null,
           "seed_sd_pct_points": null,
-          "waiv_gain_over_1sd": null,
+          "reference_gain_over_1sd": null,
           "percell_precision_flag": true,
           "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
           "sd_note": "no measured seed SD at any step for this backbone"
         }
       },
@@ -2985,7 +3533,7 @@
         "n": 2,
         "raw_mean": 0.42379629629629634,
         "base": 0.4138046296296296,
-        "waiv": 0.429,
+        "reference": 0.429,
         "selected_step": "100/150",
         "selected_steps": [
           100,
@@ -3017,17 +3565,17 @@
         "floor_ci": null,
         "ci_source": "max(empirical 2*SD/sqrt(n)=37.6, measured seed floor=n/a) [floor no measured seed SD at any step for this backbone]",
         "our_delta": 0.009991666666666732,
-        "waiv_gain": 0.015195370370370387,
+        "reference_gain": 0.015195370370370387,
         "se_our_delta": null,
-        "sd_waiv_gain": null,
+        "sd_reference_gain": null,
         "percell_denominator_diagnostic": {
-          "waiv_gain": 0.015195370370370387,
+          "reference_gain": 0.015195370370370387,
           "seed_sd": null,
           "seed_sd_pct_points": null,
-          "waiv_gain_over_1sd": null,
+          "reference_gain_over_1sd": null,
           "percell_precision_flag": true,
           "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+          "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
           "sd_note": "no measured seed SD at any step for this backbone"
         }
       },
@@ -3042,7 +3590,7 @@
         "n": 0,
         "tasks": {
           "knn": {
-            "waiv_gain": 0.0010000000000000852,
+            "reference_gain": 0.0010000000000000852,
             "floor": 0.0107,
             "our_base": 0.8333879184706913,
             "our_base_coverage": "16/16",
@@ -3056,22 +3604,22 @@
             "resolvability_floor_offset_2se": 0.0107,
             "seed_sd_of_task_mean": null,
             "percell_denominator_diagnostic": {
-              "waiv_gain": 0.0010000000000000852,
+              "reference_gain": 0.0010000000000000852,
               "seed_sd": null,
               "seed_sd_pct_points": null,
-              "waiv_gain_over_1sd": null,
+              "reference_gain_over_1sd": null,
               "percell_precision_flag": true,
               "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": null,
+            "sd_reference_gain": null,
             "n": 0,
             "status": "PARTIAL",
             "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-uni2-s0-395390_s0000100, f5_ci-uni2-s1-395869_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-uni2-s0-t900-395390_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-uni2-s1-t900-395869_s0000150"
           },
           "linear_probing": {
-            "waiv_gain": -0.007999999999999972,
+            "reference_gain": -0.007999999999999972,
             "floor": 0.0059,
             "our_base": 0.8574740814760217,
             "our_base_coverage": "16/16",
@@ -3085,22 +3633,22 @@
             "resolvability_floor_offset_2se": 0.0059,
             "seed_sd_of_task_mean": null,
             "percell_denominator_diagnostic": {
-              "waiv_gain": -0.007999999999999972,
+              "reference_gain": -0.007999999999999972,
               "seed_sd": null,
               "seed_sd_pct_points": null,
-              "waiv_gain_over_1sd": null,
+              "reference_gain_over_1sd": null,
               "percell_precision_flag": true,
               "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": null,
+            "sd_reference_gain": null,
             "n": 0,
             "status": "PARTIAL",
             "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-uni2-s0-395390_s0000100, f5_ci-uni2-s1-395869_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-uni2-s0-t900-395390_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-uni2-s1-t900-395869_s0000150"
           },
           "simple_shot": {
-            "waiv_gain": -0.0029999999999999714,
+            "reference_gain": -0.0029999999999999714,
             "floor": 0.0031,
             "our_base": 0.7979525122241352,
             "our_base_coverage": "16/16",
@@ -3114,16 +3662,16 @@
             "resolvability_floor_offset_2se": 0.0031,
             "seed_sd_of_task_mean": null,
             "percell_denominator_diagnostic": {
-              "waiv_gain": -0.0029999999999999714,
+              "reference_gain": -0.0029999999999999714,
               "seed_sd": null,
               "seed_sd_pct_points": null,
-              "waiv_gain_over_1sd": null,
+              "reference_gain_over_1sd": null,
               "percell_precision_flag": true,
               "percell_precision_note": "no measured seed SD for this cell -- resolvability untestable",
-              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_waiv points; does NOT withhold the cell (see percell_gate_diagnostic)",
+              "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > 10 pct_of_reference points; does NOT withhold the cell (see percell_gate_diagnostic)",
               "sd_note": ""
             },
-            "sd_waiv_gain": null,
+            "sd_reference_gain": null,
             "n": 0,
             "status": "PARTIAL",
             "reason": "coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-uni2-s0-395390_s0000100, f5_ci-uni2-s1-395869_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-uni2-s0-t900-395390_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-uni2-s1-t900-395869_s0000150"
@@ -3131,7 +3679,7 @@
         },
         "pooled": {
           "group": "uni2/THUNDER (3 tasks)",
-          "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+          "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
           "n_cells": 3,
           "cells": [
             {
@@ -3184,66 +3732,48 @@
       "floor_runs": [],
       "floor_is_the_graded_runs": false,
       "note": "floor at step 200 rests on a single n=2 family"
-    },
-    {
-      "backbone": "midnight",
-      "benchmark": "HEST",
-      "df": 0,
-      "step": "150",
-      "floor_runs": [],
-      "floor_is_the_graded_runs": false,
-      "note": "floor at step 150 rests on a single n=2 family"
-    },
-    {
-      "backbone": "virchow2",
-      "benchmark": "HEST",
-      "df": 0,
-      "step": "100",
-      "floor_runs": [],
-      "floor_is_the_graded_runs": false,
-      "note": "floor at step 100 rests on a single n=2 family"
     }
   ],
   "benchmark_averages": {
     "RI": {
-      "mean": null,
-      "our_avg_delta": null,
-      "waiv_avg_gain": null,
-      "ci": null,
-      "lower": null,
-      "upper": null,
-      "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+      "mean": 99.43574614756417,
+      "our_avg_delta": 0.16286875569343512,
+      "reference_avg_gain": 0.16379296380170505,
+      "ci": 2.336611393735647,
+      "lower": 97.09913475382852,
+      "upper": 101.77235754129983,
+      "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
       "pooled": {
         "group": "RI (5 backbones)",
-        "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+        "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
         "n_cells": 5,
         "cells": [
           {
             "key": "phikon",
-            "delta": 0.3704883256194587,
+            "delta": 0.3668487861679976,
             "gain": 0.3373887078920306,
-            "se_delta": 0.0032031937187750603,
+            "se_delta": 0.002615396719429005,
             "sd_gain": 0.00453,
             "complete": true,
             "note": "PASS"
           },
           {
             "key": "midnight",
-            "delta": 0.15195813722798523,
+            "delta": 0.1496675555357737,
             "gain": 0.16513934292448784,
-            "se_delta": 0.00482,
+            "se_delta": 0.0034082546853191585,
             "sd_gain": 0.00482,
-            "complete": false,
-            "note": "UNDERPOWERED"
+            "complete": true,
+            "note": "PASS"
           },
           {
             "key": "virchow2",
-            "delta": 0.046056455537712426,
+            "delta": 0.04994484632195273,
             "gain": 0.05976001224176675,
-            "se_delta": 0.00475,
+            "se_delta": 0.0027424137786507224,
             "sd_gain": 0.00475,
-            "complete": false,
-            "note": "UNDERPOWERED"
+            "complete": true,
+            "note": "PASS"
           },
           {
             "key": "hoptimus",
@@ -3264,61 +3794,116 @@
             "note": "PASS"
           }
         ],
-        "status": "WITHHELD_INCOMPLETE",
-        "reason": "pooling requires ALL 5 cells of RI (5 backbones); missing or PARTIAL: midnight, virchow2.  A pooled number over a SUBSET re-weights the group and is a different quantity.",
-        "missing_cells": [
-          "midnight",
-          "virchow2"
-        ]
+        "our_avg_delta": 0.16286875569343512,
+        "reference_avg_gain": 0.16379296380170505,
+        "se_our_avg_delta": 0.0010193592758852657,
+        "sd_reference_avg_gain": 0.0016286902713530283,
+        "se_missing_cells": [
+          "hoptimus",
+          "uni2"
+        ],
+        "sd_missing_cells": [
+          "hoptimus",
+          "uni2"
+        ],
+        "independence_caveat": "SE_agg = sqrt(sum SE_i^2)/k assumes independent cell noise; for the 3 THUNDER tasks of one backbone (same checkpoints, same 12 datasets) the true SE is up to sqrt(5) = 2.24x larger, i.e. up to 0.002279",
+        "shares": {
+          "phikon": {
+            "delta": 0.3668487861679976,
+            "gain": 0.3373887078920306,
+            "numerator_share": 0.45048393058090325,
+            "denominator_share": 0.41196972087334377
+          },
+          "midnight": {
+            "delta": 0.1496675555357737,
+            "gain": 0.16513934292448784,
+            "numerator_share": 0.18378915575126048,
+            "denominator_share": 0.20164400117261785
+          },
+          "virchow2": {
+            "delta": 0.04994484632195273,
+            "gain": 0.05976001224176675,
+            "numerator_share": 0.06133140283328866,
+            "denominator_share": 0.07297018242384921
+          },
+          "hoptimus": {
+            "delta": 0.09626632378767264,
+            "gain": 0.10534649472019197,
+            "numerator_share": 0.11821337171491993,
+            "denominator_share": 0.12863372427612832
+          },
+          "uni2": {
+            "delta": 0.15161626665377903,
+            "gain": 0.1513302612300481,
+            "numerator_share": 0.18618213911962778,
+            "denominator_share": 0.1847823712540609
+          }
+        },
+        "concentration_flags": [],
+        "concentrated": false,
+        "denominator_gate": {
+          "pooled_gain": 0.16379296380170505,
+          "pooled_sd": 0.0016286902713530283,
+          "gain_over_2sd": 50.28364406746123,
+          "rule": "|pooled reference gain| > 2 * SD(pooled reference gain) -- the denominator's sign/scale must be determined for the ratio to be a measurement",
+          "unresolvable": false,
+          "reason": null
+        },
+        "status": "POOLED",
+        "pct": 99.43574614756417,
+        "ci": 2.336611393735647,
+        "lower": 97.09913475382852,
+        "upper": 101.77235754129983,
+        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 1.24 pts, denominator term 1.98 pts"
       },
       "concentration_flags": [],
-      "n_backbones": 3,
-      "coverage_ok": false,
+      "n_backbones": 5,
+      "coverage_ok": true,
       "n_backbones_required": 5,
       "backbones_without_a_denominator": [],
-      "eligible_for_overall": false,
-      "withheld_reason": "pooling requires ALL 5 cells of RI (5 backbones); missing or PARTIAL: midnight, virchow2.  A pooled number over a SUBSET re-weights the group and is a different quantity.",
-      "legacy_mean_of_ratios": 100.46006165143507
+      "eligible_for_overall": true,
+      "withheld_reason": null,
+      "legacy_mean_of_ratios": 94.90164293772963
     },
     "HEST": {
-      "mean": null,
-      "our_avg_delta": null,
-      "waiv_avg_gain": null,
-      "ci": null,
-      "lower": null,
-      "upper": null,
-      "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+      "mean": 69.85467746139832,
+      "our_avg_delta": 0.011248672839506224,
+      "reference_avg_gain": 0.016102962962962986,
+      "ci": 8.175070636799479,
+      "lower": 61.67960682459885,
+      "upper": 78.0297480981978,
+      "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
       "pooled": {
         "group": "HEST (5 backbones)",
-        "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+        "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
         "n_cells": 5,
         "cells": [
           {
             "key": "phikon",
-            "delta": 0.015796296296296364,
+            "delta": 0.015889814814814884,
             "gain": 0.01959907407407413,
-            "se_delta": 0.0010531532659374151,
+            "se_delta": 0.0008598960408307678,
             "sd_gain": 0.0014893836319462114,
+            "complete": true,
+            "note": "PASS"
+          },
+          {
+            "key": "midnight",
+            "delta": 0.017516666666666736,
+            "gain": 0.021489814814814878,
+            "se_delta": 0.001793518518518472,
+            "sd_gain": 0.0025364182132561245,
             "complete": true,
             "note": "NOT RESOLVED"
           },
           {
-            "key": "midnight",
-            "delta": 0.018005555555555552,
-            "gain": 0.021489814814814878,
-            "se_delta": 0.0025364182132561245,
-            "sd_gain": 0.0025364182132561245,
-            "complete": false,
-            "note": "UNDERPOWERED"
-          },
-          {
             "key": "virchow2",
-            "delta": 0.00621759259259258,
+            "delta": 0.005594753086419768,
             "gain": 0.010231481481481453,
-            "se_delta": 0.0017973825705559327,
+            "se_delta": 0.0010377193109472093,
             "sd_gain": 0.0017973825705559327,
-            "complete": false,
-            "note": "UNDERPOWERED"
+            "complete": true,
+            "note": "NOT RESOLVED"
           },
           {
             "key": "hoptimus",
@@ -3339,33 +3924,88 @@
             "note": "NOT RESOLVED"
           }
         ],
-        "status": "WITHHELD_INCOMPLETE",
-        "reason": "pooling requires ALL 5 cells of HEST (5 backbones); missing or PARTIAL: midnight, virchow2.  A pooled number over a SUBSET re-weights the group and is a different quantity.",
-        "missing_cells": [
-          "midnight",
-          "virchow2"
-        ]
+        "our_avg_delta": 0.011248672839506224,
+        "reference_avg_gain": 0.016102962962962986,
+        "se_our_avg_delta": 0.00044868658306741803,
+        "sd_reference_avg_gain": 0.0006894132305253484,
+        "se_missing_cells": [
+          "hoptimus",
+          "uni2"
+        ],
+        "sd_missing_cells": [
+          "hoptimus",
+          "uni2"
+        ],
+        "independence_caveat": "SE_agg = sqrt(sum SE_i^2)/k assumes independent cell noise; for the 3 THUNDER tasks of one backbone (same checkpoints, same 12 datasets) the true SE is up to sqrt(5) = 2.24x larger, i.e. up to 0.001003",
+        "shares": {
+          "phikon": {
+            "delta": 0.015889814814814884,
+            "gain": 0.01959907407407413,
+            "numerator_share": 0.2825189254150695,
+            "denominator_share": 0.24342196053176354
+          },
+          "midnight": {
+            "delta": 0.017516666666666736,
+            "gain": 0.021489814814814878,
+            "numerator_share": 0.31144414841805734,
+            "denominator_share": 0.26690510143060897
+          },
+          "virchow2": {
+            "delta": 0.005594753086419768,
+            "gain": 0.010231481481481453,
+            "numerator_share": 0.09947401202336609,
+            "denominator_share": 0.1270757624545742
+          },
+          "hoptimus": {
+            "delta": 0.007250462962963,
+            "gain": 0.01399907407407408,
+            "numerator_share": 0.12891232710580405,
+            "denominator_share": 0.17386954321725914
+          },
+          "uni2": {
+            "delta": 0.009991666666666732,
+            "gain": 0.015195370370370387,
+            "numerator_share": 0.177650587037703,
+            "denominator_share": 0.18872763236579412
+          }
+        },
+        "concentration_flags": [],
+        "concentrated": false,
+        "denominator_gate": {
+          "pooled_gain": 0.016102962962962986,
+          "pooled_sd": 0.0006894132305253484,
+          "gain_over_2sd": 11.678745235779827,
+          "rule": "|pooled reference gain| > 2 * SD(pooled reference gain) -- the denominator's sign/scale must be determined for the ratio to be a measurement",
+          "unresolvable": false,
+          "reason": null
+        },
+        "status": "POOLED",
+        "pct": 69.85467746139832,
+        "ci": 8.175070636799479,
+        "lower": 61.67960682459885,
+        "upper": 78.0297480981978,
+        "ci_source": "delta method on the ratio: 2*100*sqrt((SE_num/den)^2 + (num*SD_den/den^2)^2); numerator term 5.57 pts, denominator term 5.98 pts"
       },
       "concentration_flags": [],
-      "n_backbones": 3,
-      "coverage_ok": false,
+      "n_backbones": 5,
+      "coverage_ok": true,
       "n_backbones_required": 5,
       "backbones_without_a_denominator": [],
-      "eligible_for_overall": false,
-      "withheld_reason": "pooling requires ALL 5 cells of HEST (5 backbones); missing or PARTIAL: midnight, virchow2.  A pooled number over a SUBSET re-weights the group and is a different quantity.",
-      "legacy_mean_of_ratios": 66.04809309396448
+      "eligible_for_overall": true,
+      "withheld_reason": null,
+      "legacy_mean_of_ratios": 66.96293387187133
     },
     "THUNDER": {
       "mean": null,
       "our_avg_delta": null,
-      "waiv_avg_gain": null,
+      "reference_avg_gain": null,
       "ci": null,
       "lower": null,
       "upper": null,
-      "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+      "aggregation": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
       "pooled": {
         "group": "THUNDER (5 backbones)",
-        "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+        "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
         "n_cells": 5,
         "cells": [
           {
@@ -3435,8 +4075,8 @@
     }
   },
   "overall_average": null,
-  "overall_average_note": "UNDEFINED: RI, HEST, THUNDER rest(s) on fewer than 5 backbones (RI=3/5, HEST=3/5, THUNDER=0/5); the overall average is defined only when all three benchmark means cover all three backbones",
-  "overall_average_partial_NOT_THE_CRITERION": null,
+  "overall_average_note": "UNDEFINED: THUNDER rest(s) on fewer than 5 backbones (THUNDER=0/5); the overall average is defined only when all three benchmark means cover all three backbones",
+  "overall_average_partial_NOT_THE_CRITERION": 84.64521180448125,
   "worst_cell": {
     "backbone": "hoptimus",
     "benchmark": "HEST",
@@ -3447,30 +4087,6 @@
     "status": "FAIL"
   },
   "ungraded_cells": [
-    {
-      "backbone": "midnight",
-      "benchmark": "RI",
-      "status": "UNDERPOWERED",
-      "reason": "n=1 < MIN_N_FOR_VERDICT=2"
-    },
-    {
-      "backbone": "virchow2",
-      "benchmark": "RI",
-      "status": "UNDERPOWERED",
-      "reason": "n=1 < MIN_N_FOR_VERDICT=2"
-    },
-    {
-      "backbone": "midnight",
-      "benchmark": "HEST",
-      "status": "UNDERPOWERED",
-      "reason": "n=1 < MIN_N_FOR_VERDICT=2"
-    },
-    {
-      "backbone": "virchow2",
-      "benchmark": "HEST",
-      "status": "UNDERPOWERED",
-      "reason": "n=1 < MIN_N_FOR_VERDICT=2"
-    },
     {
       "backbone": "phikon",
       "benchmark": "THUNDER",
@@ -3503,22 +4119,63 @@
     }
   ],
   "verdict": "INDETERMINATE",
-  "verdict_reason": "no gradeable number for midnight/RI (UNDERPOWERED), virchow2/RI (UNDERPOWERED), midnight/HEST (UNDERPOWERED), virchow2/HEST (UNDERPOWERED), phikon/THUNDER (PARTIAL), midnight/THUNDER (PARTIAL), virchow2/THUNDER (PARTIAL), hoptimus/THUNDER (PARTIAL), uni2/THUNDER (PARTIAL); error bar straddles the 70 bar for phikon/HEST (80.6+/-10.7), uni2/HEST (65.8+/-37.6)",
+  "verdict_reason": "no gradeable number for phikon/THUNDER (PARTIAL), midnight/THUNDER (PARTIAL), virchow2/THUNDER (PARTIAL), hoptimus/THUNDER (PARTIAL), uni2/THUNDER (PARTIAL); error bar straddles the 70 bar for midnight/HEST (81.5+/-16.7), virchow2/HEST (54.7+/-20.3), uni2/HEST (65.8+/-37.6)",
   "per_model": {
     "phikon": {
       "pct": {
-        "RI": 109.81052920657334,
-        "HEST": 80.5971559503001,
+        "RI": 108.73179142835885,
+        "HEST": 81.07431379033413,
         "THUNDER": null
       },
       "ci": {
-        "RI": 1.966294738790978,
-        "HEST": 10.746969596186565,
+        "RI": 2.4379237976580677,
+        "HEST": 8.774863930620556,
         "THUNDER": null
       },
       "lower_uncapped": {
-        "RI": 107.84423446778236,
-        "HEST": 69.85018635411355,
+        "RI": 106.29386763070077,
+        "HEST": 72.29944985971358,
+        "THUNDER": null
+      },
+      "status": {
+        "RI": "PASS",
+        "HEST": "PASS",
+        "THUNDER": "PARTIAL"
+      },
+      "n": {
+        "RI": 3,
+        "HEST": 3,
+        "THUNDER": 0
+      },
+      "average": null,
+      "average_note": "UNDEFINED: this model has no gradeable number on THUNDER",
+      "verdict": "INDETERMINATE",
+      "verdict_reason": "no gradeable number for THUNDER (PARTIAL)",
+      "measured_only": {
+        "benchmarks": [
+          "RI",
+          "HEST"
+        ],
+        "average": 94.90305260934649,
+        "verdict": "PASS",
+        "verdict_reason": "worst measured benchmark HEST = 81.1 >= 70; mean of measured 94.9 > 80",
+        "NOT_THE_CRITERION": "the criterion needs all of RI/HEST/THUNDER; this is the same bars on RI/HEST only"
+      }
+    },
+    "midnight": {
+      "pct": {
+        "RI": 90.6310712427935,
+        "HEST": 81.51148261450294,
+        "THUNDER": null
+      },
+      "ci": {
+        "RI": 4.127731920161058,
+        "HEST": 16.691800594596444,
+        "THUNDER": null
+      },
+      "lower_uncapped": {
+        "RI": 86.50333932263244,
+        "HEST": 64.8196820199065,
         "THUNDER": null
       },
       "status": {
@@ -3534,79 +4191,58 @@
       "average": null,
       "average_note": "UNDEFINED: this model has no gradeable number on THUNDER",
       "verdict": "INDETERMINATE",
-      "verdict_reason": "no gradeable number for THUNDER (PARTIAL); error bar straddles the 70 bar for HEST (80.6+/-10.7)",
+      "verdict_reason": "no gradeable number for THUNDER (PARTIAL); error bar straddles the 70 bar for HEST (81.5+/-16.7)",
       "measured_only": {
         "benchmarks": [
           "RI",
           "HEST"
         ],
-        "average": 95.20384257843672,
+        "average": 86.07127692864822,
         "verdict": "NOT RESOLVED",
         "verdict_reason": "error bar straddles 70 for HEST",
         "NOT_THE_CRITERION": "the criterion needs all of RI/HEST/THUNDER; this is the same bars on RI/HEST only"
       }
     },
-    "midnight": {
-      "pct": {
-        "RI": null,
-        "HEST": null,
-        "THUNDER": null
-      },
-      "ci": {
-        "RI": 5.837494463332106,
-        "HEST": 23.605770781305583,
-        "THUNDER": null
-      },
-      "lower_uncapped": {
-        "RI": null,
-        "HEST": null,
-        "THUNDER": null
-      },
-      "status": {
-        "RI": "UNDERPOWERED",
-        "HEST": "UNDERPOWERED",
-        "THUNDER": "PARTIAL"
-      },
-      "n": {
-        "RI": 1,
-        "HEST": 1,
-        "THUNDER": 0
-      },
-      "average": null,
-      "average_note": "UNDEFINED: this model has no gradeable number on RI, HEST, THUNDER",
-      "verdict": "INDETERMINATE",
-      "verdict_reason": "no gradeable number for RI (UNDERPOWERED), HEST (UNDERPOWERED), THUNDER (PARTIAL)"
-    },
     "virchow2": {
       "pct": {
-        "RI": null,
-        "HEST": null,
+        "RI": 83.57569626976395,
+        "HEST": 54.68174962292621,
         "THUNDER": null
       },
       "ci": {
-        "RI": 15.896917760937765,
-        "HEST": 35.134356130324214,
+        "RI": 9.178089748562762,
+        "HEST": 20.284829969646864,
         "THUNDER": null
       },
       "lower_uncapped": {
-        "RI": null,
-        "HEST": null,
+        "RI": 74.3976065212012,
+        "HEST": 34.39691965327935,
         "THUNDER": null
       },
       "status": {
-        "RI": "UNDERPOWERED",
-        "HEST": "UNDERPOWERED",
+        "RI": "PASS",
+        "HEST": "NOT RESOLVED",
         "THUNDER": "PARTIAL"
       },
       "n": {
-        "RI": 1,
-        "HEST": 1,
+        "RI": 3,
+        "HEST": 3,
         "THUNDER": 0
       },
       "average": null,
-      "average_note": "UNDEFINED: this model has no gradeable number on RI, HEST, THUNDER",
+      "average_note": "UNDEFINED: this model has no gradeable number on THUNDER",
       "verdict": "INDETERMINATE",
-      "verdict_reason": "no gradeable number for RI (UNDERPOWERED), HEST (UNDERPOWERED), THUNDER (PARTIAL)"
+      "verdict_reason": "no gradeable number for THUNDER (PARTIAL); error bar straddles the 70 bar for HEST (54.7+/-20.3)",
+      "measured_only": {
+        "benchmarks": [
+          "RI",
+          "HEST"
+        ],
+        "average": 69.12872294634508,
+        "verdict": "NOT RESOLVED",
+        "verdict_reason": "error bar straddles 70 for HEST",
+        "NOT_THE_CRITERION": "the criterion needs all of RI/HEST/THUNDER; this is the same bars on RI/HEST only"
+      }
     },
     "hoptimus": {
       "pct": {
@@ -3691,7 +4327,7 @@
       }
     }
   },
-  "per_model_criterion": "THE CRITERION.  Each backbone independently: pct_of_waiv >= 70 on EACH of RI/HEST/THUNDER AND the mean of its three percentages > 80.  No pooling across backbones.",
+  "per_model_criterion": "THE CRITERION.  Each backbone independently: pct_of_reference >= 70 on EACH of RI/HEST/THUNDER AND the mean of its three percentages > 80.  No pooling across backbones.",
   "per_model_verdict": "INDETERMINATE",
   "ri_se_sweep": {
     "grid": [
@@ -3729,9 +4365,9 @@
         "backbone": "hoptimus",
         "seed": 1,
         "picks": {
-          "0.001": null,
-          "0.002": null,
-          "0.003": null,
+          "0.001": 150,
+          "0.002": 150,
+          "0.003": 150,
           "0.004": 100,
           "0.005": 100,
           "0.006": 100,
@@ -3800,14 +4436,14 @@
           "0.001": null,
           "0.002": null,
           "0.003": null,
-          "0.004": null,
-          "0.005": null,
-          "0.006": null,
-          "0.007": null,
-          "0.008": null,
-          "0.01": null,
-          "0.015": null,
-          "0.02": null
+          "0.004": 100,
+          "0.005": 100,
+          "0.006": 100,
+          "0.007": 100,
+          "0.008": 100,
+          "0.01": 100,
+          "0.015": 100,
+          "0.02": 100
         }
       },
       "genMASK-c50-lr1e-4-kl0-ms500-midnight-s2-t900-407569": {
@@ -3865,17 +4501,17 @@
         "backbone": "phikon",
         "seed": 2,
         "picks": {
-          "0.001": null,
-          "0.002": null,
-          "0.003": null,
-          "0.004": null,
-          "0.005": null,
-          "0.006": null,
-          "0.007": null,
-          "0.008": null,
-          "0.01": null,
-          "0.015": null,
-          "0.02": null
+          "0.001": 300,
+          "0.002": 200,
+          "0.003": 200,
+          "0.004": 200,
+          "0.005": 200,
+          "0.006": 200,
+          "0.007": 200,
+          "0.008": 200,
+          "0.01": 200,
+          "0.015": 150,
+          "0.02": 150
         }
       },
       "genMASK-c50-lr1e-4-kl0-ms500-uni2-s0-t900-395390": {
@@ -3967,17 +4603,17 @@
         "backbone": "virchow2",
         "seed": 1,
         "picks": {
-          "0.001": null,
-          "0.002": null,
-          "0.003": null,
-          "0.004": null,
-          "0.005": null,
-          "0.006": null,
-          "0.007": null,
-          "0.008": null,
-          "0.01": null,
-          "0.015": null,
-          "0.02": null
+          "0.001": 150,
+          "0.002": 150,
+          "0.003": 150,
+          "0.004": 150,
+          "0.005": 150,
+          "0.006": 150,
+          "0.007": 150,
+          "0.008": 150,
+          "0.01": 100,
+          "0.015": 100,
+          "0.02": 100
         }
       },
       "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s2-t900-407570": {
@@ -4074,12 +4710,12 @@
           "0.003": null,
           "0.004": null,
           "0.005": null,
-          "0.006": null,
-          "0.007": null,
-          "0.008": null,
-          "0.01": null,
-          "0.015": null,
-          "0.02": null
+          "0.006": 100,
+          "0.007": 100,
+          "0.008": 100,
+          "0.01": 100,
+          "0.015": 100,
+          "0.02": 100
         }
       }
     },
@@ -4092,7 +4728,8 @@
           150
         ],
         "phikon": [
-          200
+          200,
+          300
         ],
         "uni2": [
           150
@@ -4141,6 +4778,7 @@
           150
         ],
         "midnight": [
+          100,
           150
         ],
         "phikon": [
@@ -4150,7 +4788,8 @@
           150
         ],
         "virchow2": [
-          100
+          100,
+          150
         ]
       },
       "0.005": {
@@ -4159,6 +4798,7 @@
           150
         ],
         "midnight": [
+          100,
           150
         ],
         "phikon": [
@@ -4169,7 +4809,8 @@
           150
         ],
         "virchow2": [
-          100
+          100,
+          150
         ]
       },
       "0.006": {
@@ -4177,6 +4818,7 @@
           100
         ],
         "midnight": [
+          100,
           150
         ],
         "phikon": [
@@ -4187,7 +4829,8 @@
           150
         ],
         "virchow2": [
-          100
+          100,
+          150
         ]
       },
       "0.007": {
@@ -4195,6 +4838,7 @@
           100
         ],
         "midnight": [
+          100,
           150
         ],
         "phikon": [
@@ -4205,7 +4849,8 @@
           150
         ],
         "virchow2": [
-          100
+          100,
+          150
         ]
       },
       "0.008": {
@@ -4213,6 +4858,7 @@
           100
         ],
         "midnight": [
+          100,
           150
         ],
         "phikon": [
@@ -4222,7 +4868,8 @@
           100
         ],
         "virchow2": [
-          100
+          100,
+          150
         ]
       },
       "0.01": {
@@ -4250,6 +4897,7 @@
           100
         ],
         "phikon": [
+          150,
           200
         ],
         "uni2": [
@@ -4267,6 +4915,7 @@
           100
         ],
         "phikon": [
+          150,
           200
         ],
         "uni2": [
@@ -4279,5 +4928,5 @@
     }
   },
   "pooled_across_backbones_NOT_THE_CRITERION": "report['benchmark_averages'], report['overall_average'] and report['verdict'] pool across the three backbones.  They are SECONDARY.  The criterion is report['per_model'] / report['per_model_verdict'].",
-  "ri_se_source": "docs/RESULTS.md section 12.3 measured between-seed avg-RI floor 0.0070 (max |ctrl - ctrlseed| over checkpoints, n=2); OPERATOR INPUT, not a per-checkpoint bootstrap SE -- PathoROB's bootstrap fields are on no curve on disk"
+  "ri_se_source": "docs/archive/RESULTS.md section 12.3 measured between-seed avg-RI floor 0.0070 (max |ctrl - ctrlseed| over checkpoints, n=2); OPERATOR INPUT, not a per-checkpoint bootstrap SE -- PathoROB's bootstrap fields are on no curve on disk"
 }

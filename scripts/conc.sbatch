@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-conc
+#SBATCH --job-name=spectra-conc
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

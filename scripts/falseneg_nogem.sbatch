@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-fnnogem
+#SBATCH --job-name=spectra-fnnogem
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

@@ -34,8 +34,8 @@ from spectra.eval.hest_adapter import (  # noqa: E402
     PUBLISHED_PHAET_AVG,
     PUBLISHED_PHIKONV2_AVG,
     PUBLISHED_PHIKONV2_CLS,
-    WAIV_PHAET_HEST,
-    WAIV_PHIKONV2_HEST,
+    REFERENCE_PHAET_HEST,
+    REFERENCE_PHIKONV2_HEST,
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -182,7 +182,7 @@ def main() -> int:
     if not loaded:
         print("# no fine-tuned runs found yet -- base row only")
     if show_published:
-        print("# 'published' is HEST's own phikon_v2 row (CLS, fp32); Waiv Table 1 quotes it verbatim.")
+        print("# 'published' is HEST's own phikon_v2 row (CLS, fp32); Reference Table 1 quotes it verbatim.")
     elif args.pooling != "cls":
         print("# clsmean has NO published counterpart. The base column is OUR OWN reference,")
         print("# valid only for checkpoint-to-checkpoint retention. Do not compare it to 0.3747.")
@@ -218,12 +218,12 @@ def main() -> int:
 
     print()
     if show_published:
-        print(f"Waiv's published Phaet HEST average: **{PUBLISHED_PHAET_AVG:.4f}** "
+        print(f"Reference's published Phaet HEST average: **{PUBLISHED_PHAET_AVG:.4f}** "
               f"(from {PUBLISHED_PHIKONV2_AVG:.4f} base, i.e. {PUBLISHED_PHAET_AVG - PUBLISHED_PHIKONV2_AVG:+.4f}).")
         print("Per-task Phaet row (arXiv:2607.22861 Table 3), for Δ-vs-Δ comparison:")
-        for t, v in WAIV_PHAET_HEST.items():
-            print(f"  {t:10s} {v:.4f}  (base {WAIV_PHIKONV2_HEST[t]:.4f}, "
-                  f"their Δ {v - WAIV_PHIKONV2_HEST[t]:+.4f})")
+        for t, v in REFERENCE_PHAET_HEST.items():
+            print(f"  {t:10s} {v:.4f}  (base {REFERENCE_PHIKONV2_HEST[t]:.4f}, "
+                  f"their Δ {v - REFERENCE_PHIKONV2_HEST[t]:+.4f})")
     for code, blob in loaded:
         print(f"- {code}: embed_dim={blob.get('embed_dim')} precision={blob.get('precision')} "
               f"seconds={blob.get('seconds')}")

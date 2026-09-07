@@ -116,8 +116,8 @@ def load_dotenv(path: Path | None = None) -> dict[str, str]:
 def alias_legacy_env() -> dict[str, str]:
     """Mirror ``WAIV_*`` <-> ``SPECTRA_*`` in ``os.environ``, neither side clobbering.
 
-    The project was called ``waivphaet`` while the pinned code snapshots under
-    :data:`SNAPSHOTS` were frozen, and those copies still read ``WAIV_PACKED_DIR``,
+    The pinned code snapshots under :data:`SNAPSHOTS` were frozen under an earlier
+    internal package name, and those copies still read ``WAIV_PACKED_DIR``,
     ``WAIV_BACKBONE`` and friends.  A pin is frozen on purpose, so rather than rewrite
     one, both spellings are published.  Returns what it added.  ``scripts/_env.sh`` does
     the same thing for the shell.  Delete this once no pin in use reads the old names.

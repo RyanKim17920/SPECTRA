@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """ONE definition of every quantity the three verdict/reporting scripts share.
 
-Created 2026-08-26 by the formula-unification audit (docs/FORMULA_UNIFICATION_2026-08-26.md).
+Created 2026-08-26 by the formula-unification audit (docs/archive/FORMULA_UNIFICATION_2026-08-26.md).
 
 Before this module existed the repo carried FIVE independent transcriptions of the same
-few numbers (RI base, RI/HEST Waiv targets, the HEST base, the resolvability limit) and
+few numbers (RI base, RI/HEST Reference targets, the HEST base, the resolvability limit) and
 THREE different constructions of a 95% error bar.  Numbers that are supposed to be the
 same quantity disagreed by up to 32%, and two scripts printed different statuses for the
 same cell.  Everything in here is either (a) read from disk, or (b) a transcription from
@@ -12,7 +12,7 @@ a named published table with exactly one owner in the repo.
 
 WHAT IS ALLOWED TO BE A LITERAL HERE
   * A path or a directory name (where a measurement lives).
-  * A number transcribed from a paper we cannot recompute (Waiv's published Table 1/2).
+  * A number transcribed from a paper we cannot recompute (Reference's published Table 1/2).
     Those carry a `_SOURCE` string and exist in NO other file.
 Everything else -- every measured quantity, every noise floor -- is loaded.
 """
@@ -31,18 +31,18 @@ if str(REPO / "src") not in sys.path:
 # ---------------------------------------------------------------------------
 # The ONE denominator-resolvability gate  (F-B)
 # ---------------------------------------------------------------------------
-# A pct_of_waiv cell divides by (waiv - base).  When that denominator is itself within
+# A pct_of_reference cell divides by (reference - base).  When that denominator is itself within
 # the instrument's seed noise, the ratio is not a measurement of anything: matching a
 # regression scores 100%, and 80% cannot be told from 100%.  The cell is then WITHHELD.
 #
 # The test, algebraically identical in both of its historical spellings:
-#       2 * seed_SD > 20% of |waiv gain|      <=>      seed_SD / |gain| * 100 > 10
+#       2 * seed_SD > 20% of |reference gain|      <=>      seed_SD / |gain| * 100 > 10
 #
 # THRESHOLD PROVENANCE: scoreboard.py has applied `sd_pct > 10` since the resolvability
 # audit; the 20%-of-gain spelling is the one scoreboard._thunder_unresolvable applies to
 # THUNDER.  This module is now the only definition; scoreboard imports it.
 #
-# n-INDEPENDENT ON PURPOSE.  This is a property of the COMPARISON (is Waiv's own gain
+# n-INDEPENDENT ON PURPOSE.  This is a property of the COMPARISON (is Reference's own gain
 # bigger than the noise of the instrument that measured it), not of how many seeds WE
 # ran.  Running more of our own seeds shrinks OUR error bar -- that is the separate
 # CI-vs-70-bar test -- but it cannot sharpen a denominator that was never resolved.
@@ -57,7 +57,7 @@ DENOMINATOR_GATE_NOISE = "across-seed SD (1 SD, one run) of the reported statist
 
 
 def denominator_sd_pct(gain: float | None, seed_sd: float | None) -> float | None:
-    """One seed-SD expressed in pct_of_waiv POINTS, or None when it cannot be formed."""
+    """One seed-SD expressed in pct_of_reference POINTS, or None when it cannot be formed."""
     if gain is None or seed_sd is None or abs(gain) < 1e-12:
         return None
     return seed_sd / abs(gain) * 100.0
@@ -73,11 +73,11 @@ def denominator_unresolvable(gain: float | None, seed_sd: float | None):
     if seed_sd is None:
         return True, None, "no measured seed SD for this cell -- resolvability untestable"
     if gain is None or abs(gain) < 1e-12:
-        return True, None, "waiv gain is zero/undefined -- denominator is not a scale"
+        return True, None, "reference gain is zero/undefined -- denominator is not a scale"
     sd_pct = seed_sd / abs(gain) * 100.0
     if sd_pct > UNRESOLVABLE_SD_PCT_LIMIT:
         return True, sd_pct, (
-            "one seed-SD is %.1f pct_of_waiv points (> %.0f); waiv gain %+.4f is within "
+            "one seed-SD is %.1f pct_of_reference points (> %.0f); reference gain %+.4f is within "
             "%.1fx the instrument's seed noise %.4f -- denominator is noise"
             % (sd_pct, UNRESOLVABLE_SD_PCT_LIMIT, gain, abs(gain) / seed_sd, seed_sd))
     return False, sd_pct, None
@@ -121,7 +121,7 @@ def ci95(pcts: list[float], floor_sd_pct: float | None):
 # probe and contains no robustness_index field at all.  The real source is PathoROB's own
 # results_summary.json for the UNFINETUNED feature dirs, which is what is read here.
 #
-# NOT to be confused with ri_curve.json["targets"]["*_base"], which is WAIV's PUBLISHED
+# NOT to be confused with ri_curve.json["targets"]["*_base"], which is REFERENCE's PUBLISHED
 # Table-1 base row (3 decimals), a different quantity that happens to agree to 3 dp.
 RI_BASE_MODEL_DIRS = {
     "phikon":   "phikonv2_clsmean_ours",
@@ -150,7 +150,7 @@ def load_ri_base():
 
     An arm with SOME but not all three still RAISES.  An average over a subset of the
     datasets is a different quantity wearing the same name, and silently returning it
-    would bias every pct_of_waiv that divides by it -- and, unlike a wholly-missing arm,
+    would bias every pct_of_reference that divides by it -- and, unlike a wholly-missing arm,
     a partial one is evidence that something went wrong rather than that nothing has run.
     """
     vals, src = {}, {}
@@ -178,22 +178,22 @@ def load_ri_base():
 
 
 # ---------------------------------------------------------------------------
-# Published Waiv targets -- READ FROM docs/waiv_published.json, ONE loader  (F-J)
+# Published Reference targets -- READ FROM docs/reference_published.json, ONE loader  (F-J)
 # ---------------------------------------------------------------------------
-# docs/waiv_published.json is the full, line-by-line transcription of Waiv Tables 1/2/3
+# docs/reference_published.json is the full, line-by-line transcription of Reference Tables 1/2/3
 # for all twenty models they rank.  Before this section existed, THREE of its numbers had
 # been copied back out into Python literals keyed by our three published arms -- the RI
-# target (via pathorob_adapter.TARGETS), the HEST target (HEST_WAIV), and scoreboard's own
+# target (via pathorob_adapter.TARGETS), the HEST target (HEST_REFERENCE), and scoreboard's own
 # copy of the THUNDER rows -- so adding a fourth or fifth backbone meant hand-typing six
 # more numbers into three more places.  All of them now come from the JSON, through the
-# loader below, for EVERY arm.  Adding a backbone is a row in WAIV_ROWS and nothing else.
+# loader below, for EVERY arm.  Adding a backbone is a row in REFERENCE_ROWS and nothing else.
 #
 # The retired literals survive ONLY as an assertion target (see the *_RETIRED_LITERALS
 # dicts and check_retired_literals()): a disagreement between what was published and what
 # is on disk is itself a bug and must be measured, not absorbed.
-WAIV_PUBLISHED_JSON = REPO / "docs" / "waiv_published.json"
+REFERENCE_PUBLISHED_JSON = REPO / "docs" / "reference_published.json"
 
-#: arm -> (base row, fine-tuned row) in the published table.  Waiv RENAME the fine-tuned
+#: arm -> (base row, fine-tuned row) in the published table.  Reference RENAME the fine-tuned
 #: models (Phikon-v2 -> Phaet, Midnight-12k -> Mascaret) while leaving Virchow2, UNI2-h
 #: and H-Optimus-0 under their own names, so the correspondence has to be stated; it is
 #: stated ONCE, here.
@@ -201,7 +201,7 @@ WAIV_PUBLISHED_JSON = REPO / "docs" / "waiv_published.json"
 #: TRAP: "H0-mini" is a separate row and a DIFFERENT model -- a distillation of
 #: H-Optimus-0, with its own numbers and its own (clsmean) THUNDER protocol.  It is not
 #: an alias for `hoptimus`.
-WAIV_ROWS: dict[str, tuple[tuple[str, str], tuple[str, str]]] = {
+REFERENCE_ROWS: dict[str, tuple[tuple[str, str], tuple[str, str]]] = {
     "phikon":   (("Phikon-v2", "base"),   ("Phaet", "fine-tuned")),
     "midnight": (("Midnight-12k", "base"), ("Mascaret", "fine-tuned")),
     "virchow2": (("Virchow2", "base"),    ("Virchow2", "fine-tuned")),
@@ -209,10 +209,10 @@ WAIV_ROWS: dict[str, tuple[tuple[str, str], tuple[str, str]]] = {
     "uni2":     (("UNI2-h", "base"),      ("UNI2-h", "fine-tuned")),
 }
 
-#: Waiv's THUNDER task names -> ours.  Their two extra tasks (calibration, adversarial)
+#: Reference's THUNDER task names -> ours.  Their two extra tasks (calibration, adversarial)
 #: are not computed by this repo and are dropped on purpose -- any mean over the four
 #: below is NOT their six-task rank sum.
-WAIV_THUNDER_TASKS = {
+REFERENCE_THUNDER_TASKS = {
     "knn": "knn",
     "linear": "linear_probing",
     "few_shot": "simple_shot",
@@ -220,80 +220,80 @@ WAIV_THUNDER_TASKS = {
 }
 
 #: Their RI per-dataset key -> ours.
-WAIV_RI_DS = {"tcga": "tcga", "camelyon": "camelyon", "tolkach": "tolkach_esca"}
+REFERENCE_RI_DS = {"tcga": "tcga", "camelyon": "camelyon", "tolkach": "tolkach_esca"}
 
-WAIV_SOURCE = "docs/waiv_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24)"
+REFERENCE_SOURCE = "docs/reference_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24)"
 
 
-def load_waiv_published():
-    """(WAIV, WAIV_THUNDER) read from docs/waiv_published.json.  ONE formula, all arms.
+def load_reference_published():
+    """(REFERENCE, REFERENCE_THUNDER) read from docs/reference_published.json.  ONE formula, all arms.
 
-    WAIV[arm]         = {"ri": ft avg RI, "hest": ft HEST avg, "ri_ds": {ds: ft RI}}
-    WAIV_THUNDER[arm] = {"base": {our_task: pct}, "ft": {our_task: pct}}
+    REFERENCE[arm]         = {"ri": ft avg RI, "hest": ft HEST avg, "ri_ds": {ds: ft RI}}
+    REFERENCE_THUNDER[arm] = {"base": {our_task: pct}, "ft": {our_task: pct}}
 
-    Raises rather than falling back: every pct_of_waiv denominator comes from this file
+    Raises rather than falling back: every pct_of_reference denominator comes from this file
     and there is no literal left to fall back to.
     """
     try:
-        blob = json.loads(WAIV_PUBLISHED_JSON.read_text())
+        blob = json.loads(REFERENCE_PUBLISHED_JSON.read_text())
     except Exception as exc:  # noqa: BLE001 -- any read/parse failure is fatal here
         raise RuntimeError(
-            "cannot read the Waiv published-numbers transcription at %s: %s.  Every "
-            "pct_of_waiv denominator comes from that file; there is no fallback literal."
-            % (WAIV_PUBLISHED_JSON, exc)) from exc
+            "cannot read the Reference published-numbers transcription at %s: %s.  Every "
+            "pct_of_reference denominator comes from that file; there is no fallback literal."
+            % (REFERENCE_PUBLISHED_JSON, exc)) from exc
     index = {(m["name"], m["variant"]): m for m in blob["models"]}
-    waiv, waiv_thunder = {}, {}
-    for arm, (base_row, ft_row) in WAIV_ROWS.items():
+    reference, reference_thunder = {}, {}
+    for arm, (base_row, ft_row) in REFERENCE_ROWS.items():
         absent = [r for r in (base_row, ft_row) if r not in index]
         if absent:
             raise RuntimeError(
-                "arm %r maps to rows %s which are not in %s; fix WAIV_ROWS or the "
-                "transcription." % (arm, absent, WAIV_PUBLISHED_JSON.name))
+                "arm %r maps to rows %s which are not in %s; fix REFERENCE_ROWS or the "
+                "transcription." % (arm, absent, REFERENCE_PUBLISHED_JSON.name))
         base, ft = index[base_row], index[ft_row]
-        waiv[arm] = {
+        reference[arm] = {
             "ri": ft["ri"]["avg"],
             "ri_base": base["ri"]["avg"],
             "hest": ft["hest_avg"],
             "hest_base": base["hest_avg"],
-            "ri_ds": {ours: ft["ri"].get(theirs) for theirs, ours in WAIV_RI_DS.items()},
+            "ri_ds": {ours: ft["ri"].get(theirs) for theirs, ours in REFERENCE_RI_DS.items()},
         }
-        waiv_thunder[arm] = {
-            "base": {ours: base["thunder"][theirs] for theirs, ours in WAIV_THUNDER_TASKS.items()},
-            "ft": {ours: ft["thunder"][theirs] for theirs, ours in WAIV_THUNDER_TASKS.items()},
+        reference_thunder[arm] = {
+            "base": {ours: base["thunder"][theirs] for theirs, ours in REFERENCE_THUNDER_TASKS.items()},
+            "ft": {ours: ft["thunder"][theirs] for theirs, ours in REFERENCE_THUNDER_TASKS.items()},
         }
-    return waiv, waiv_thunder
+    return reference, reference_thunder
 
 
-WAIV, WAIV_THUNDER = load_waiv_published()
+REFERENCE, REFERENCE_THUNDER = load_reference_published()
 
 
-def load_ri_waiv():
-    """{arm: Waiv's fine-tuned Avg RI} for EVERY arm in WAIV_ROWS, from the JSON.
+def load_ri_reference():
+    """{arm: Reference's fine-tuned Avg RI} for EVERY arm in REFERENCE_ROWS, from the JSON.
 
     Was: re-keyed out of src/spectra/eval/pathorob_adapter.TARGETS, which is a second
     transcription of the same Table-1 column and covers only the published trio.  That
     module keeps its per-DATASET targets (the gate script indexes them by dataset); this
     average is now read from the one file that has the whole table.
     """
-    return ({a: float(v["ri"]) for a, v in WAIV.items()},
-            "%s -> models[<ft row>].ri.avg (Waiv Table 1)" % WAIV_SOURCE)
+    return ({a: float(v["ri"]) for a, v in REFERENCE.items()},
+            "%s -> models[<ft row>].ri.avg (Reference Table 1)" % REFERENCE_SOURCE)
 
 
-#: HEST: Waiv arXiv:2607.22861 Table 1, "HEST" column, fine-tuned rows -- for every arm.
-HEST_WAIV = {a: float(v["hest"]) for a, v in WAIV.items()}
-HEST_WAIV_SOURCE = "%s -> models[<ft row>].hest_avg (Waiv Table 1 HEST column)" % WAIV_SOURCE
+#: HEST: Reference arXiv:2607.22861 Table 1, "HEST" column, fine-tuned rows -- for every arm.
+HEST_REFERENCE = {a: float(v["hest"]) for a, v in REFERENCE.items()}
+HEST_REFERENCE_SOURCE = "%s -> models[<ft row>].hest_avg (Reference Table 1 HEST column)" % REFERENCE_SOURCE
 
 
 # --- retired literals, kept ONLY as assertion targets -------------------------------
-#: What the three Waiv targets were hand-typed as before they were read from the JSON.
+#: What the three Reference targets were hand-typed as before they were read from the JSON.
 #: Nothing consumes these; check_retired_literals() compares them to what is now loaded
 #: so that a transcription drift shows up as a reported number rather than as silence.
-RI_WAIV_RETIRED_LITERALS = {"phikon": 0.806, "midnight": 0.924, "virchow2": 0.918}
-HEST_WAIV_RETIRED_LITERALS = {"phikon": 0.3943, "midnight": 0.4167, "virchow2": 0.4135}
+RI_REFERENCE_RETIRED_LITERALS = {"phikon": 0.806, "midnight": 0.924, "virchow2": 0.918}
+HEST_REFERENCE_RETIRED_LITERALS = {"phikon": 0.3943, "midnight": 0.4167, "virchow2": 0.4135}
 
 
 def check_retired_literals():
-    """{name: {retired, from_disk, delta, agrees}} for every retired Waiv literal.
+    """{name: {retired, from_disk, delta, agrees}} for every retired Reference literal.
 
     Also re-checks pathorob_adapter.TARGETS, which remains the owner of the per-DATASET
     Table-1 targets: its averages must equal the JSON's or the two transcriptions have
@@ -310,8 +310,8 @@ def check_retired_literals():
                 "agrees_to_4dp": d is not None and abs(d) < tol,
             }
 
-    _cmp("RI_WAIV", RI_WAIV_RETIRED_LITERALS, {a: v["ri"] for a, v in WAIV.items()})
-    _cmp("HEST_WAIV", HEST_WAIV_RETIRED_LITERALS, HEST_WAIV)
+    _cmp("RI_REFERENCE", RI_REFERENCE_RETIRED_LITERALS, {a: v["ri"] for a, v in REFERENCE.items()})
+    _cmp("HEST_REFERENCE", HEST_REFERENCE_RETIRED_LITERALS, HEST_REFERENCE)
     try:
         from spectra.eval.pathorob_adapter import TARGETS  # noqa: PLC0415
     except Exception:  # noqa: BLE001 -- the cross-check is a bonus, not a requirement
@@ -320,7 +320,7 @@ def check_retired_literals():
                "virchow2": "virchow2_target"}
     _cmp("pathorob_adapter.TARGETS",
          {a: float(TARGETS[k]["avg"]) for a, k in ft_keys.items() if k in TARGETS},
-         {a: v["ri"] for a, v in WAIV.items()})
+         {a: v["ri"] for a, v in REFERENCE.items()})
     return out
 
 
@@ -371,16 +371,16 @@ def seed_sd_at_step(per_step: dict, step: int):
 # THE GRADING RULE.  Aggregate the NUMERATOR and the DENOMINATOR first, then divide
 # ONCE:
 #
-#       pct = mean_over_cells(our raw delta) / mean_over_cells(Waiv's raw gain) * 100
+#       pct = mean_over_cells(our raw delta) / mean_over_cells(Reference's raw gain) * 100
 #
 # NEVER average per-cell percentages.  A mean of ratios is dominated by whichever cell
 # happens to have the smallest denominator, and it is exactly that pathology that made
-# three of the nine (backbone x benchmark) cells ungradeable: virchow2's per-task Waiv
+# three of the nine (backbone x benchmark) cells ungradeable: virchow2's per-task Reference
 # THUNDER gains are +0.037 / -0.0030 / +0.0030, two of them below the seed floor and one
 # NEGATIVE, so no per-task ratio is meaningful -- yet their POOLED denominator is
 # +0.0090, which is well conditioned.
 #
-# The two ABSOLUTE averages (ours, Waiv's) are the primary quantities and must be led
+# The two ABSOLUTE averages (ours, Reference's) are the primary quantities and must be led
 # with; the percentage is the derived, secondary one.
 #
 # ALL-OR-NOTHING.  A pooled number may only be formed from EVERY cell of its group.  A
@@ -405,7 +405,7 @@ def pool_cells(cells, *, group: str = "", require_complete: bool = True,
 
         key        str   -- how the cell is named in the concentration table
         delta      float -- OUR raw improvement over OUR base, in raw metric units
-        gain       float -- WAIV's raw gain (their FT minus their base), same units
+        gain       float -- REFERENCE's raw gain (their FT minus their base), same units
         se_delta   float -- 1 SE of OUR delta = per-seed SD / sqrt(n_our_seeds)
         sd_gain    float -- 1 SD, one run, of the instrument that measured `gain`
         complete   bool  -- False when the cell is missing or PARTIAL
@@ -435,7 +435,7 @@ def pool_cells(cells, *, group: str = "", require_complete: bool = True,
     """
     out = {
         "group": group,
-        "rule": "ratio-of-means (pooled): mean(our delta) / mean(waiv gain) * 100",
+        "rule": "ratio-of-means (pooled): mean(our delta) / mean(reference gain) * 100",
         "n_cells": len(cells),
         "cells": [dict(c) for c in cells],
     }
@@ -466,9 +466,9 @@ def pool_cells(cells, *, group: str = "", require_complete: bool = True,
 
     out.update({
         "our_avg_delta": num,
-        "waiv_avg_gain": den,
+        "reference_avg_gain": den,
         "se_our_avg_delta": se_num,
-        "sd_waiv_avg_gain": sd_den,
+        "sd_reference_avg_gain": sd_den,
         "se_missing_cells": any_se_missing,
         "sd_missing_cells": any_sd_missing,
         "independence_caveat": (
@@ -540,7 +540,7 @@ def pool_cells(cells, *, group: str = "", require_complete: bool = True,
 #: not distinguishable from zero and the ratio is unbounded (its distribution has no
 #: finite mean).  That -- and only that -- is what "the denominator is noise" means.
 #: It is the same 2-sigma the CI construction uses; nothing here is tuned.
-POOLED_DENOMINATOR_GATE = ("|pooled waiv gain| > 2 * SD(pooled waiv gain) -- the "
+POOLED_DENOMINATOR_GATE = ("|pooled reference gain| > 2 * SD(pooled reference gain) -- the "
                            "denominator's sign/scale must be determined for the ratio "
                            "to be a measurement")
 
@@ -548,11 +548,11 @@ POOLED_DENOMINATOR_GATE = ("|pooled waiv gain| > 2 * SD(pooled waiv gain) -- the
 def pooled_denominator_unresolvable(gain: float | None, sd: float | None):
     """(unresolvable, reason) for a POOLED denominator.  See POOLED_DENOMINATOR_GATE."""
     if gain is None:
-        return True, "no pooled waiv gain"
+        return True, "no pooled reference gain"
     if sd is None:
-        return True, "no measured SD for the pooled waiv gain -- resolvability untestable"
+        return True, "no measured SD for the pooled reference gain -- resolvability untestable"
     if abs(gain) <= 2.0 * sd:
-        return True, ("pooled waiv gain %+.5f is within 2 SD (%.5f) of zero -- the "
+        return True, ("pooled reference gain %+.5f is within 2 SD (%.5f) of zero -- the "
                       "denominator's sign is not determined, so the ratio is unbounded"
                       % (gain, 2.0 * sd))
     return False, None
@@ -597,7 +597,7 @@ def load_thunder_seed_sd():
 #: The OTHER column of the same file: the RESOLVABILITY floor.
 #: offset_2se = |mean(d)| + 2*SD(d)/sqrt(12) over the 12 per-dataset F1 deltas of a seed
 #: pair, averaged over all 10 unordered pairs.  Its job is the denominator gate ("is
-#: Waiv's own gain even bigger than seed noise"), NOT the error bar on our task mean --
+#: Reference's own gain even bigger than seed noise"), NOT the error bar on our task mean --
 #: its SD is taken over DATASETS, which is the wrong variance component for that.  Both
 #: quantities live in the same JSON and swapping them inflates a noise estimate 2-4x, so
 #: each has its own loader and its own docstring saying which is which.

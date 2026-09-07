@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-gridcmp2-smoke-grid2
+#SBATCH --job-name=spectra-gridcmp2-smoke-grid2
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

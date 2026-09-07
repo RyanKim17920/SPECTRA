@@ -18,7 +18,7 @@ The interpretation rule is the whole point of the script. A contrastive fine-tun
                                       drifting toward one vector, cosine goes to 1 for
                                       everything, and the number is meaningless.
 
-So the headline is the **separation** ``matched - random``, never matched alone. PLAN.md 6
+So the headline is the **separation** ``matched - random``, never matched alone. the design spec 6
 says the same thing for the eval suite: "never report cosine similarity alone -- PLIP
 scores 0.878 cosine at 0.054 top-10".
 
@@ -28,7 +28,7 @@ mean pairwise cosine of a single condition against itself over different tiles
 (``within_condition_random``) as a direct collapse gauge.
 
 Reported separately for cross-SCANNER (same stain) and cross-STAIN (same scanner) pairs,
-and separately for train-split vs held-out-split conditions -- PLAN.md 6: "report
+and separately for train-split vs held-out-split conditions -- the design spec 6: "report
 cross-stain and cross-scanner separately; the composite hides the hard axis".
 
     python scripts/embed_probe.py --out probe_before.json

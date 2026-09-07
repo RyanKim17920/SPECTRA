@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-gridcmp2-follower
+#SBATCH --job-name=spectra-gridcmp2-follower
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -77,7 +77,7 @@ echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | rescue follow
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
 # No --model-prefix: the in-job follower of the other arms (gridcmp2.sbatch line 135) does
-# not pass one either, so the default -- "waiv_" + run dir name with - turned into _ -- is
+# not pass one either, so the default -- "reference_" + run dir name with - turned into _ -- is
 # what named THEIR feature and results dirs. Passing a hand-built prefix here would name
 # this arm differently from the arms it is meant to be compared against.
 #

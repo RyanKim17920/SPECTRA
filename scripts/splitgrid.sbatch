@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-splitgrid
+#SBATCH --job-name=spectra-splitgrid
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

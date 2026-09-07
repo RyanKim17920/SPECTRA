@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-smoke-ph
+#SBATCH --job-name=spectra-smoke-ph
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-fixed
+#SBATCH --job-name=spectra-fixed
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

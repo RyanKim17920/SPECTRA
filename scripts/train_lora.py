@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""Full contrastive fine-tune entrypoint (PLAN.md 3, phase 7).
+"""Full contrastive fine-tune entrypoint (the design spec 3, phase 7).
 
 LoRA-all-blocks + masked InfoNCE over PLISM registered pairs, holding out 2 scanners and
-3 stains. Retention/robustness evaluation hangs off ``on_checkpoint`` -- PLAN.md 3 phase 8
-requires it at *every* checkpoint, and PLAN.md 6 requires it reported alongside every
+3 stains. Retention/robustness evaluation hangs off ``on_checkpoint`` -- the design spec 3 phase 8
+requires it at *every* checkpoint, and the design spec 6 requires it reported alongside every
 robustness claim.
 
     python scripts/train_lora.py --out-dir runs/lora_r16_t007 --lora-rank 16 --temperature 0.07
@@ -61,10 +61,10 @@ def parse_args():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--packed-dir", type=Path, default=PLISM_PACKED)
     ap.add_argument("--out-dir", type=Path, required=True)
-    # split (PLAN.md 3 phase 7): 2 of 7 scanners, 3 of 13 stains
+    # split (the design spec 3 phase 7): 2 of 7 scanners, 3 of 13 stains
     ap.add_argument("--heldout-scanners", nargs="*", default=["GT450", "S210"])
     ap.add_argument("--heldout-stains", nargs="*", default=["HRH", "KR", "MY"])
-    # the unknown hyperparameters (PLAN.md 3 risk 4) -- these are what phase 8 sweeps
+    # the unknown hyperparameters (the design spec 3 risk 4) -- these are what phase 8 sweeps
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--temperature", type=float, default=0.07)
     ap.add_argument("--lora-rank", type=int, default=16)
@@ -143,8 +143,8 @@ def parse_args():
     ap.add_argument("--symmetric", action="store_true",
                     help="ABLATION ONLY: adds the anchor->positive direction, whose candidate "
                          "row spans conditions and reintroduces the acquisition shortcut")
-    # Retention term (PLAN.md 2 "frozen-teacher anchor"). Both are ALSO unknown
-    # hyperparameters (PLAN.md 3 risk 4), same class as --lr / --temperature / --lora-rank.
+    # Retention term (the design spec 2 "frozen-teacher anchor"). Both are ALSO unknown
+    # hyperparameters (the design spec 3 risk 4), same class as --lr / --temperature / --lora-rank.
     # Default 0.0 == OFF == the exact training path every published number was produced on.
     ap.add_argument("--retention-kl-weight", type=float, default=0.0,
                     help="lambda for the relational-KL retention term: "
@@ -365,7 +365,7 @@ def main() -> int:
     if args.full_ft and args.lr >= 5e-5:
         print(
             f"[train] WARNING: --full-ft with lr={args.lr} >= 5e-5. Full FT at high LR "
-            "destroys the representation in tens of steps. Waiv's Phaet used ~1e-5 class. "
+            "destroys the representation in tens of steps. Reference's Phaet used ~1e-5 class. "
             "Consider --lr 1e-5. Proceeding anyway.", flush=True,
         )
 
@@ -407,7 +407,7 @@ def main() -> int:
     if len(train_conds) < 2:
         raise SystemExit("need >=2 repacked training conditions; run `spectra-repack` first")
 
-    # PLAN.md 3 risk 3: held-out *conditions* are the only in-training check against
+    # the design spec 3 risk 3: held-out *conditions* are the only in-training check against
     # tile-identity memorisation, so prove the exclusion instead of trusting the split.
     assert set(train_conds).isdisjoint(heldout_conds), "train/heldout condition sets overlap"
     leaked = [c.key for c in train_conds
@@ -491,7 +491,7 @@ def main() -> int:
         )
     if heldout_loader is None:
         print("[train] WARNING: <2 held-out conditions repacked -- no held-out-condition eval. "
-              "PLAN.md 3 risk 3 says this is the only in-training check against tile memorisation.")
+              "the design spec 3 risk 3 says this is the only in-training check against tile memorisation.")
 
     model = build_encoder(
         backbone=args.backbone,
@@ -590,7 +590,7 @@ def main() -> int:
         cfg.ckpt_schedule = ckpt_schedule
 
     def on_checkpoint(model, step, metrics, ckpt_dir):
-        """PLAN.md 3 phase 8 wants the eval at *every* checkpoint, not just the end.
+        """the design spec 3 phase 8 wants the eval at *every* checkpoint, not just the end.
 
         It is NOT run inline. Extraction + the CPU kNN is ~15-20 min per checkpoint,
         which would roughly double wall time and stall the GPU. ``eval_checkpoints.py``

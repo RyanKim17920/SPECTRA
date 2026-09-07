@@ -59,7 +59,7 @@ from _config import HEST_WORK, RUNS, THUNDER  # noqa: E402
 # fine-tuned score is read from `hest_perf_per_encoder.custom_encoder`, so the fallback
 # path quietly mixed two different fields into one ratio (virchow2's base was low by
 # 2.4e-5, and three other scripts hardcoded the rounded 0.40324 as though it were the
-# base).  A base that cannot be read is UNAVAILABLE; a pct_of_waiv that divides by a
+# base).  A base that cannot be read is UNAVAILABLE; a pct_of_reference that divides by a
 # substituted number is worse than no number at all.  _load_hest_base() now raises.
 #
 # The retired literals are kept ONLY as an assertion target, so that a disagreement
@@ -74,7 +74,7 @@ HEST_BASE_RETIRED_LITERALS = {
 #   midnight  clsmean 0.41210  (mbase_clsmean_summary.json) — wrong pooling for midnight HEST
 #   any value from results_backup/hest_sub5/ — 5-task subset, wrong task count AND wrong protocol
 #   any value read from the `results.avg` field — that field is rounded and is NOT the
-#     field the fine-tuned collector reads; mixing the two biases pct_of_waiv.
+#     field the fine-tuned collector reads; mixing the two biases pct_of_reference.
 
 # ---------------------------------------------------------------------------
 # ARM <-> BACKBONE.  The single mapping between the short arm token that appears
@@ -111,10 +111,10 @@ ARMS: tuple[str, ...] = tuple(ARM_BACKBONE)
 # been copied into five scripts on the strength of it.  The real measurement is
 # PathoROB's own results_summary.json for the untuned feature dirs; eval_common reads it.
 #
-# They are also NOT ri_curve.json["targets"]["*_base"], which is WAIV'S PUBLISHED Table-1
+# They are also NOT ri_curve.json["targets"]["*_base"], which is REFERENCE'S PUBLISHED Table-1
 # base row at 3 decimals -- a different quantity that happens to agree to 3 dp.
 RI_BASE, RI_BASE_SOURCE = _ec.load_ri_base()
-RI_WAIV, RI_WAIV_SOURCE = _ec.load_ri_waiv()
+RI_REFERENCE, RI_REFERENCE_SOURCE = _ec.load_ri_reference()
 
 RI_BASE_RETIRED_LITERALS = {"phikon": 0.4686, "midnight": 0.7589, "virchow2": 0.8582}
 
@@ -166,14 +166,14 @@ HEST_WORK_DIR = HEST_WORK
 # ---------------------------------------------------------------------------
 # ONE metric field, ONE pooling rule, ONE base loader -- used by every consumer
 # (collect_final5, scoreboard, final_recipe_report).  The whole repo must read the
-# same field for base and for fine-tuned, or pct_of_waiv is biased.
+# same field for base and for fine-tuned, or pct_of_reference is biased.
 HEST_METRIC_FIELD = "hest_perf_per_encoder.custom_encoder"
 
 HEST_BASE_FILES = {
     "phikon":   "base_cls_summary.json",
     "midnight": "midnight_base_cls_9task_v1_summary.json",
     "virchow2": "vbase_clsmean_summary.json",
-    # hoptimus / uni2: cls-pooled, per HEST_POOLING below (neither backbone is on Waiv's
+    # hoptimus / uni2: cls-pooled, per HEST_POOLING below (neither backbone is on Reference's
     # clsmean list).  Bare filenames like the entries above -- `_hest_summary_paths`
     # resolves them against HEST_WORK_DIR/results and the results_backup mirror.  Until
     # those base evals land the files are simply absent, and `_load_hest_base` leaves the
@@ -259,7 +259,7 @@ def _load_hest_base():
             raise FileNotFoundError(
                 "HEST base for %s: none of %s is readable, and there is deliberately no "
                 "literal fallback any more (F-E).  Every consumer must read the SAME "
-                "field (%s) for base and for fine-tuned, or pct_of_waiv is biased."
+                "field (%s) for base and for fine-tuned, or pct_of_reference is biased."
                 % (arm, [str(c) for c in _hest_summary_paths(fname)], HEST_METRIC_FIELD))
     return vals, src
 
@@ -283,24 +283,24 @@ THUNDER_ROOT = THUNDER
 # PAPER_CLS_SPIDER    -- the 4 SPIDER organ subsets.  These POSTDATE the THUNDER paper,
 #                        which is why they are not in the 12; they are classification-
 #                        only (no segmentation task exists for them).
-# PAPER_CLS_WAIV16    -- the 16 datasets WAIV average over in arXiv:2607.22861 Table 2.
+# PAPER_CLS_REFERENCE16    -- the 16 datasets REFERENCE average over in arXiv:2607.22861 Table 2.
 #
-# WHY THIS MATTERS.  Waiv's published THUNDER classification numbers are means over 16
+# WHY THIS MATTERS.  Reference's published THUNDER classification numbers are means over 16
 # datasets; ours were means over 12.  That is a ROSTER mismatch, not a model difference,
-# and it moved every one of our base task means 0.86-3.72 points BELOW Waiv's published
-# base -- which then flowed straight into pct_of_waiv as a bogus numerator offset.  On
-# the 16-set roster our bases agree with Waiv's published bases to within 0.61 points on
+# and it moved every one of our base task means 0.86-3.72 points BELOW Reference's published
+# base -- which then flowed straight into pct_of_reference as a bogus numerator offset.  On
+# the 16-set roster our bases agree with Reference's published bases to within 0.61 points on
 # all 9 (backbone, task) cells; see docs/THUNDER_16DS_2026-08-26.md.
 #
 # `PAPER_CLS` stays the 12-set panel so that every existing consumer (the seed-floor
 # measurement, scoreboard, thunder_seed_delta) keeps reading the quantity it was built
-# against.  Consumers that grade against Waiv must ask for PAPER_CLS_WAIV16 explicitly.
+# against.  Consumers that grade against Reference must ask for PAPER_CLS_REFERENCE16 explicitly.
 PAPER_CLS_THUNDER12 = [
     "bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
     "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds",
 ]
 PAPER_CLS_SPIDER = ["spider_breast", "spider_colorectal", "spider_skin", "spider_thorax"]
-PAPER_CLS_WAIV16 = PAPER_CLS_THUNDER12 + PAPER_CLS_SPIDER
+PAPER_CLS_REFERENCE16 = PAPER_CLS_THUNDER12 + PAPER_CLS_SPIDER
 PAPER_CLS = PAPER_CLS_THUNDER12
 # ---------------------------------------------------------------------------
 # SEGMENTATION ROSTER -- SINGLE OWNER (2026-08-26)
@@ -311,7 +311,7 @@ PAPER_CLS = PAPER_CLS_THUNDER12
 # depended on which module it happened to import, and two different quantities were
 # printed under one label.
 #
-# PAPER_SEG_PUBLISHED -- Waiv's published 4-dataset segmentation panel (arXiv:2607.22861).
+# PAPER_SEG_PUBLISHED -- Reference's published 4-dataset segmentation panel (arXiv:2607.22861).
 # PAPER_SEG_SUBMITTED -- the 2 datasets we run on every exploratory checkpoint.
 # PAPER_SEG           -- the default panel our collectors average over = SUBMITTED.
 #
@@ -329,7 +329,7 @@ PAPER_CLS = PAPER_CLS_THUNDER12
 # 2-dataset panel is therefore the deliberate operating point for exploratory cohorts, and
 # segpath is run ONCE, on the final locked configuration, as a last-case evaluation.
 #
-# CONSEQUENCE THAT MUST BE STATED WHEREVER SEGMENTATION IS COMPARED TO WAIV:
+# CONSEQUENCE THAT MUST BE STATED WHEREVER SEGMENTATION IS COMPARED TO REFERENCE:
 # our segmentation mean has 2-dataset support and theirs has 4.  That is a support
 # mismatch, not a like-for-like delta, and it stays one until the final segpath run lands.
 # Flipping this default to PAPER_SEG_PUBLISHED before then would not fix the comparison --
@@ -600,7 +600,7 @@ def _thunder_base_per_ds(arm: str, cls_datasets: list[str] | None = None,
     """Return per-dataset F1 for the BASE checkpoint.  Returns dict[task, dict[ds, float]].
 
     `cls_datasets` selects the classification roster (default PAPER_CLS = the 12
-    THUNDER-paper sets).  Callers that grade against Waiv must pass PAPER_CLS_WAIV16.
+    THUNDER-paper sets).  Callers that grade against Reference must pass PAPER_CLS_REFERENCE16.
     """
     dirs = THUNDER_BASE_DIRS.get(arm)
     if dirs is None:

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-gridcmp3
+#SBATCH --job-name=spectra-gridcmp3
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -57,7 +57,7 @@
 # is the MATCHED-IMAGE comparison against the completed arms' final point, and step 1500
 # here is the matched-STEP comparison. Both are wanted; do not trim the schedule.
 #
-#   SPECTRA_ARM=a sbatch --job-name=waiv-gridcmp3-a scripts/gridcmp3.sbatch
+#   SPECTRA_ARM=a sbatch --job-name=spectra-gridcmp3-a scripts/gridcmp3.sbatch
 
 set -euo pipefail
 
@@ -209,7 +209,7 @@ CUDA_VISIBLE_DEVICES=1 "$PY" "$PIN"/scripts/embed_probe.py \
 # the snapshot -- a relative run-dir would send embed_probe looking for <snapshot>/runs/,
 # and the default --python would resolve to <snapshot>/.venv/bin/python.
 #
-# NO --model-prefix. The default ("waiv_" + run dir name, dashes to underscores) is what
+# NO --model-prefix. The default ("reference_" + run dir name, dashes to underscores) is what
 # named every comparable arm's feature and results dirs; passing a hand-built prefix
 # renames this arm out of the comparison.
 rm -f "$OUT_DIR/TRAIN_DONE"

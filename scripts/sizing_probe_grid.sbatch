@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-gridsize
+#SBATCH --job-name=spectra-gridsize
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -12,7 +12,7 @@
 #   sbatch scripts/sizing_probe_grid.sbatch "2x1200 2x1400 2x1600" 600 4
 #
 # GRID geometries (CxT), one GPU. See scripts/sizing_probe_grid.py for why C=2 is the
-# negatives-maximising choice and docs/RESULTS.md 8.6 for the resulting table.
+# negatives-maximising choice and docs/archive/RESULTS.md 8.6 for the resulting table.
 #
 # ALLOC_CONF is a first-class variable here, not boilerplate: at these batch sizes the
 # ceiling is partly a FRAGMENTATION ceiling, and expandable_segments changes it. Pass it

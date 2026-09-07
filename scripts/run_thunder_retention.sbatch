@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-thunder-ret
+#SBATCH --job-name=spectra-thunder-ret
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -9,7 +9,7 @@
 #SBATCH --output=$SPECTRA_THUNDER/logs/slurm-%x-%j.out
 #SBATCH --error=$SPECTRA_THUNDER/logs/slurm-%x-%j.err
 #
-# THUNDER retention at CHECKPOINT time -- PLAN.md §4 phase 8 ("evaluate retention at every
+# THUNDER retention at CHECKPOINT time -- the design spec §4 phase 8 ("evaluate retention at every
 # checkpoint, not just at the end") and §6 (retention reported alongside every robustness
 # claim, always as a pair).
 #

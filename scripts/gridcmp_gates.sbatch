@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-gridgates
+#SBATCH --job-name=spectra-gridgates
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

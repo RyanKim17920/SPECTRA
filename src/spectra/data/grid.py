@@ -88,7 +88,7 @@ def assert_grid_batch(
        tissue, so one true match is scored as a negative (a false negative);
     4. a condition index outside ``allowed_conditions`` -- a held-out condition leaking
        into a training batch;
-    5. a candidate block that is not condition-homogeneous -- the original PLAN.md 2
+    5. a candidate block that is not condition-homogeneous -- the original the design spec 2
        constraint: cross-condition candidates make "different acquisition" a
        partially-correct shortcut for "different tile".
     """

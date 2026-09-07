@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-eval-backfill
+#SBATCH --job-name=spectra-eval-backfill
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

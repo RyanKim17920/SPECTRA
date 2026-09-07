@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hest-midnight-s3-100-cls
+#SBATCH --job-name=spectra-hest-midnight-s3-100-cls
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

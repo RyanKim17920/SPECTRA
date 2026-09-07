@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hest-midnight-split250-cls
+#SBATCH --job-name=spectra-hest-midnight-split250-cls
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -11,7 +11,7 @@
 #
 # HEST-Benchmark: midnight, splitgrid final checkpoint, step 250 (RI 0.9027).
 # Run: runs/splitgrid-386380/step_0000250
-# Pooling: cls  (midnight HEST protocol -- verified base 0.39521 vs Waiv 0.3952, exact)
+# Pooling: cls  (midnight HEST protocol -- verified base 0.39521 vs Reference 0.3952, exact)
 # LoRA r32 / alpha64 / proj_out_dim 512 / clsmean at train time.
 #
 # CACHE KEY: exp_code `splitgrid_midnight_ft250_cls_v1` verified absent from

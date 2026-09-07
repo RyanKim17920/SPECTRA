@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-sizing
+#SBATCH --job-name=spectra-sizing
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

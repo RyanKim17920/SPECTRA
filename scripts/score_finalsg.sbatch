@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-score-finalsg
+#SBATCH --job-name=spectra-score-finalsg
 #SBATCH --partition=main
 #SBATCH --account=max
 #SBATCH --qos=high
@@ -47,9 +47,9 @@
 #   [build_model] skipping projector: trained with a 1024-d input, evaluating at 2048-d
 #
 # USAGE
-#   sbatch --job-name=waiv-score-phikon   scripts/score_finalgem.sbatch phikon
-#   sbatch --job-name=waiv-score-midnight scripts/score_finalgem.sbatch midnight
-#   sbatch --job-name=waiv-score-virchow2 scripts/score_finalgem.sbatch virchow2
+#   sbatch --job-name=spectra-score-phikon   scripts/score_finalgem.sbatch phikon
+#   sbatch --job-name=spectra-score-midnight scripts/score_finalgem.sbatch midnight
+#   sbatch --job-name=spectra-score-virchow2 scripts/score_finalgem.sbatch virchow2
 set -euo pipefail
 
 REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
@@ -143,7 +143,7 @@ print(f"[plan] this pass will score         : {[s for s in ck if s not in have]}
 EOF
 
 # NO --model-prefix and NO --follow.
-#   --model-prefix: the default is "waiv_" + the run-dir name with dashes as underscores.
+#   --model-prefix: the default is "reference_" + the run-dir name with dashes as underscores.
 #     None of these three has any existing feature/result dir, so the default names them.
 #   --follow: one-shot drain over what is already on disk. Without it the loop makes exactly
 #     one pass and exits, so --max-wait-s is irrelevant -- the idle-timeout failure mode

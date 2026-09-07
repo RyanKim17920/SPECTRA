@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hest-virchow1-base-clsmean
+#SBATCH --job-name=spectra-hest-virchow1-base-clsmean
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -14,7 +14,7 @@
 # Backbone pinned in-file (NOT $SPECTRA_BACKBONE) because an unset env var silently
 # falls back to owkin/phikon-v2 and would produce a phikon row wearing this label.
 #
-# Pooling is `cls`: neither H-Optimus-0 nor UNI2-h is on Waiv's clsmean list
+# Pooling is `cls`: neither H-Optimus-0 nor UNI2-h is on Reference's clsmean list
 # (H0-mini is, H-Optimus-0 is not).
 #
 # CACHE KEY: run_hest.py keys the embedding cache on --exp-code ALONE (pooling is NOT

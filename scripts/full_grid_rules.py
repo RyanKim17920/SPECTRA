@@ -8,7 +8,7 @@ meta={r['run']:r for r in rows}
 RUNS='${SPECTRA_RUNS:?}'
 BB=['phikon','midnight','virchow2']
 RI_BASE={"phikon":0.4686,"midnight":0.7589,"virchow2":0.8582}
-RI_WAIV={"phikon":0.806,"midnight":0.924,"virchow2":0.918}
+RI_REFERENCE={"phikon":0.806,"midnight":0.924,"virchow2":0.918}
 
 curves={}
 for run in {r['run'] for r in rows}:
@@ -24,7 +24,7 @@ for run in {r['run'] for r in rows}:
             ci=st.mean(f('confounder_insensitivity')) if f('confounder_insensitivity') else None,
             pp=st.mean(f('prediction_performance')) if f('prediction_performance') else None,
             hest=hest.get((run,p['step'])),bb=bb,
-            ri_pct=100*(p['avg_robustness_index']-RI_BASE[bb])/(RI_WAIV[bb]-RI_BASE[bb])))
+            ri_pct=100*(p['avg_robustness_index']-RI_BASE[bb])/(RI_REFERENCE[bb]-RI_BASE[bb])))
     curves[run]=pts
 
 print("FULL-GRID checkpoint availability per run (steps; * = has HEST)")

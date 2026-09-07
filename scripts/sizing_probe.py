@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""Measure what actually fits, per backbone, instead of guessing (PLAN.md §5).
+"""Measure what actually fits, per backbone, instead of guessing (the design spec §5).
 
 Why this exists
 ---------------
 The negative count in our objective is ``group_size - 1`` and negatives may only come
-from the anchor's own condition-homogeneous group (PLAN.md §2). Gradient accumulation
+from the anchor's own condition-homogeneous group (the design spec §2). Gradient accumulation
 therefore **cannot** buy negatives -- they have to be in the same *forward* batch. So the
 only question that matters for a new backbone is: how many images per step fit, and how
 slow is a step at that size.

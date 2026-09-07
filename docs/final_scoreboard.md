@@ -1,4 +1,4 @@
-# Waiv final scoreboard
+# Reference final scoreboard
 
 **Generated file -- do not hand-edit.**  Regenerate with:
 
@@ -6,7 +6,7 @@
 ./.venv/bin/python scripts/final_scoreboard.py
 ```
 
-Waiv targets: `docs/waiv_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24)`.
+Reference targets: `docs/reference_published.json (arXiv:2607.22861v1 Tables 1/2/3, verified 2026-08-24)`.
 Every number below is read from disk at generation time.  `MISSING` means the
 metric is not on disk for that cell; it is never substituted from another
 checkpoint, another step, or another arm.
@@ -23,7 +23,7 @@ Checkpoint per run is chosen by the **1se rule**: 1-SE (online): B = best avg_ro
 Metric: PathoROB avg_robustness_index (bounded, published).  This SUPERSEDES the retired `confounder_insensitivity >= 0.75` rule (and its 250/125/125 picks), which
 graded an unbounded odds with a per-dataset chance level -- see `docs/CAVEATS.md`.
 
-SE fed to the rule: **0.007** -- docs/RESULTS.md section 12.3 measured between-seed avg-RI floor 0.0070 (max |ctrl - ctrlseed| over checkpoints, n=2); OPERATOR INPUT, not a per-checkpoint bootstrap SE -- PathoROB's bootstrap fields are on no curve on disk.
+SE fed to the rule: **0.007** -- docs/archive/RESULTS.md section 12.3 measured between-seed avg-RI floor 0.0070 (max |ctrl - ctrlseed| over checkpoints, n=2); OPERATOR INPUT, not a per-checkpoint bootstrap SE -- PathoROB's bootstrap fields are on no curve on disk.
 Per-checkpoint bootstrap SE found on disk: False.
 The sensitivity of every pick to that one number is tabulated below, so the
 choice is checkable rather than asserted.
@@ -33,7 +33,7 @@ THUNDER for a given run.  Best-RI from one checkpoint and best-HEST from another
 is never combined.  Where two seeds of one backbone plateau at different steps
 the `step` cell lists both and the cell's floor is the larger of the two.
 
-`pct` = (our mean - our base) / (Waiv ft - Waiv base) x 100, UNCAPPED.
+`pct` = (our mean - our base) / (Reference ft - Reference base) x 100, UNCAPPED.
 
 ### 1a. Checkpoint the rule selected, per run
 
@@ -80,7 +80,7 @@ the `step` cell lists both and the cell's floor is the larger of the two.
 
 A cell with two steps means the seeds of that backbone disagree at that SE; `-` means the rule did not fire on any seed.
 
-| backbone | benchmark | step | ours | our base | Waiv base | Waiv ft | our gain | Waiv gain | pct of Waiv | +/-95% | n | status |
+| backbone | benchmark | step | ours | our base | Reference base | Reference ft | our gain | Reference gain | pct of Reference | +/-95% | n | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Phikon-v2 | RI | 200 | 0.83910 | 0.46861 | 0.46900 | 0.80600 | 0.37049 | 0.33739 | 109.8 | 2.0 | 2 | PASS |
 | Phikon-v2 | HEST | 200 | 0.39050 | 0.37470 | 0.37470 | 0.39430 | 0.01580 | 0.01960 | 80.6 | 10.7 | 2 | NOT RESOLVED |
@@ -113,15 +113,15 @@ Per-model verdict (THE criterion: pct >= 70 on each of RI/HEST/THUNDER and mean 
 ## 2. THUNDER, all six published tasks (second corpus)
 
 Source: `/data/ryan.kim/pathfm-full-evals/thunder/outputs/res/results.csv` -- the harness's own `benchmark_*` roll-up rows,
-which are the same quantity Waiv tabulate in their Table 2.  This corpus is
+which are the same quantity Reference tabulate in their Table 2.  This corpus is
 the ONLY place segmentation, calibration (ECE) and adversarial exist on our
 side; the old harness computes none of them.  Its base-controls also sit much
-closer to Waiv's published base than the old harness does (`base gap` column),
+closer to Reference's published base than the old harness does (`base gap` column),
 so the within-corpus base-vs-tuned delta is the defensible one.
 
 ### Phikon-v2
 
-| task | our base | Waiv base | base gap | Waiv ft | Waiv gain | c3s-s0-step250 | c3s-s1-step250 | c50-s0-step200 | pct of Waiv (recipe arm, mean over seeds) |
+| task | our base | Reference base | base gap | Reference ft | Reference gain | c3s-s0-step250 | c3s-s1-step250 | c50-s0-step200 | pct of Reference (recipe arm, mean over seeds) |
 |---|---|---|---|---|---|---|---|---|---|
 | knn | 73.9 | 74.0 | -0.1 | 77.7 | 3.7 | 77.4 | 76.3 | 77.3 | 79.7 (n=2) |
 | linear | 79.7 | 79.3 | 0.4 | 80.7 | 1.4 | 81.4 | 80.8 | 81.4 | 100.0 (n=2) |
@@ -132,35 +132,35 @@ so the within-corpus base-vs-tuned delta is the defensible one.
 
 ### Midnight-12k
 
-| task | our base | Waiv base | base gap | Waiv ft | Waiv gain | c3s-s0-step125 | c3s-s1-step125 | c50-s0-step150 | pct of Waiv (recipe arm, mean over seeds) |
+| task | our base | Reference base | base gap | Reference ft | Reference gain | c3s-s0-step125 | c3s-s1-step125 | c50-s0-step150 | pct of Reference (recipe arm, mean over seeds) |
 |---|---|---|---|---|---|---|---|---|---|
 | knn | 80.0 | 80.0 | 0.0 | 81.7 | 1.7 | 81.9 | 81.8 | 81.4 | 108.8 (n=2) |
-| linear | 84.8 | 84.4 | 0.4 | 84.6 | 0.2 | 85.8 | 85.6 | 85.7 | INDETERMINATE (Waiv gain +0.2pp is within 0.2pp print error) |
+| linear | 84.8 | 84.4 | 0.4 | 84.6 | 0.2 | 85.8 | 85.6 | 85.7 | INDETERMINATE (Reference gain +0.2pp is within 0.2pp print error) |
 | few_shot | 71.5 | 71.5 | 0.0 | 75.2 | 3.7 | 77.1 | 77.4 | 77.0 | 155.4 (n=2) |
 | segmentation | 68.0 | 66.0 | 2.0 | 67.6 | 1.6 | 68.6 | 68.3 | 68.1 | 28.1 (n=2) |
-| calibration (lower is better) | 2.9 | 2.4 | 0.5 | 2.3 | -0.1 | 3.7 | 3.6 | 3.5 | INDETERMINATE (Waiv gain -0.1pp is within 0.2pp print error) |
+| calibration (lower is better) | 2.9 | 2.4 | 0.5 | 2.3 | -0.1 | 3.7 | 3.6 | 3.5 | INDETERMINATE (Reference gain -0.1pp is within 0.2pp print error) |
 | adversarial (lower is better) | 29.9 | 35.7 | -5.8 | 23.2 | -12.5 | 23.3 | 22.6 | 21.1 | 55.6 (n=2) |
 
-* INDETERMINATE cells above: Waiv's own published gain for that task is at or below 0.2pp, twice the 0.1pp granularity their table is printed to, so the ratio is rounding, not a measurement.  Read the raw columns for these tasks.
+* INDETERMINATE cells above: Reference's own published gain for that task is at or below 0.2pp, twice the 0.1pp granularity their table is printed to, so the ratio is rounding, not a measurement.  Read the raw columns for these tasks.
 
 ### Virchow2
 
-| task | our base | Waiv base | base gap | Waiv ft | Waiv gain | c3s-s0-step125 | c3s-s1-step125 | pct of Waiv (recipe arm, mean over seeds) |
+| task | our base | Reference base | base gap | Reference ft | Reference gain | c3s-s0-step125 | c3s-s1-step125 | pct of Reference (recipe arm, mean over seeds) |
 |---|---|---|---|---|---|---|---|---|
 | knn | 82.9 | 82.9 | 0.0 | 82.6 | -0.3 | 82.8 | 82.8 | 33.3 (n=2) |
 | linear | 84.7 | 84.8 | -0.1 | 85.1 | 0.3 | 85.3 | 85.6 | 250.0 (n=2) |
 | few_shot | 74.0 | 73.9 | 0.1 | 76.6 | 2.7 | 77.8 | 78.1 | 146.3 (n=2) |
-| segmentation | 69.0 | 68.2 | 0.8 | 68.0 | -0.2 | 68.9 | 69.1 | INDETERMINATE (Waiv gain -0.2pp is within 0.2pp print error) |
+| segmentation | 69.0 | 68.2 | 0.8 | 68.0 | -0.2 | 68.9 | 69.1 | INDETERMINATE (Reference gain -0.2pp is within 0.2pp print error) |
 | calibration (lower is better) | 4.0 | 3.6 | 0.4 | 4.2 | 0.6 | 4.3 | 4.2 | 41.7 (n=2) |
 | adversarial (lower is better) | 0.3 | 31.1 | -30.8 | 7.7 | -23.4 | 0.2 | 0.1 | SUSPECT -- not scored |
 
-* **adversarial SUSPECT for Virchow2** -- attack ineffective: our f1 drop is <5pp where Waiv report a large drop for the same base weights, so the drop measures the attack, not the model.  Printed, not scored.
+* **adversarial SUSPECT for Virchow2** -- attack ineffective: our f1 drop is <5pp where Reference report a large drop for the same base weights, so the drop measures the attack, not the model.  Printed, not scored.
 
-* INDETERMINATE cells above: Waiv's own published gain for that task is at or below 0.2pp, twice the 0.1pp granularity their table is printed to, so the ratio is rounding, not a measurement.  Read the raw columns for these tasks.
+* INDETERMINATE cells above: Reference's own published gain for that task is at or below 0.2pp, twice the 0.1pp granularity their table is printed to, so the ratio is rounding, not a measurement.  Read the raw columns for these tasks.
 
 ### H-Optimus-0
 
-| task | our base | Waiv base | base gap | Waiv ft | Waiv gain | bm3-s0-step100 | c3s-s0-step125 | c3s-s1-step125 | c50-s0-step100 | c50-s0-step150 | c50-s0-step50 | pct of Waiv (recipe arm, mean over seeds) |
+| task | our base | Reference base | base gap | Reference ft | Reference gain | bm3-s0-step100 | c3s-s0-step125 | c3s-s1-step125 | c50-s0-step100 | c50-s0-step150 | c50-s0-step50 | pct of Reference (recipe arm, mean over seeds) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | knn | 81.4 | 81.5 | -0.1 | 81.9 | 0.4 | 80.6 | 80.9 | 81.7 | 81.6 | 81.2 | 81.8 | -25.0 (n=2) |
 | linear | 83.8 | 83.7 | 0.1 | 84.0 | 0.3 | 83.9 | 84.0 | 83.3 | 84.2 | 83.8 | 83.9 | -50.0 (n=2) |
@@ -171,16 +171,16 @@ so the within-corpus base-vs-tuned delta is the defensible one.
 
 ### UNI2-h
 
-| task | our base | Waiv base | base gap | Waiv ft | Waiv gain | bm3-s0-step100 | c3s-s0-step125 | c3s-s1-step125 | c50-s0-step100 | c50-s0-step150 | c50-s0-step50 | pct of Waiv (recipe arm, mean over seeds) |
+| task | our base | Reference base | base gap | Reference ft | Reference gain | bm3-s0-step100 | c3s-s0-step125 | c3s-s1-step125 | c50-s0-step100 | c50-s0-step150 | c50-s0-step50 | pct of Reference (recipe arm, mean over seeds) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| knn | 83.3 | 83.3 | 0.0 | 83.4 | 0.1 | 83.3 | 83.0 | 82.8 | 83.3 | 82.5 | 83.0 | INDETERMINATE (Waiv gain +0.1pp is within 0.2pp print error) |
+| knn | 83.3 | 83.3 | 0.0 | 83.4 | 0.1 | 83.3 | 83.0 | 82.8 | 83.3 | 82.5 | 83.0 | INDETERMINATE (Reference gain +0.1pp is within 0.2pp print error) |
 | linear | 85.7 | 86.3 | -0.6 | 85.5 | -0.8 | 86.0 | 86.1 | 86.2 | 86.1 | 85.9 | 85.7 | -56.3 (n=2) |
 | few_shot | 79.8 | 79.8 | 0.0 | 79.5 | -0.3 | 79.1 | 78.8 | 78.7 | 79.2 | 78.7 | 80.0 | 350.0 (n=2) |
 | segmentation | 69.2 | 68.1 | 1.1 | 67.6 | -0.5 | 69.1 | 68.7 | 68.4 | 69.0 | 69.3 | 69.0 | 130.0 (n=2) |
 | calibration (lower is better) | 3.9 | 3.7 | 0.2 | 2.5 | -1.2 | 3.4 | 4.3 | 4.1 | 4.6 | 4.2 | 3.7 | -25.0 (n=2) |
 | adversarial (lower is better) | 26.8 | 31.0 | -4.2 | 24.1 | -6.9 | 21.2 | 19.5 | 19.0 | 22.0 | MISSING | 27.8 | 109.4 (n=2) |
 
-* INDETERMINATE cells above: Waiv's own published gain for that task is at or below 0.2pp, twice the 0.1pp granularity their table is printed to, so the ratio is rounding, not a measurement.  Read the raw columns for these tasks.
+* INDETERMINATE cells above: Reference's own published gain for that task is at or below 0.2pp, twice the 0.1pp granularity their table is printed to, so the ratio is rounding, not a measurement.  Read the raw columns for these tasks.
 
 ## 3. PathoROB robustness index, all five backbones (second corpus)
 
@@ -189,7 +189,7 @@ key `robustness_index`, averaged over tcga / camelyon / tolkach_esca -- the same
 three datasets and the same key section 1 uses, but from the newer corpus, which
 is the only one carrying the two gated backbones.
 
-| backbone | our base-control | Waiv base | Waiv ft | best tuned (arm) | pct of Waiv |
+| backbone | our base-control | Reference base | Reference ft | best tuned (arm) | pct of Reference |
 |---|---|---|---|---|---|
 | Phikon-v2 | 0.4701 | 0.4690 | 0.8060 | 0.8421 (c50-s0-step200) | 110.4 |
 | Midnight-12k | 0.7589 | 0.7590 | 0.9240 | 0.9126 (c3s-s1-step125) | 93.2 |
@@ -204,13 +204,13 @@ repo-local `third_party/PathoROB` tree instead and is NOT interchangeable.
 ## 4. CPTAC / Patho-Bench
 
 Source: `/data/ryan.kim/pathfm-full-evals/cptac/<model>/aggregate.json`, key `classification_macro_ovr_auc`.
-Waiv's side is `docs/waiv_published.json -> table4_pathobench`.  Only the
-mutation/MSI AUC tasks are metric-compatible: Waiv score `Immune class` as
+Reference's side is `docs/reference_published.json -> table4_pathobench`.  Only the
+mutation/MSI AUC tasks are metric-compatible: Reference score `Immune class` as
 balanced accuracy while we score it as macro-OvR AUC, and their survival cells
 are a C-index we compute per-alpha, so both groups are excluded from the paired
 mean and listed as MISSING rather than silently averaged in.
 
-| backbone | arm | n matched tasks | our mean AUC (matched) | Waiv base | Waiv ft | pct of Waiv |
+| backbone | arm | n matched tasks | our mean AUC (matched) | Reference base | Reference ft | pct of Reference |
 |---|---|---|---|---|---|---|
 | Phikon-v2 | c3s-s0-step250 (no base-control) | 25 | 68.58 | 66.43 | 67.86 | MISSING |
 | Phikon-v2 | c3s-s1-step250 (no base-control) | 25 | 68.64 | 66.43 | 67.86 | MISSING |
@@ -247,13 +247,13 @@ reader has to infer it from a blank cell.
 | item | status | why |
 |---|---|---|
 | THUNDER segmentation (section 1) | MISSING | `collect_final5.PAPER_SEG` defaults to ocelot+pannuke and those two cells were not run for every arm; the 16-set roster has no SPIDER segmentation task at all. Section 2 carries segmentation from the second corpus instead. |
-| THUNDER calibration / adversarial (section 1) | NOT COMPUTED | `eval_common.WAIV_THUNDER_TASKS` deliberately covers four tasks; the old harness never computed ECE or an attack.  Section 2 carries both. |
-| THUNDER adversarial, Virchow2 only | SUSPECT | attack ineffective: our f1 drop is <5pp where Waiv report a large drop for the same base weights, so the drop measures the attack, not the model.  Printed, not scored.  All three Virchow2 models report a 0.1-0.3pp drop against a published 31.1; the other four backbones report 19-32 and are scored normally. |
+| THUNDER calibration / adversarial (section 1) | NOT COMPUTED | `eval_common.REFERENCE_THUNDER_TASKS` deliberately covers four tasks; the old harness never computed ECE or an attack.  Section 2 carries both. |
+| THUNDER adversarial, Virchow2 only | SUSPECT | attack ineffective: our f1 drop is <5pp where Reference report a large drop for the same base weights, so the drop measures the attack, not the model.  Printed, not scored.  All three Virchow2 models report a 0.1-0.3pp drop against a published 31.1; the other four backbones report 19-32 and are scored normally. |
 | PathoROB base-control for phikon-v2 (second corpus) | MISSING | `phikon2-base-control_clsmean` is absent from all three metric dirs under /data/ryan.kim/pathfm-full-evals/pathorob/results. |
 | CPTAC base-control for midnight / phikon-v2 / Virchow2 | MISSING | Only hoptimus0 and uni2h have a `base-control` dir under the CPTAC tree. |
 | CPTAC for 4 hoptimus arms | EMPTY | hoptimus0-bm3-s0-step100 and hoptimus0-c50-s0-step{50,100,150} have no `.complete`, no aggregate.json and zero task dirs. |
-| CPTAC Immune class / survival | NOT COMPARED | metric mismatch: Waiv report balanced accuracy and C-index, we compute macro-OvR AUC and a per-alpha C-index. |
-| Waiv Patho-Bench grand average (63 tasks) | NOT COMPARABLE | our CPTAC corpus covers 38 tasks, 26 of which map onto their table; their grand average also spans Hancock / PANDA / BC-Therapy cohorts we never ran. |
+| CPTAC Immune class / survival | NOT COMPARED | metric mismatch: Reference report balanced accuracy and C-index, we compute macro-OvR AUC and a per-alpha C-index. |
+| Reference Patho-Bench grand average (63 tasks) | NOT COMPARABLE | our CPTAC corpus covers 38 tasks, 26 of which map onto their table; their grand average also spans Hancock / PANDA / BC-Therapy cohorts we never ran. |
 | section 1 THUNDER for Phikon-v2 | PARTIAL | coverage 0,0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-phikon-s0-399165_s0000200, f5_ci-phikon-s1-407565_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165_s0000200, f5_genMASK-c50-lr1e-4-kl0-ms500-phikon-s1-t900-407565_s0000200 |
 | section 1 THUNDER for Midnight-12k | PARTIAL | coverage 0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-midnight-s0-399166_s0000150, f5_genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166_s0000150 |
 | section 1 THUNDER for Virchow2 | PARTIAL | coverage 0/16 per seed; 12ds floor invalid below 12/12; nothing on disk for this (run, step) under /data/ryan.kim/thunder/outputs/res -- searched f5_ci-virchow2-s0-399167_s0000100, f5_genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167_s0000100 |

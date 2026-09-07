@@ -38,7 +38,7 @@ except Exception: pass" 2>/dev/null); do
       done
     fi
   done
-  for F in logs/slurm-waiv-hest-final5-*.out; do
+  for F in logs/slurm-spectra-hest-final5-*.out; do
     [ -f "$F" ] || continue
     J=$(basename "$F" .out); J=${J##*-}
     if grep -q "=== done" "$F" 2>/dev/null && ! seen "hestdone-$J"; then

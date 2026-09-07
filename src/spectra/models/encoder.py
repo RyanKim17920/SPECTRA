@@ -4,7 +4,7 @@ wide projection head.
 Design choices and where they come from
 ---------------------------------------
 * **Base is a parameter, not a constant.** The default is ``owkin/phikon-v2`` (Dinov2,
-  ViT-L/16, 24 blocks, 1024-d, ungated, 1.21 GB) -- PLAN.md 1: weakest starting point
+  ViT-L/16, 24 blocks, 1024-d, ungated, 1.21 GB) -- the design spec 1: weakest starting point
   on PathoROB (Avg RI 0.469, Camelyon 0.019) and the largest published gain
   (-> 0.806 / 0.702), so it is the cheapest informative base. But the pipeline has to
   generalise, so ``hidden_size``, ``num_hidden_layers`` and ``patch_size`` are read off
@@ -22,12 +22,12 @@ Design choices and where they come from
   Virchow2 is ViT-H/14, 32 blocks, 1280-d, packed-SwiGLU FFN, and carries **4 register
   tokens** on top of CLS -- see ``num_prefix_tokens`` and ``_pool``.
 
-* **LoRA on every block, not head-only.** PLAN.md 2 + 0 (their Fig 4): base H-Optimus-0
+* **LoRA on every block, not head-only.** the design spec 2 + 0 (their Fig 4): base H-Optimus-0
   only develops cross-scanner matching in the last few blocks, and fine-tuning pushes
   that ~8 blocks earlier. Invariance has to build *across depth*, so head-only tuning is
   ruled out. LoRA rather than full FT is our deliberate anti-forgetting divergence
-  (PLAN.md 2): it bounds drift on a backbone that saw 456M tiles, cuts memory, and
-  merges back to full weights afterwards. Full FT is the escalation (PLAN.md 3 phase 9).
+  (the design spec 2): it bounds drift on a backbone that saw 456M tiles, cuts memory, and
+  merges back to full weights afterwards. Full FT is the escalation (the design spec 3 phase 9).
 
   **Why discovery rather than a fixed name list.** ``fc1``/``fc2`` is the HF Dinov2 MLP
   naming, but ``kaiko-ai/midnight`` sets ``use_swiglu_ffn=True`` and its FFN linears are
@@ -38,14 +38,14 @@ Design choices and where they come from
   effect on ViT-g". So we discover, and we assert the per-block match count is uniform
   and non-empty, and we log it.
 
-* **Projection width >= 512.** PLAN.md 2: ScanGen used hidden 48/96 for binary MIL,
+* **Projection width >= 512.** the design spec 2: ScanGen used hidden 48/96 for binary MIL,
   far too narrow for retrieval among 16k tiles. Default 1024 hidden / 512 out. The
   projector's *input* width is ``embed_dim``, i.e. it is tied to the **training**
   pooling -- see ``build_model`` in ``scripts/extract_pathorob_features.py``.
 
 * **Pooling defaults to ``clsmean``** (CLS token concatenated with the mean of patch
   tokens) because that is exactly what PathoROB's own ``phikonv2_clsmean`` entry uses --
-  matching it is what makes our reproduced Avg RI 0.469 gate (PLAN.md 3 phase 5)
+  matching it is what makes our reproduced Avg RI 0.469 gate (the design spec 3 phase 5)
   meaningful. ``embed_dim`` is *derived*: ``hidden`` for cls/mean, ``2*hidden`` for
   clsmean -- 1024/2048 on phikon-v2, 1536/3072 on midnight.
 """
@@ -504,8 +504,8 @@ def _block_index(name: str) -> int | None:
 class EncoderConfig:
     backbone: str = DEFAULT_BACKBONE
     pooling: str = "clsmean"  # "cls" | "mean" | "clsmean"
-    # --- LoRA (PLAN.md 2: all blocks; rank is one of the unknown hyperparameters,
-    # PLAN.md 3 risk 4 -> sweep it)
+    # --- LoRA (the design spec 2: all blocks; rank is one of the unknown hyperparameters,
+    # the design spec 3 risk 4 -> sweep it)
     use_lora: bool = True
     lora_rank: int = 16
     lora_alpha: int = 32
@@ -563,7 +563,7 @@ class EncoderConfig:
     #: actually has. Pass an explicit tuple only to deliberately narrow the set.
     lora_target_modules: tuple[str, ...] | None = None
     lora_blocks: tuple[int, ...] | None = None  # None = ALL blocks (the default, on purpose)
-    # --- projection head (PLAN.md 2: >= 512, NOT ScanGen's 48)
+    # --- projection head (the design spec 2: >= 512, NOT ScanGen's 48)
     proj_hidden_dim: int = 1024
     proj_out_dim: int = 512
     proj_use_bn: bool = True
@@ -577,7 +577,7 @@ class EncoderConfig:
     #: possible at all. Off by default so the smoke-run numbers stay reproducible.
     grad_checkpointing: bool = False
     # --- misc
-    freeze_backbone: bool = False  # True => frozen-feature probe (PLAN.md 3 phase 6)
+    freeze_backbone: bool = False  # True => frozen-feature probe (the design spec 3 phase 6)
     dtype: str = "float32"
     extra: dict = field(default_factory=dict)
 
@@ -606,7 +606,7 @@ class ProjectionHead(nn.Module):
         super().__init__()
         if out_dim < 512:
             raise ValueError(
-                f"proj_out_dim={out_dim} < 512; PLAN.md 2 rules out narrow heads "
+                f"proj_out_dim={out_dim} < 512; the design spec 2 rules out narrow heads "
                 "(ScanGen's 48/96) for 16k-tile retrieval"
             )
         layers: list[nn.Module] = [nn.Linear(in_dim, hidden_dim)]
@@ -624,7 +624,7 @@ def _lora_target_names(model: nn.Module, cfg: EncoderConfig) -> tuple[list[str],
 
     PEFT's ``target_modules`` accepts bare suffixes, but a bare suffix silently matches
     whatever happens to share the name. We enumerate explicit full names instead, then
-    assert the per-block count -- head-only adaptation is the failure mode PLAN.md 2
+    assert the per-block count -- head-only adaptation is the failure mode the design spec 2
     explicitly rules out, and it would otherwise be invisible.
 
     Architecture-agnostic by construction: we walk the backbone's ``nn.Linear`` modules,
@@ -648,7 +648,7 @@ def _lora_target_names(model: nn.Module, cfg: EncoderConfig) -> tuple[list[str],
         blk = _block_index(name)
         if blk is None:
             # A Linear with a matching leaf name outside any transformer block (a head,
-            # a pooler). Never adapt it: LoRA-on-the-head is exactly what PLAN.md 2 rules
+            # a pooler). Never adapt it: LoRA-on-the-head is exactly what the design spec 2 rules
             # out, and it would inflate the "targets" count while adapting no depth.
             continue
         if cfg.lora_blocks is not None and blk not in cfg.lora_blocks:
@@ -811,7 +811,7 @@ class SpectraEncoder(nn.Module):
             if covered != expected:
                 raise RuntimeError(
                     f"LoRA covers blocks {sorted(covered)} but expected {sorted(expected)}; "
-                    "PLAN.md 2 requires adaptation across the full depth, not head-only"
+                    "the design spec 2 requires adaptation across the full depth, not head-only"
                 )
             # Uniformity is the second half of the guard. A ragged count means the leaf
             # names differ between blocks, i.e. some blocks are only partly adapted --
@@ -1140,7 +1140,7 @@ class SpectraEncoder(nn.Module):
     def merge_lora(self) -> nn.Module:
         """Merge LoRA deltas into the base weights -> a plain Dinov2 checkpoint.
 
-        PLAN.md 2: LoRA "merges to full weights afterwards", which is what lets the eval
+        the design spec 2: LoRA "merges to full weights afterwards", which is what lets the eval
         adapters and any downstream user load us as an ordinary ``owkin/phikon-v2``.
         """
         if not self.cfg.use_lora:

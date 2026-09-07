@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-poolcmp
+#SBATCH --job-name=spectra-poolcmp
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -47,7 +47,7 @@
 # from the preflight so the BEFORE probe and the follower score the SAME condition set the
 # training run saw.
 #
-#   SPECTRA_ARM=gem sbatch --job-name=waiv-poolcmp-gem scripts/poolcmp.sbatch
+#   SPECTRA_ARM=gem sbatch --job-name=spectra-poolcmp-gem scripts/poolcmp.sbatch
 
 set -euo pipefail
 

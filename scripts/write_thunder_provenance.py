@@ -55,7 +55,7 @@ from _config import BACKUPS, RUNS, THUNDER  # noqa: E402
 
 THUNDER_ROOT = THUNDER
 BACKUP_ROOT = BACKUPS / "thunder_provenance"
-SIDECAR_NAME = "waiv_provenance.json"
+SIDECAR_NAME = "reference_provenance.json"
 
 #: The 2026-08-24 negative-masking THUNDER roster, transcribed from
 #: ``sacct --format=JobID,JobName,State,SubmitLine -j 391839-391866``. The adapter path is

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """The mechanism figure: acquisition structure REPLACED BY tissue structure.
 
-Waiv/PathoROB's own argument for why cross-condition contrastive fine-tuning works is a
+Reference/PathoROB's own argument for why cross-condition contrastive fine-tuning works is a
 representational claim, not just a retrieval-accuracy number: in the BASE embedding
 space, nearest neighbours are dominated by acquisition condition (scanner/stain) --
 scanner and stain leave a stronger fingerprint than tissue identity does. Fine-tuning is

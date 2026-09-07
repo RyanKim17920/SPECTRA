@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hest
+#SBATCH --job-name=spectra-hest
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -9,7 +9,7 @@
 #SBATCH --output=logs/slurm-%x-%j.out
 #SBATCH --error=logs/slurm-%x-%j.err
 #
-# HEST-Benchmark retention eval (PLAN.md §3 risk 1, §4 phase 11).
+# HEST-Benchmark retention eval (the design spec §3 risk 1, §4 phase 11).
 #
 #   sbatch scripts/run_hest.sbatch cls     base_cls
 #   sbatch scripts/run_hest.sbatch clsmean base_clsmean

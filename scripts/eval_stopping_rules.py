@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Evaluate candidate model-agnostic stopping rules.
 A rule sees only internal signals along a run's checkpoint sequence and picks a step.
-Scored by the HEST pct_of_waiv actually measured at that step."""
+Scored by the HEST pct_of_reference actually measured at that step."""
 import json, statistics as st
 from collections import defaultdict
 rows=json.load(open('docs/stopping_criterion_rows.json'))
@@ -119,7 +119,7 @@ def report(name, fn, note=""):
 ALL_RULES = []
 
 print("RULE EVALUATION on the 27 runs with >=2 HEST'd checkpoints")
-print("(H = mean HEST pct_of_waiv at selected step; RI = mean RI pct_of_waiv; reg = mean regret vs per-run oracle)")
+print("(H = mean HEST pct_of_reference at selected step; RI = mean RI pct_of_reference; reg = mean regret vs per-run oracle)")
 print("-"*150)
 results=[]
 results.append(("oracle (cheats)", *report("ORACLE  argmax HEST (upper bound)", lambda v: max(v,key=lambda r:r['hest_pct']))))
@@ -141,7 +141,7 @@ for c in (0.60,0.70,0.75,0.80,0.85,0.90,0.95):
 for c in (0.6,0.7,0.8,0.85,0.9,0.95,1.0,1.05):
     report(f"R10 first L2 >= {c}", mk_thresh('l2',c))
 for c in (0.90,0.94,0.96,0.98,1.00,1.02):
-    report(f"R11 first RI >= {c}*Waiv target (ri_pct)", lambda v,c=c: first_where(v, lambda r: r['ri_pct'] is not None and r['ri_pct']>=100*c))
+    report(f"R11 first RI >= {c}*Reference target (ri_pct)", lambda v,c=c: first_where(v, lambda r: r['ri_pct'] is not None and r['ri_pct']>=100*c))
 
 print("-"*150); print("COMPOSITE rules:")
 def comp_min(v):
@@ -166,7 +166,7 @@ report("C4  first CI>=0.75 (repeat, best single)", mk_thresh('ci',0.75))
 print()
 print("="*150)
 print("RULE SELECTION -- eligible rules only (a rule that fails to fire on any run is")
-print("not a stopping rule; F-H).  Ranked by worst-backbone mean HEST pct_of_waiv.")
+print("not a stopping rule; F-H).  Ranked by worst-backbone mean HEST pct_of_reference.")
 print("="*150)
 _elig=[r for r in ALL_RULES if r["complete"] and r["worst"] is not None
        and not r["name"].startswith("ORACLE")]

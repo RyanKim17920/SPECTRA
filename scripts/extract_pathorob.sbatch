@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-pathorob-extract
+#SBATCH --job-name=spectra-pathorob-extract
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -9,7 +9,7 @@
 #SBATCH --output=logs/slurm-%x-%j.out
 #SBATCH --error=logs/slurm-%x-%j.err
 #
-# PathoROB feature extraction (PLAN.md §4 phase 5 -- the Phase-2 gate).
+# PathoROB feature extraction (the design spec §4 phase 5 -- the Phase-2 gate).
 #
 #   sbatch scripts/extract_pathorob.sbatch phikonv2_clsmean_ours camelyon
 #   sbatch scripts/extract_pathorob.sbatch phikonv2_clsmean_ours "camelyon tcga tolkach_esca"

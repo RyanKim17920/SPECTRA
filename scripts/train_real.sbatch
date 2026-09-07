@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-real
+#SBATCH --job-name=spectra-real
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -13,13 +13,13 @@
 #SBATCH --output=logs/slurm-%x-%j.out
 #SBATCH --error=logs/slurm-%x-%j.err
 #
-# The first REAL run (PLAN.md 3 phase 7/8). Three deliberate changes from the 300-step
+# The first REAL run (the design spec 3 phase 7/8). Three deliberate changes from the 300-step
 # rank-8 smoke checkpoint (job 369019, Avg RI 0.469 -> 0.736 against a 0.806 target):
 #
 # 1. FAR MORE NEGATIVES. The smoke ran 2 groups x 32, i.e. 31 negatives per anchor, and
 #    top-1 hit 1.0 by step 70 with the loss at 0.038 -- the objective was solved, so the
 #    gradient after that was noise. Here: 2 x 192 = 191 negatives, 6.2x. Because the
-#    negative set is the anchor's own condition-homogeneous group (PLAN.md 2), the ONLY
+#    negative set is the anchor's own condition-homogeneous group (the design spec 2), the ONLY
 #    way to buy negatives is a bigger forward batch: 384 anchors + 384 positives = 768
 #    images/step. At the measured 0.21 GiB/image that is ~161 GiB, so this run turns on
 #    gradient checkpointing (~0.02 GiB/image, ~+35% step time). Without it the ceiling
@@ -64,13 +64,13 @@ export PYTHONUNBUFFERED=1
 # gone, so a stale default here does not degrade -- it fails the preflight in 1 second with
 # FileNotFoundError on manifest.json, which is how jobs 376023/376024 died.
 PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-RUN_NAME="${SLURM_JOB_NAME:-waiv-real}-${SLURM_JOB_ID:-local}"
+RUN_NAME="${SLURM_JOB_NAME:-spectra-real}-${SLURM_JOB_ID:-local}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"
 
 # Defaults reproduce job 369043 exactly; the env overrides exist so a sweep can vary one
-# knob without forking this file (PLAN.md 3 risk 4 phase 8). Rank/alpha MUST come from
+# knob without forking this file (the design spec 3 risk 4 phase 8). Rank/alpha MUST come from
 # here rather than through the trailing "$@", because embed_probe.py and the eval follower
 # below are also given $LORA_RANK -- passing --lora-rank as an extra arg would train one
 # rank and evaluate at another, and build_model hard-fails on that mismatch.
@@ -113,7 +113,7 @@ from pathlib import Path
 packed, out = Path(sys.argv[1]), Path(sys.argv[2])
 man = json.loads((packed / "manifest.json").read_text())
 ok = {k: v for k, v in man.items() if v.get("verified")}
-# PLAN.md 3 phase 7 wants the full 13 x 7 grid; the smoke run only had part of it.
+# the design spec 3 phase 7 wants the full 13 x 7 grid; the smoke run only had part of it.
 assert len(ok) == 91, f"expected 91 verified slides, manifest has {len(ok)} (repack incomplete)"
 (out / "conditions_used.json").write_text(json.dumps(sorted(ok), indent=2))
 stains = sorted({v["stain"] for v in ok.values()})

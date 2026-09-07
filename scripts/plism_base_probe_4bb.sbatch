@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-plism-base-4bb
+#SBATCH --job-name=spectra-plism-base-4bb
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

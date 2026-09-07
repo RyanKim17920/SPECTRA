@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-smoke-falseneg
+#SBATCH --job-name=spectra-smoke-falseneg
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

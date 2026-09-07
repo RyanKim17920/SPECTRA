@@ -1,4 +1,4 @@
-"""Adapter onto PathoROB -- our PRIMARY metric (PLAN.md 1).
+"""Adapter onto PathoROB -- our PRIMARY metric (the design spec 1).
 
 What PathoROB actually is (inspected at ``third_party/PathoROB``)
 ------------------------------------------------------------------
@@ -24,8 +24,8 @@ Their metadata CSVs ship in the repo (``data/metadata/*.csv``, columns
 (``bifold-pathomics/PathoROB-{dataset}``), so set ``HF_HOME=$SPECTRA_HF_HOME``.
 
 Reference numbers are committed under ``third_party/PathoROB/results/``, including
-``phikonv2_clsmean`` -- that is the gate for PLAN.md 3 phase 5 (reproduce Avg RI 0.469,
-Camelyon 0.019). Report cross-stain and cross-scanner separately (PLAN.md 6).
+``phikonv2_clsmean`` -- that is the gate for the design spec 3 phase 5 (reproduce Avg RI 0.469,
+Camelyon 0.019). Report cross-stain and cross-scanner separately (the design spec 6).
 """
 
 from __future__ import annotations
@@ -48,30 +48,30 @@ DEFAULT_ROOT = Path("third_party/PathoROB")
 #: Only torch 2.8.0 is shared, and that pin is fixed by the cluster's CUDA 12.8 driver.
 DEFAULT_PYTHON = Path(".venv-pathorob/bin/python")
 
-#: Waiv Table 1 (PLAN.md 1). Our phase-5 gate is the base row.
+#: Reference Table 1 (the design spec 1). Our phase-5 gate is the base row.
 TARGETS = {
     "phikon_v2_base": {"tcga": 0.619, "camelyon": 0.019, "tolkach_esca": 0.768, "avg": 0.469},
     "phaet_target": {"tcga": 0.785, "camelyon": 0.702, "tolkach_esca": 0.932, "avg": 0.806},
-    # Second backbone (PLAN.md 5 lists it as the ungated 4.55 GB alternative).
-    # kaiko-ai/midnight = "Midnight-12k" in Waiv's Table 1; MASCARET is their fine-tune of
+    # Second backbone (the design spec 5 lists it as the ungated 4.55 GB alternative).
+    # kaiko-ai/midnight = "Midnight-12k" in Reference's Table 1; MASCARET is their fine-tune of
     # it, and it carries the largest published gain in the table -- which is why it is the
     # right second test of whether our reconstruction generalises.
     "midnight_base": {"tcga": 0.858, "camelyon": 0.478, "tolkach_esca": 0.941, "avg": 0.759},
     "mascaret_target": {"tcga": 0.893, "camelyon": 0.907, "tolkach_esca": 0.972, "avg": 0.924},
     # Third backbone, paige-ai/Virchow2 (timm ViT-H/14). AVERAGE ONLY, ON PURPOSE.
-    # Waiv Table 1 gives Virchow2 Avg RI 0.858 base -> 0.918 fine-tuned; the per-dataset
+    # Reference Table 1 gives Virchow2 Avg RI 0.858 base -> 0.918 fine-tuned; the per-dataset
     # tcga / camelyon / tolkach_esca breakdown behind that average was not transcribed and
     # is not in this repo. Three numbers that average to 0.858 are trivial to invent and
     # impossible to distinguish from real ones once written down, so the keys are simply
     # absent. A caller that indexes TARGETS["virchow2_base"]["camelyon"] therefore gets a
-    # loud KeyError, which is the correct outcome; use waiv_target() below for the
+    # loud KeyError, which is the correct outcome; use reference_target() below for the
     # tolerant, None-returning read.
     "virchow2_base": {"avg": 0.858},
     "virchow2_target": {"avg": 0.918},
 }
 
-def waiv_target(key: str, dataset: str) -> float | None:
-    """Waiv Table-1 value for ``key`` on ``dataset`` (or ``"avg"``), or None if unpublished.
+def reference_target(key: str, dataset: str) -> float | None:
+    """Reference Table-1 value for ``key`` on ``dataset`` (or ``"avg"``), or None if unpublished.
 
     ``TARGETS[key][dataset]`` stays a hard KeyError for anything that assumes a full
     breakdown exists (scripts/pathorob_gate.py does, deliberately -- it prints a
@@ -79,7 +79,7 @@ def waiv_target(key: str, dataset: str) -> float | None:
     for code that can honestly render "not published".
     """
     if key not in TARGETS:
-        raise KeyError(f"unknown Waiv Table-1 row {key!r}; have {sorted(TARGETS)}")
+        raise KeyError(f"unknown Reference Table-1 row {key!r}; have {sorted(TARGETS)}")
     return TARGETS[key].get(dataset)
 
 
@@ -225,7 +225,7 @@ def read_results(
 
 
 def summarize(model_name: str, **kw) -> dict[str, float]:
-    """``{dataset: RI, ..., "avg": mean}`` -- the shape of Waiv's Table 1 row."""
+    """``{dataset: RI, ..., "avg": mean}`` -- the shape of Reference's Table 1 row."""
     out = {d: float(read_results(model_name, d, **kw)["robustness_index"]) for d in DATASETS}
     out["avg"] = float(np.mean(list(out.values())))
     return out

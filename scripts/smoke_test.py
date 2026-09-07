@@ -4,7 +4,7 @@
 Runs a handful of real training steps through the real sampler, the real encoder and the
 real loss, on CPU or 1 GPU. Its job is to catch wiring bugs, NOT to learn anything --
 with only 2 of 91 conditions present there is exactly one positive direction available,
-which is the degenerate case PLAN.md 2 warns about.
+which is the degenerate case the design spec 2 warns about.
 
     python scripts/smoke_test.py --steps 4 --device cpu
 

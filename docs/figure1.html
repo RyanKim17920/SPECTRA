@@ -1,4 +1,4 @@
-<title>Waiv Figure 1</title>
+<title>Reference Figure 1</title>
 <style>
 /* ── CSS tokens: light (default) ── */
 :root {
@@ -8,8 +8,8 @@
   --ink-muted:    #898781;
   --gridline:     #e1e0d9;
   --baseline:     #c3c2b7;
-  --s1:           #2a78d6;   /* Waiv base */
-  --s2:           #eb6834;   /* Waiv fine-tuned */
+  --s1:           #2a78d6;   /* Reference base */
+  --s2:           #eb6834;   /* Reference fine-tuned */
   --s3:           #1baf7a;   /* Ours */
   --range-fill:   rgba(27,175,122,0.13);
   --range-stroke: rgba(27,175,122,0.38);
@@ -249,7 +249,7 @@ body {
 <div id="wrap">
   <h1 class="chart-title">Composite Benchmark Performance — Figure 1 Reproduction</h1>
   <p class="chart-subtitle">
-    Waiv's composite score: <em>y = (58 − total rank) / 53</em>, where total = HEST + THUNDER + Patho-Bench rank.<br>
+    Reference's composite score: <em>y = (58 − total rank) / 53</em>, where total = HEST + THUNDER + Patho-Bench rank.<br>
     Our models: <em>y = (40 − total) / 38</em>, HEST + THUNDER only, renormalised (Patho-Bench is unmeasurable — see captions).
   </p>
 
@@ -257,11 +257,11 @@ body {
   <div class="legend" role="list">
     <div class="legend-item" role="listitem">
       <span class="leg-swatch-circle" style="background:var(--s1)"></span>
-      Waiv base model
+      Reference base model
     </div>
     <div class="legend-item" role="listitem">
       <span class="leg-swatch-circle" style="background:var(--s2)"></span>
-      Waiv fine-tuned
+      Reference fine-tuned
     </div>
     <div class="legend-item" role="listitem">
       <span class="leg-swatch-diamond" style="background:var(--s3)"></span>
@@ -285,14 +285,14 @@ body {
   <!-- Captions -->
   <div class="captions" role="note">
     <p class="caption-line">
-      <strong>Patho-Bench limitation:</strong> Our models cannot be scored on Patho-Bench — Waiv's benchmark uses UNI2-h patch embeddings requiring ~7–8 TB of WSIs and a full extraction pass not available to us; their published figures have no traceable source table.
+      <strong>Patho-Bench limitation:</strong> Our models cannot be scored on Patho-Bench — Reference's benchmark uses UNI2-h patch embeddings requiring ~7–8 TB of WSIs and a full extraction pass not available to us; their published figures have no traceable source table.
     </p>
     <p class="caption-line">
-      <strong>THUNDER note:</strong> Our THUNDER ranks use 4 shared tasks (kNN, linear, few-shot, segmentation) recomputed identically for all 21 models; Waiv's published ranks include 2 additional tasks (adversarial, calibration) that we do not run.
+      <strong>THUNDER note:</strong> Our THUNDER ranks use 4 shared tasks (kNN, linear, few-shot, segmentation) recomputed identically for all 21 models; Reference's published ranks include 2 additional tasks (adversarial, calibration) that we do not run.
     </p>
     <p class="caption-line">
       Scenario A (open circle) assumes our fine-tuned model inherits the base model's Patho-Bench rank — an explicit proxy, flagged.
-      Scenario B (shaded band) spans best-case (rank 1) to worst-case (rank 20) Patho-Bench bounds using Waiv's 3-component formula.
+      Scenario B (shaded band) spans best-case (rank 1) to worst-case (rank 20) Patho-Bench bounds using Reference's 3-component formula.
     </p>
   </div>
 
@@ -313,11 +313,11 @@ body {
 // Sorted by y descending (ties broken as noted inline).
 
 const ROWS = [
-  // ── Waiv published models ──────────────────────────────────────────────────
+  // ── Reference published models ──────────────────────────────────────────────────
   {id:"uni2h_ft",    dn:"UNI2-h",         s:1, y:1.000000,  h:2,  t:1,  pb:2,  tot:5,  label:null},
-  {id:"mascaret_ft", dn:"Mascaret",        s:1, y:0.886792,  h:5,  t:5,  pb:1,  tot:11, label:"Mascaret (Waiv)"},
+  {id:"mascaret_ft", dn:"Mascaret",        s:1, y:0.886792,  h:5,  t:5,  pb:1,  tot:11, label:"Mascaret (Reference)"},
   {id:"hopt0_ft",    dn:"H-Optimus-0",     s:1, y:0.849057,  h:1,  t:7,  pb:5,  tot:13, label:null},
-  {id:"v2_ft_waiv",  dn:"Virchow2",        s:1, y:0.754717,  h:8,  t:4,  pb:6,  tot:18, label:"Virchow2 ft (Waiv)"},
+  {id:"v2_ft_reference",  dn:"Virchow2",        s:1, y:0.754717,  h:8,  t:4,  pb:6,  tot:18, label:"Virchow2 ft (Reference)"},
   {id:"gbpfm_ft",    dn:"GenBio-PathFM",   s:1, y:0.754717,  h:4,  t:3,  pb:11, tot:18, label:null},
   {id:"uni2h_base",  dn:"UNI2-h",          s:0, y:0.698113,  h:7,  t:2,  pb:12, tot:21, label:null},
   {id:"aquavit_ft",  dn:"AquaViT",         s:1, y:0.641509,  h:11, t:10, pb:3,  tot:24, label:null},
@@ -326,7 +326,7 @@ const ROWS = [
     rangeY:[0.4151,0.7736], scenA:0.5472},
   {id:"mid_ft_ours", dn:"Midnight ft",     s:2, y:0.605263,  h:9,  t:8,  pb:"—",tot:null, label:"Midnight ft (ours)",
     rangeY:[0.3962,0.7547], scenA:0.4906},
-  // ── Waiv continued ────────────────────────────────────────────────────────
+  // ── Reference continued ────────────────────────────────────────────────────────
   {id:"gpg_ft",      dn:"Prov-GigaPath",   s:1, y:0.603774,  h:9,  t:9,  pb:8,  tot:26, label:null},
   {id:"h0mini_ft",   dn:"H0-mini",         s:1, y:0.584906,  h:10, t:13, pb:4,  tot:27, label:null},
   {id:"gbpfm_base",  dn:"GenBio-PathFM",   s:0, y:0.566038,  h:3,  t:6,  pb:19, tot:28, label:null},
@@ -334,14 +334,14 @@ const ROWS = [
   {id:"h0mini_base", dn:"H0-mini",         s:0, y:0.471698,  h:14, t:12, pb:7,  tot:33, label:null},
   {id:"v2_base",     dn:"Virchow2",        s:0, y:0.452830,  h:13, t:8,  pb:13, tot:34, label:null},
   {id:"hopt0_base",  dn:"H-Optimus-0",     s:0, y:0.396226,  h:6,  t:14, pb:17, tot:37, label:null},
-  {id:"phaet_ft",    dn:"Phaet",           s:1, y:0.264151,  h:16, t:18, pb:10, tot:44, label:"Phaet (Waiv)"},
+  {id:"phaet_ft",    dn:"Phaet",           s:1, y:0.264151,  h:16, t:18, pb:10, tot:44, label:"Phaet (Reference)"},
   {id:"mid_base",    dn:"Midnight-12k",    s:0, y:0.245283,  h:15, t:15, pb:15, tot:45, label:null},
   {id:"phikon_ft",   dn:"Phikon",          s:1, y:0.169811,  h:18, t:17, pb:14, tot:49, label:null},
   {id:"gpg_base",    dn:"Prov-GigaPath",   s:0, y:0.169811,  h:17, t:16, pb:16, tot:49, label:null},
   // ── Our models (continued) ────────────────────────────────────────────────
   {id:"phv2_ft_ours",dn:"Phikon-v2 ft",   s:2, y:0.026316,  h:19, t:20, pb:"—",tot:null, label:"Phikon-v2 ft (ours)",
     rangeY:[0.0, 0.3396], scenA:0.0189},
-  // ── Waiv base Phikon-v2 and Phikon ────────────────────────────────────────
+  // ── Reference base Phikon-v2 and Phikon ────────────────────────────────────────
   {id:"phv2_base",   dn:"Phikon-v2",       s:0, y:0.018868,  h:19, t:20, pb:18, tot:57, label:null},
   {id:"phikon_base", dn:"Phikon",          s:0, y:0.000000,  h:20, t:18, pb:20, tot:58, label:null},
 ];
@@ -491,7 +491,7 @@ function buildChart() {
 const tip = document.getElementById('tip');
 
 function seriesLabel(s) {
-  return s === 0 ? 'Waiv base model' : s === 1 ? 'Waiv fine-tuned' : 'Ours (HEST+THUNDER only)';
+  return s === 0 ? 'Reference base model' : s === 1 ? 'Reference fine-tuned' : 'Ours (HEST+THUNDER only)';
 }
 
 function showTip(ev, row) {
@@ -507,7 +507,7 @@ function showTip(ev, row) {
       html += `<div class="tip-row">Scenario B range: ${row.rangeY[0].toFixed(3)} – ${row.rangeY[1].toFixed(3)}</div>`;
     if (row.scenA !== undefined)
       html += `<div class="tip-row">Scenario A (inherited PB rank): ${row.scenA.toFixed(3)}</div>`;
-    html += `<div class="tip-warn">⚠ Not directly comparable to Waiv's 3-component y.</div>`;
+    html += `<div class="tip-warn">⚠ Not directly comparable to Reference's 3-component y.</div>`;
   } else {
     html += `<div class="tip-row">Patho-Bench rank: ${row.pb}/20</div>`;
     html += `<div class="tip-row">Total rank sum: ${row.tot}</div>`;

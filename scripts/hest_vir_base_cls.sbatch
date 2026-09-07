@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hest-vir-base-cls
+#SBATCH --job-name=spectra-hest-vir-base-cls
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -17,7 +17,7 @@
 # labelled "midnight". The backbone is pinned in-file here so the label cannot drift.
 #
 # Head-to-head being run: our Midnight base HEST average is 0.41210 under `clsmean`
-# (exp_code mbase_clsmean, job 370850, 26-08-06). Waiv publish 0.3952 for the same
+# (exp_code mbase_clsmean, job 370850, 26-08-06). Reference publish 0.3952 for the same
 # model and state no pooling protocol. Hypothesis: their number is CLS-only. This job
 # produces the CLS-only Midnight base number on the identical 9-task protocol so the
 # two can be compared on a common scale.

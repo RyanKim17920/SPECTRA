@@ -5,7 +5,7 @@ Why this exists
 Each PLISM ``.h5`` is *flat*: 16,278 top-level datasets, one per tile, named
 ``tile_{level}_{x}_{y}``, each ``(224, 224, 3)`` uint8, uncompressed, no groups
 (verified in Phase 1). Reading a tile therefore costs an HDF5 B-tree lookup plus a
-seek, and the registered-pair sampler (PLAN.md 2) issues *random* reads scattered
+seek, and the registered-pair sampler (the design spec 2) issues *random* reads scattered
 across up to 91 open files. That is the classic many-tiny-reads pattern and it makes
 training I/O-bound long before the GPU is.
 
@@ -22,7 +22,7 @@ Layout produced::
     ...
 
 ``.npy`` (not raw) so the shape/dtype are self-describing and ``np.load(mmap_mode="r")``
-just works. Put ``out_dir`` on ``/data`` -- 91 slides is ~208 GiB (PLAN.md 5).
+just works. Put ``out_dir`` on ``/data`` -- 91 slides is ~208 GiB (the design spec 5).
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def write_keys(out_dir: Path, keys: list[str]) -> Path:
 
     Phase 1 verified key order is identical across files; we re-assert it here rather
     than trust it, because a silent mismatch would train on *unregistered* pairs
-    (PLAN.md 4, phase 1 item 3: "getting this wrong silently trains on unregistered
+    (the design spec 4, phase 1 item 3: "getting this wrong silently trains on unregistered
     pairs").
     """
     out_dir = Path(out_dir)

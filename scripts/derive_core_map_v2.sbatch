@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-core-map
+#SBATCH --job-name=spectra-core-map
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

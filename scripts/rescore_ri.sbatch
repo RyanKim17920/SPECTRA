@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-rescoreri
+#SBATCH --job-name=spectra-rescoreri
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

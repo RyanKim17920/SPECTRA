@@ -5,29 +5,29 @@ RULE 1 (ENFORCED): Every row is ONE (run_name, step).  Never pair best-RI from o
   arm with best-HEST from another.  If a metric is missing for THAT checkpoint,
   print MISSING — never substitute another arm's number.
 
-RULE 2 (ENFORCED): Raw scores are reported as  ours | Waiv | diff.  Gain-vs-base
+RULE 2 (ENFORCED): Raw scores are reported as  ours | Reference | diff.  Gain-vs-base
   may appear as an extra column but never as the headline.
 
-PRIMARY METRIC: pct_of_waiv = (ours - base) / (Waiv - base) * 100  for every
-  metric and dataset, CAPPED at 100 (beating Waiv scores 100, not more; the
+PRIMARY METRIC: pct_of_reference = (ours - base) / (Reference - base) * 100  for every
+  metric and dataset, CAPPED at 100 (beating Reference scores 100, not more; the
   uncapped value is retained and printed with a trailing '*').
-  The per-checkpoint AVERAGE of the CAPPED pct_of_waiv is the default sort key.
+  The per-checkpoint AVERAGE of the CAPPED pct_of_reference is the default sort key.
 
 PASS CRITERION (CURRENT): per backbone, EVERY metric (RI, HEST, THUNDER) >= 70%
-  of Waiv's gain AND the mean of the three > 80%.  A recipe is scored by its
+  of Reference's gain AND the mean of the three > 80%.  A recipe is scored by its
   WORST backbone.  Printed by verdict_report().  This REPLACES the older
   RI>80 / HEST>70 / THUNDER>80 rule.
 
 NOISE: Every diff is annotated with how many seed-SD it spans.  Differences below
-  2 SD are marked [~noise].  Seed-SD is ALSO expressed as a % of Waiv's gain,
+  2 SD are marked [~noise].  Seed-SD is ALSO expressed as a % of Reference's gain,
   so we can see whether 80% vs 100% is even resolvable.  Metrics where 2SD >
-  20% of Waiv's gain are flagged UNRESOLVABLE.
+  20% of Reference's gain are flagged UNRESOLVABLE.
 
 THUNDER PARTIAL GUARD: If a protocol does not have ALL required datasets (12 cls,
   2 seg), the per-protocol mean is printed as PARTIAL(n/total) and the overall
   THUNDER task-mean is suppressed.
 
-RI FLOOR (replaces absolute floors): base + 0.80 * (Waiv - base).  PASS/FAIL
+RI FLOOR (replaces absolute floors): base + 0.80 * (Reference - base).  PASS/FAIL
   against this per-checkpoint.
 
 HEST BASE FIX: virchow2 base_hest = 0.40324 (correct; old scoreboard had 0.4034).
@@ -37,7 +37,7 @@ Usage:
     python scripts/scoreboard.py --step 250               # step 250
     python scripts/scoreboard.py --runs final5-midnight-s0-t900-386799
     python scripts/scoreboard.py --only-arm midnight
-    python scripts/scoreboard.py --sort-by hest_pct       # sort by pct_of_waiv on HEST
+    python scripts/scoreboard.py --sort-by hest_pct       # sort by pct_of_reference on HEST
     python scripts/scoreboard.py --only-complete
 """
 from __future__ import annotations
@@ -74,8 +74,8 @@ PAPER_CLS = _c5.PAPER_CLS           # 12 classification datasets
 PAPER_SEG = _c5.PAPER_SEG           # 2 segmentation datasets
 THUNDER_TASKS = _c5.THUNDER_TASKS   # knn, linear_probing, simple_shot, segmentation
 
-# ── Waiv published targets (arXiv:2607.22861 Tables 1+3) ────────────────────
-# READ FROM docs/waiv_published.json, not retyped here.  That file is the full
+# ── Reference published targets (arXiv:2607.22861 Tables 1+3) ────────────────────
+# READ FROM docs/reference_published.json, not retyped here.  That file is the full
 # transcription of all 20 rows of their tables; this module used to hold a
 # hand-copied subset of three of them, which is a second source of truth for a
 # published constant -- the exact shape of bug that produced the HEST base
@@ -91,9 +91,9 @@ THUNDER_TASKS = _c5.THUNDER_TASKS   # knn, linear_probing, simple_shot, segmenta
 # TRAP: "H0-mini" is a separate row and a DIFFERENT model -- a distillation of
 # H-Optimus-0, with its own numbers and its own (clsmean) THUNDER protocol.  It
 # is not an alias for `hoptimus`.
-WAIV_PUBLISHED_JSON = _HERE.parent / "docs" / "waiv_published.json"
+REFERENCE_PUBLISHED_JSON = _HERE.parent / "docs" / "reference_published.json"
 
-WAIV_ROWS = {
+REFERENCE_ROWS = {
     "phikon":   (("Phikon-v2", "base"),    ("Phaet", "fine-tuned")),
     "midnight": (("Midnight-12k", "base"), ("Mascaret", "fine-tuned")),
     "virchow2": (("Virchow2", "base"),     ("Virchow2", "fine-tuned")),
@@ -101,10 +101,10 @@ WAIV_ROWS = {
     "uni2":     (("UNI2-h", "base"),       ("UNI2-h", "fine-tuned")),
 }
 
-#: Waiv's THUNDER task names -> ours.  Their two extra tasks (calibration,
+#: Reference's THUNDER task names -> ours.  Their two extra tasks (calibration,
 #: adversarial) are not computed by this repo and are dropped here on purpose --
 #: see note (a) below on why any mean over these four is not their rank sum.
-_WAIV_THUNDER_TASKS = {
+_REFERENCE_THUNDER_TASKS = {
     "knn": "knn",
     "linear": "linear_probing",
     "few_shot": "simple_shot",
@@ -112,102 +112,102 @@ _WAIV_THUNDER_TASKS = {
 }
 
 #: Their RI per-dataset key -> ours.
-_WAIV_RI_DS = {"tcga": "tcga", "camelyon": "camelyon", "tolkach": "tolkach_esca"}
+_REFERENCE_RI_DS = {"tcga": "tcga", "camelyon": "camelyon", "tolkach": "tolkach_esca"}
 
 
-def _load_waiv_published():
-    """(WAIV, WAIV_THUNDER) read from docs/waiv_published.json.  ONE formula, all arms."""
+def _load_reference_published():
+    """(REFERENCE, REFERENCE_THUNDER) read from docs/reference_published.json.  ONE formula, all arms."""
     try:
-        blob = json.loads(WAIV_PUBLISHED_JSON.read_text())
+        blob = json.loads(REFERENCE_PUBLISHED_JSON.read_text())
     except Exception as exc:
         raise RuntimeError(
-            f"cannot read the Waiv published-numbers transcription at "
-            f"{WAIV_PUBLISHED_JSON}: {exc}. Every pct_of_waiv denominator comes from "
+            f"cannot read the Reference published-numbers transcription at "
+            f"{REFERENCE_PUBLISHED_JSON}: {exc}. Every pct_of_reference denominator comes from "
             "that file; there is no fallback literal to fall back to."
         ) from exc
     index = {(m["name"], m["variant"]): m for m in blob["models"]}
-    waiv, waiv_thunder = {}, {}
-    for arm, (base_row, ft_row) in WAIV_ROWS.items():
+    reference, reference_thunder = {}, {}
+    for arm, (base_row, ft_row) in REFERENCE_ROWS.items():
         missing = [r for r in (base_row, ft_row) if r not in index]
         if missing:
             raise RuntimeError(
                 f"arm {arm!r} maps to rows {missing} which are not in "
-                f"{WAIV_PUBLISHED_JSON.name}; fix WAIV_ROWS or the transcription."
+                f"{REFERENCE_PUBLISHED_JSON.name}; fix REFERENCE_ROWS or the transcription."
             )
         base, ft = index[base_row], index[ft_row]
-        waiv[arm] = {
+        reference[arm] = {
             "ri": ft["ri"]["avg"],
             "hest": ft["hest_avg"],
-            "ri_ds": {ours: ft["ri"][theirs] for theirs, ours in _WAIV_RI_DS.items()},
+            "ri_ds": {ours: ft["ri"][theirs] for theirs, ours in _REFERENCE_RI_DS.items()},
         }
-        waiv_thunder[arm] = {
-            "base": {ours: base["thunder"][theirs] for theirs, ours in _WAIV_THUNDER_TASKS.items()},
-            "ft": {ours: ft["thunder"][theirs] for theirs, ours in _WAIV_THUNDER_TASKS.items()},
+        reference_thunder[arm] = {
+            "base": {ours: base["thunder"][theirs] for theirs, ours in _REFERENCE_THUNDER_TASKS.items()},
+            "ft": {ours: ft["thunder"][theirs] for theirs, ours in _REFERENCE_THUNDER_TASKS.items()},
         }
-    return waiv, waiv_thunder
+    return reference, reference_thunder
 
-# ── Waiv published THUNDER targets ──────────────────────────────────────────
+# ── Reference published THUNDER targets ──────────────────────────────────────────
 # Source: Filiot, Thaeter, Schmauch, Guillou, "Robustifying pathology foundation
 # models via fine-tuning", arXiv:2607.22861v1 (24 Jul 2026), TABLE 2
 # ("THUNDER benchmark. Per-task scores with leaderboard rank in parentheses").
 # Verified 2026-08-24 against https://arxiv.org/html/2607.22861v1 Table 2; the
 # values below are byte-identical to the full transcription in
-# docs/waiv_published.json and to PUBLISHED_TASKMEAN in scripts/collect_thunder.py.
+# docs/reference_published.json and to PUBLISHED_TASKMEAN in scripts/collect_thunder.py.
 #
 # Values are PERCENT as printed; divided by 100 at use so they match our
-# fractional means.  Waiv's task keys are renamed to ours:
+# fractional means.  Reference's task keys are renamed to ours:
 #     knn -> knn | linear -> linear_probing | few_shot -> simple_shot | segmentation -> segmentation
-# Waiv's two extra tasks (calibration, adversarial) are NOT computed by this repo
+# Reference's two extra tasks (calibration, adversarial) are NOT computed by this repo
 # and are deliberately absent -- any mean here is over 4 tasks, not their 6, and is
 # therefore NOT comparable to their rank sum.
 #
-# READ THIS BEFORE TRUSTING A THUNDER pct_of_waiv:
+# READ THIS BEFORE TRUSTING A THUNDER pct_of_reference:
 #
 #  (a) TWO-BASE FORMULA.  Unlike RI and HEST -- where our measured base reproduces
-#      Waiv's published base to 4 decimals (RI 0.4686/0.7589/0.8582 vs their
+#      Reference's published base to 4 decimals (RI 0.4686/0.7589/0.8582 vs their
 #      0.469/0.759/0.858; HEST 0.37470/0.39521/0.40324 vs their 0.3747/0.3952/0.4034)
 #      -- our measured THUNDER base does NOT reproduce theirs.  Classification sits
 #      ~2-4 points BELOW their base on every backbone (e.g. phikon-v2 kNN: ours
 #      0.7028 vs their 74.0), while our 2-dataset segmentation sits ~4 points ABOVE
 #      their 4-dataset one.  Our base instead reproduces THUNDER's OWN paper
 #      (arXiv:2507.07860v3 Tables S37/S39/S50: kNN 70.14, lin-probe 76.46 vs our
-#      70.28 / 76.54).  So Waiv's THUNDER absolutes are on a different scale from
+#      70.28 / 76.54).  So Reference's THUNDER absolutes are on a different scale from
 #      both us and the THUNDER authors, and a LEVEL comparison is invalid.
-#      Consequently THUNDER pct_of_waiv is computed as a GAIN RATIO with two bases:
-#          (ours - OUR_base) / (Waiv_ft - Waiv_base)
+#      Consequently THUNDER pct_of_reference is computed as a GAIN RATIO with two bases:
+#          (ours - OUR_base) / (Reference_ft - Reference_base)
 #      RI and HEST keep the single-base formula because their bases agree.
 #
-#  (b) SEGMENTATION SUPPORT MISMATCH.  Waiv's segmentation mean is over FOUR datasets
+#  (b) SEGMENTATION SUPPORT MISMATCH.  Reference's segmentation mean is over FOUR datasets
 #      (ocelot, pannuke, segpath_epithelial, segpath_lymphocytes); ours is over TWO
 #      (see PAPER_SEG in collect_final5.py).  Every segmentation cell -- and any
 #      task-mean containing it -- is flagged support_2v4 and must not be read as a
 #      matched comparison.
 #
-#  (c) NO PER-DATASET BREAKDOWN.  Waiv publish task-level means only; §3.3 states
+#  (c) NO PER-DATASET BREAKDOWN.  Reference publish task-level means only; §3.3 states
 #      "Each model is evaluated on frozen features following the default protocol"
 #      and never names the metric.  Alignment with our F1 (classification) / Dice
 #      (segmentation, binary Dice == F1) is INHERITED from THUNDER's defaults, not
-#      asserted by Waiv.  There is no appendix per-dataset table to check it against.
+#      asserted by Reference.  There is no appendix per-dataset table to check it against.
 #
-#  (d) WAIV REGRESS ON SOME TASKS.  Where Waiv_ft < Waiv_base the denominator is
-#      negative and pct_of_waiv is meaningless (matching a regression would score
-#      100%).  Those cells are guarded to N/A with reason "waiv_regressed".
-#  (e) NOT EVERY ARM IS GRADEABLE.  For `hoptimus` and especially `uni2`, Waiv's own
+#  (d) REFERENCE REGRESS ON SOME TASKS.  Where Reference_ft < Reference_base the denominator is
+#      negative and pct_of_reference is meaningless (matching a regression would score
+#      100%).  Those cells are guarded to N/A with reason "reference_regressed".
+#  (e) NOT EVERY ARM IS GRADEABLE.  For `hoptimus` and especially `uni2`, Reference's own
 #      THUNDER gain is at or below our measured seed floor, and three of UNI2-h's four
 #      task gains are NEGATIVE.  Nothing special is done about that here: (d)'s
-#      `waiv_regressed` guard already refuses a ratio against a negative denominator,
+#      `reference_regressed` guard already refuses a ratio against a negative denominator,
 #      _cap_pct already handles a near-zero one, and _thunder_2se returns None for an
 #      (arm, task) whose floor was never measured -- which the callers already turn into
 #      an ungradeable cell.  The generic guards ARE the answer; do not add a per-model
 #      case.
-WAIV, WAIV_THUNDER = _load_waiv_published()
-WAIV_SOURCE = f"docs/waiv_published.json ({WAIV_PUBLISHED_JSON})"
-WAIV_THUNDER_SOURCE = (
+REFERENCE, REFERENCE_THUNDER = _load_reference_published()
+REFERENCE_SOURCE = f"docs/reference_published.json ({REFERENCE_PUBLISHED_JSON})"
+REFERENCE_THUNDER_SOURCE = (
     "arXiv:2607.22861v1 Table 2 (THUNDER benchmark), verified 2026-08-24, "
-    "read from docs/waiv_published.json"
+    "read from docs/reference_published.json"
 )
 
-# Tasks whose dataset support differs between us (2 seg datasets) and Waiv (4).
+# Tasks whose dataset support differs between us (2 seg datasets) and Reference (4).
 THUNDER_SUPPORT_MISMATCH = {"segmentation"}
 
 
@@ -235,9 +235,9 @@ NOISE_SD = {
 }
 
 # UNRESOLVABLE-BY-CONSTRUCTION limit.  A (backbone, metric) cell is refused a printed
-# pct_of_waiv when one seed-SD, expressed in pct_of_waiv points, exceeds this.
+# pct_of_reference when one seed-SD, expressed in pct_of_reference points, exceeds this.
 # NOTE this is ALGEBRAICALLY THE SAME TEST the module already applied as
-# "2*seed_SD > 20% of Waiv's gain" -- 2*sd/gain > 0.20  <=>  sd/gain*100 > 10.
+# "2*seed_SD > 20% of Reference's gain" -- 2*sd/gain > 0.20  <=>  sd/gain*100 > 10.
 # What changes here is the CONSEQUENCE: the cell used to be annotated and printed anyway;
 # now the number is withheld and a raw delta + CI is printed in its place.
 # F-B fix (2026-08-26): the threshold AND the test now live in scripts/eval_common.py so
@@ -300,13 +300,13 @@ THUNDER_TASK_2SE_5DS_LEGACY = {
     ("clsmean", "linear_probing"):  0.0208,
 }
 
-# pct_of_waiv cap.  The scoring criterion treats "exceeded Waiv" as 100, not more:
+# pct_of_reference cap.  The scoring criterion treats "exceeded Reference" as 100, not more:
 # a recipe that overshoots on one metric must not launder that overshoot into the
 # average and mask a shortfall elsewhere.  The UNCAPPED value is retained and printed
 # (as `{metric}_pct_uncapped`, rendered with a trailing `*`) so nothing is hidden.
 CAP_PCT_AT_100 = True
 
-# Pass criterion (CURRENT).  Per backbone: every metric >= 70% of Waiv's gain AND the
+# Pass criterion (CURRENT).  Per backbone: every metric >= 70% of Reference's gain AND the
 # mean of the three > 80%.  A recipe is scored by its WORST backbone.
 # (This REPLACES the older RI>80 / HEST>70 / THUNDER>80 rule.)
 VERDICT_MIN_PCT = 70.0
@@ -325,20 +325,20 @@ _REPO = Path(__file__).resolve().parents[1]
 _DEFAULT_RUNS = _REPO / "runs"
 
 
-# ── pct_of_waiv helpers ─────────────────────────────────────────────────────
+# ── pct_of_reference helpers ─────────────────────────────────────────────────────
 
-def _waiv_gain(base, waiv):
-    """Return Waiv - base, or None if either is missing."""
-    if base is None or waiv is None:
+def _reference_gain(base, reference):
+    """Return Reference - base, or None if either is missing."""
+    if base is None or reference is None:
         return None
-    return waiv - base
+    return reference - base
 
 
 def _fmt(v, spec="%+.5f"):
     """Null-safe numeric formatter.  Returns 'n/a' instead of raising on None.
 
     print_run_block formats diffs that are deliberately None when a base or a
-    Waiv reference is unavailable (e.g. UNKNOWN-BACKBONE runs, where
+    Reference reference is unavailable (e.g. UNKNOWN-BACKBONE runs, where
     RI_BASE.get(arm) is None by design).  Formatting those with %f raised
     TypeError and killed the trailing detail section after ~2880 good lines.
     """
@@ -348,7 +348,7 @@ def _fmt(v, spec="%+.5f"):
 
 
 def _cap_pct(pct):
-    """Return (capped, uncapped).  Cap is at 100 -- exceeding Waiv scores 100, not more."""
+    """Return (capped, uncapped).  Cap is at 100 -- exceeding Reference scores 100, not more."""
     if pct is None:
         return None, None
     if CAP_PCT_AT_100 and pct > 100.0:
@@ -356,50 +356,50 @@ def _cap_pct(pct):
     return pct, pct
 
 
-def _pct_of_waiv(ours, base, waiv):
+def _pct_of_reference(ours, base, reference):
     """
-    Compute (ours - base) / (Waiv - base) * 100.
+    Compute (ours - base) / (Reference - base) * 100.
     Returns (pct_capped, guard_reason, pct_uncapped).  pct is None when uncomputable.
-    The CAPPED value is the primary one and is what feeds avg_pct_of_waiv.
+    The CAPPED value is the primary one and is what feeds avg_pct_of_reference.
     """
     if ours is None:
         return None, "no_ours", None
-    gain = _waiv_gain(base, waiv)
+    gain = _reference_gain(base, reference)
     if gain is None:
         if base is None:
             return None, "no_base", None
-        if waiv is None:
-            return None, "no_waiv", None
+        if reference is None:
+            return None, "no_reference", None
         return None, "unknown", None
     if abs(gain) < 1e-10:
-        return None, "base>=Waiv", None
+        return None, "base>=Reference", None
     capped, uncapped = _cap_pct((ours - base) / gain * 100.0)
     return capped, None, uncapped
 
 
-def _pct_of_waiv_two_base(ours, our_base, waiv_base, waiv_ft):
+def _pct_of_reference_two_base(ours, our_base, reference_base, reference_ft):
     """
-    GAIN-RATIO form of pct_of_waiv for metrics where our base does not reproduce
-    Waiv's base (THUNDER).  Numerator uses OUR base, denominator uses THEIRS:
+    GAIN-RATIO form of pct_of_reference for metrics where our base does not reproduce
+    Reference's base (THUNDER).  Numerator uses OUR base, denominator uses THEIRS:
 
-        (ours - our_base) / (waiv_ft - waiv_base) * 100
+        (ours - our_base) / (reference_ft - reference_base) * 100
 
     Returns (pct_capped, guard_reason, pct_uncapped).  pct is None when uncomputable.
-    The CAPPED value is the primary one and is what feeds avg_pct_of_waiv.
+    The CAPPED value is the primary one and is what feeds avg_pct_of_reference.
     """
     if ours is None:
         return None, "no_ours", None
     if our_base is None:
         return None, "no_base", None
-    if waiv_base is None or waiv_ft is None:
-        return None, "no_waiv", None
-    gain = waiv_ft - waiv_base
+    if reference_base is None or reference_ft is None:
+        return None, "no_reference", None
+    gain = reference_ft - reference_base
     if abs(gain) < 1e-10:
-        return None, "waiv_gain_zero", None
+        return None, "reference_gain_zero", None
     if gain < 0:
-        # Waiv REGRESSED on this task.  A ratio against a negative gain rewards
+        # Reference REGRESSED on this task.  A ratio against a negative gain rewards
         # getting worse; refuse to print one.
-        return None, "waiv_regressed", None
+        return None, "reference_regressed", None
     capped, uncapped = _cap_pct((ours - our_base) / gain * 100.0)
     return capped, None, uncapped
 
@@ -478,8 +478,8 @@ def _thunder_2se_mean(arm, tasks):
     return max(_thunder_2se(arm, t) for t in tasks), []
 
 
-def _thunder_unresolvable(waiv_gain_frac, arm=None, task=None, floor=None):
-    """2*seed_SE > 20% of Waiv's gain  ->  80% vs 100% is not distinguishable.
+def _thunder_unresolvable(reference_gain_frac, arm=None, task=None, floor=None):
+    """2*seed_SE > 20% of Reference's gain  ->  80% vs 100% is not distinguishable.
 
     Returns (unresolvable, noise_pct_of_gain, floor_unmeasured).
     floor_unmeasured=True means the seed floor for this (arm, task) was NEVER
@@ -496,12 +496,12 @@ def _thunder_unresolvable(waiv_gain_frac, arm=None, task=None, floor=None):
         # No measured floor.  Do NOT substitute a small default -- that is the exact
         # bug the old scalar THUNDER_TASK_2SE=0.0025 had.
         return True, None, True
-    if waiv_gain_frac is None or abs(waiv_gain_frac) < 1e-10:
+    if reference_gain_frac is None or abs(reference_gain_frac) < 1e-10:
         return True, None, False
-    noise_pct = floor / abs(waiv_gain_frac) * 100.0
+    noise_pct = floor / abs(reference_gain_frac) * 100.0
     # NOTE ON THE 20% BAR -- it is STRICTER than "resolvable" in
     # docs/thunder_seed_floor_12ds.md, and deliberately so.  That doc calls a cell
-    # resolvable when floor < |Waiv gain| (ratio < 1), i.e. we could tell a full-gain
+    # resolvable when floor < |Reference gain| (ratio < 1), i.e. we could tell a full-gain
     # arm from a zero-gain arm.  This scoreboard asks a harder question: can we tell
     # 80% of the gain from 100% of it?  That band is 20% of the gain wide, so the bar
     # is floor < 0.20 * |gain|.  Under the corrected 12-dataset floors the best cell
@@ -642,24 +642,24 @@ def score_run(meta, step):
     # THUNDER
     r["thunder"] = _thunder_for(name, step)
 
-    # pct_of_waiv computations
-    waiv_dict = WAIV.get(arm, {})
+    # pct_of_reference computations
+    reference_dict = REFERENCE.get(arm, {})
     base_ri = RI_BASE.get(arm)
     base_hest = HEST_BASE.get(arm)
 
-    # RI pct_of_waiv
-    r["ri_pct"], r["ri_pct_guard"], r["ri_pct_uncapped"] = _pct_of_waiv(
-        r["ri"], base_ri, waiv_dict.get("ri"))
+    # RI pct_of_reference
+    r["ri_pct"], r["ri_pct_guard"], r["ri_pct_uncapped"] = _pct_of_reference(
+        r["ri"], base_ri, reference_dict.get("ri"))
 
-    # HEST pct_of_waiv
-    r["hest_pct"], r["hest_pct_guard"], r["hest_pct_uncapped"] = _pct_of_waiv(
-        r["hest"], base_hest, waiv_dict.get("hest"))
+    # HEST pct_of_reference
+    r["hest_pct"], r["hest_pct_guard"], r["hest_pct_uncapped"] = _pct_of_reference(
+        r["hest"], base_hest, reference_dict.get("hest"))
 
-    # THUNDER pct_of_waiv -- GAIN RATIO with two bases (see WAIV_THUNDER note).
+    # THUNDER pct_of_reference -- GAIN RATIO with two bases (see REFERENCE_THUNDER note).
     base_thunder = _c5._thunder_base_score(arm) if arm in ARMS else {}
     r["base_thunder"] = base_thunder
 
-    wt = WAIV_THUNDER.get(arm, {})
+    wt = REFERENCE_THUNDER.get(arm, {})
     wt_base = wt.get("base", {})
     wt_ft = wt.get("ft", {})
     pooling = _thunder_pooling(arm)
@@ -677,7 +677,7 @@ def score_run(meta, step):
         wb_f = wb / 100.0 if wb is not None else None
         wf_f = wf / 100.0 if wf is not None else None
         gain = (wf_f - wb_f) if (wb_f is not None and wf_f is not None) else None
-        pct, guard, pct_unc = _pct_of_waiv_two_base(ours_t, base_thunder.get(task), wb_f, wf_f)
+        pct, guard, pct_unc = _pct_of_reference_two_base(ours_t, base_thunder.get(task), wb_f, wf_f)
         if guard_partial:
             pct, guard, pct_unc = None, guard_partial, None
         unres, noise_pct, floor_unmeasured = _thunder_unresolvable(gain, arm, task)
@@ -699,9 +699,9 @@ def score_run(meta, step):
             "partial_coverage": partial_coverage,
             "coverage": "%d/%d" % (td.get("n", 0), td.get("total", 0)),
             "unmeasured_floor": floor_unmeasured,
-            "waiv_base": wb_f,
-            "waiv_ft": wf_f,
-            "waiv_gain": gain,
+            "reference_base": wb_f,
+            "reference_ft": wf_f,
+            "reference_gain": gain,
             "our_base": base_thunder.get(task),
             "unresolvable": unres,
             "noise_pct_of_gain": noise_pct,
@@ -709,7 +709,7 @@ def score_run(meta, step):
         }
     r["thunder_pct"] = th_pct
 
-    # THUNDER task-mean pct_of_waiv: only when ALL four protocols are complete.
+    # THUNDER task-mean pct_of_reference: only when ALL four protocols are complete.
     complete = [t for t in THUNDER_TASKS
                 if not r["thunder"].get(t, {}).get("partial", True)
                 and r["thunder"].get(t, {}).get("mean") is not None]
@@ -720,7 +720,7 @@ def score_run(meta, step):
             ourb_m = sum(ourb_vals) / len(ourb_vals)
             wb_m = sum(wt_base[t] for t in THUNDER_TASKS) / len(THUNDER_TASKS) / 100.0
             wf_m = sum(wt_ft[t] for t in THUNDER_TASKS) / len(THUNDER_TASKS) / 100.0
-            pct, guard, pct_unc = _pct_of_waiv_two_base(ours_m, ourb_m, wb_m, wf_m)
+            pct, guard, pct_unc = _pct_of_reference_two_base(ours_m, ourb_m, wb_m, wf_m)
             mean_floor, unmeasured_tasks = _thunder_2se_mean(arm, THUNDER_TASKS)
             unres, noise_pct, floor_unmeasured = _thunder_unresolvable(
                 wf_m - wb_m, arm, None, floor=mean_floor)
@@ -746,7 +746,7 @@ def score_run(meta, step):
     #
     # F-P fix (2026-08-26).  This was a MEAN OF THE PER-TASK PERCENTAGES over whichever
     # tasks happened to survive a per-task resolvability veto -- two wrongs at once.  It
-    # averaged ratios (so the task with the smallest Waiv gain dominated), and it did so
+    # averaged ratios (so the task with the smallest Reference gain dominated), and it did so
     # over a task SUBSET that varied per run (so two runs' "THUNDER pct" were not the
     # same quantity).  Both are now gone: the three classification tasks are pooled into
     # ONE numerator and ONE denominator via the shared eval_common.pool_cells -- the same
@@ -770,7 +770,7 @@ def score_run(meta, step):
         elif ourb_t is None:
             why = "no_base"
         elif gain_t is None:
-            why = "no_waiv"
+            why = "no_reference"
         pool_in.append({
             "key": task,
             "delta": (ours_t - ourb_t) if (ours_t is not None and ourb_t is not None) else None,
@@ -788,7 +788,7 @@ def score_run(meta, step):
     r["thunder_verdict_pct"] = pooled_cls.get("pct")
     r["thunder_verdict_ci"] = pooled_cls.get("ci")
     r["thunder_verdict_our_avg_delta"] = pooled_cls.get("our_avg_delta")
-    r["thunder_verdict_waiv_avg_gain"] = pooled_cls.get("waiv_avg_gain")
+    r["thunder_verdict_reference_avg_gain"] = pooled_cls.get("reference_avg_gain")
     r["thunder_verdict_tasks"] = cls_tasks if pooled_cls["status"] == "POOLED" else []
     r["thunder_verdict_skipped"] = [
         "%s:%s" % (c["key"], c.get("note") or "incomplete")
@@ -796,8 +796,8 @@ def score_run(meta, step):
     r["thunder_verdict_status"] = pooled_cls["status"]
     r["thunder_verdict_concentration"] = pooled_cls.get("concentration_flags") or []
 
-    # RI floor: base + 0.80 * (Waiv - base)
-    ri_gain = _waiv_gain(base_ri, waiv_dict.get("ri"))
+    # RI floor: base + 0.80 * (Reference - base)
+    ri_gain = _reference_gain(base_ri, reference_dict.get("ri"))
     if ri_gain is not None:
         r["ri_floor"] = base_ri + 0.80 * ri_gain
         r["ri_floor_pct"] = 80.0
@@ -810,7 +810,7 @@ def score_run(meta, step):
     else:
         r["ri_budget"] = "N/A"
 
-    # Average pct_of_waiv (for sorting)
+    # Average pct_of_reference (for sorting)
     pcts = []
     if r["ri_pct"] is not None:
         pcts.append(r["ri_pct"])
@@ -818,14 +818,14 @@ def score_run(meta, step):
         pcts.append(r["hest_pct"])
     if r.get("thunder_mean_pct") is not None:
         pcts.append(r["thunder_mean_pct"])
-    r["avg_pct_of_waiv"] = (sum(pcts) / len(pcts)) if pcts else None
+    r["avg_pct_of_reference"] = (sum(pcts) / len(pcts)) if pcts else None
 
-    # Noise as % of Waiv's gain
+    # Noise as % of Reference's gain
     sd_ri = _sd_for(arm, step, "ri")
     sd_hest = _sd_for(arm, step, "hest")
 
     ri_gain_abs = ri_gain if ri_gain is not None else None
-    hest_gain = _waiv_gain(base_hest, waiv_dict.get("hest"))
+    hest_gain = _reference_gain(base_hest, reference_dict.get("hest"))
     hest_gain_abs = hest_gain if hest_gain is not None else None
 
     r["ri_noise_pct_of_gain"] = None
@@ -839,13 +839,13 @@ def score_run(meta, step):
     r["ri_unresolvable"] = (r["ri_noise_pct_of_gain"] is not None and r["ri_noise_pct_of_gain"] > 20.0)
     r["hest_unresolvable"] = (r["hest_noise_pct_of_gain"] is not None and r["hest_noise_pct_of_gain"] > 20.0)
 
-    # 1 seed-SD expressed in pct_of_waiv points (half the stored 2SD-of-gain figure).
+    # 1 seed-SD expressed in pct_of_reference points (half the stored 2SD-of-gain figure).
     r["ri_sd_pct"] = (r["ri_noise_pct_of_gain"] / 2.0) if r["ri_noise_pct_of_gain"] is not None else None
     r["hest_sd_pct"] = (r["hest_noise_pct_of_gain"] / 2.0) if r["hest_noise_pct_of_gain"] is not None else None
 
     # UNRESOLVABLE-BY-CONSTRUCTION: withhold the pct, publish raw delta + CI instead.
     # The cell is NEVER silently dropped -- it prints as UNRES and is listed in the
-    # raw-delta report -- but it is excluded from avg_pct_of_waiv, because averaging a
+    # raw-delta report -- but it is excluded from avg_pct_of_reference, because averaging a
     # number we just declared unmeasurable would launder it back into the headline.
     for metric, base_v, sd_v in (("ri", base_ri, sd_ri), ("hest", base_hest, sd_hest)):
         sd_pct = r.get("%s_sd_pct" % metric)
@@ -854,7 +854,7 @@ def score_run(meta, step):
         r["%s_raw_delta" % metric] = (ours_v - base_v) if (ours_v is not None and base_v is not None) else None
         r["%s_raw_ci95" % metric] = (1.96 * sd_v) if sd_v is not None else None
         unres_bc, _sdp, _why = _ec.denominator_unresolvable(
-            _waiv_gain(base_v, (waiv_dict or {}).get(metric)), sd_v)
+            _reference_gain(base_v, (reference_dict or {}).get(metric)), sd_v)
         if unres_bc and sd_pct is not None:
             r["%s_by_construction" % metric] = True
             r["%s_pct_withheld" % metric] = r.get("%s_pct" % metric)
@@ -902,7 +902,7 @@ def _pct_str(pct, guard, width=7, uncapped=None):
     if pct is None:
         if guard == "no_ours":
             return ("MISSING").ljust(width)
-        if guard == "base>=Waiv":
+        if guard == "base>=Reference":
             return ("n/a").ljust(width)
         if guard == "unresolvable_by_construction":
             return ("UNRES").rjust(width)
@@ -912,19 +912,19 @@ def _pct_str(pct, guard, width=7, uncapped=None):
 
 def print_denominators():
     print("\n%s" % _hr("="))
-    print("  DENOMINATORS (auditable base/Waiv values per backbone)")
+    print("  DENOMINATORS (auditable base/Reference values per backbone)")
     print("%s" % _hr("="))
     hdr = "  %-12s %8s %8s %10s %14s %9s %9s %10s" % (
-        "backbone", "base_RI", "Waiv_RI", "gain_RI", "RI_floor(80pct)",
-        "base_HEST", "Waiv_HEST", "gain_HEST")
+        "backbone", "base_RI", "Reference_RI", "gain_RI", "RI_floor(80pct)",
+        "base_HEST", "Reference_HEST", "gain_HEST")
     print(hdr)
     for arm in ARMS:
         b_ri = RI_BASE.get(arm)
-        w_ri = WAIV[arm].get("ri")
+        w_ri = REFERENCE[arm].get("ri")
         b_h = HEST_BASE.get(arm)
-        w_h = WAIV[arm].get("hest")
-        ri_gain = _waiv_gain(b_ri, w_ri)
-        h_gain = _waiv_gain(b_h, w_h)
+        w_h = REFERENCE[arm].get("hest")
+        ri_gain = _reference_gain(b_ri, w_ri)
+        h_gain = _reference_gain(b_h, w_h)
         ri_floor = (b_ri + 0.80 * ri_gain) if ri_gain is not None else None
         ri_floor_str = "%.5f" % ri_floor if ri_floor is not None else "N/A"
         # DEFENSIVE (2026-08-26), same class as the ARM_BACKBONE.get fix above: an arm
@@ -938,16 +938,16 @@ def print_denominators():
             arm, _f(b_ri, "%.5f"), _f(w_ri, "%.3f"), _f(ri_gain, "%+.5f"), ri_floor_str,
             _f(b_h, "%.5f"), _f(w_h, "%.4f"), _f(h_gain, "%+.5f")))
     print()
-    print("  THUNDER denominators -- %s" % WAIV_THUNDER_SOURCE)
-    print("  GAIN-RATIO form: (ours - OUR_base) / (Waiv_ft - Waiv_base).  Our THUNDER base does NOT")
-    print("  reproduce Waiv's base (cls ~2-4pp low, seg ~4pp high on 2 datasets vs their 4), so only")
+    print("  THUNDER denominators -- %s" % REFERENCE_THUNDER_SOURCE)
+    print("  GAIN-RATIO form: (ours - OUR_base) / (Reference_ft - Reference_base).  Our THUNDER base does NOT")
+    print("  reproduce Reference's base (cls ~2-4pp low, seg ~4pp high on 2 datasets vs their 4), so only")
     print("  the GAIN is comparable -- never the level.  Our base reproduces THUNDER's own paper.")
     print("  2SE = measured seed floor from docs/thunder_seed_floor_12ds.md (offset-2SE of the")
     print("  12-dataset PAPER_CLS task mean, n=5 final5 training seeds, keyed by backbone).")
     print("  %-12s %-16s %9s %9s %9s %9s %8s %6s" % (
-        "backbone", "task", "our_base", "Waiv_base", "Waiv_ft", "Waiv_gain", "2SE/gain", "flag"))
+        "backbone", "task", "our_base", "Reference_base", "Reference_ft", "Reference_gain", "2SE/gain", "flag"))
     for arm in ARMS:
-        wt = WAIV_THUNDER.get(arm, {})
+        wt = REFERENCE_THUNDER.get(arm, {})
         ob = _c5._thunder_base_score(arm)
         for task in THUNDER_TASKS:
             wb = wt.get("base", {}).get(task)
@@ -960,7 +960,7 @@ def print_denominators():
             if floor_unm:
                 flags.append("UNMEASURED_FLOOR")
             if gain is not None and gain < 0:
-                flags.append("WAIV-REGRESSED")
+                flags.append("REFERENCE-REGRESSED")
             if unres:
                 flags.append("UNRESOLVABLE")
             if task in THUNDER_SUPPORT_MISMATCH:
@@ -979,20 +979,20 @@ def print_denominators():
 
 
 def print_raw_delta_report(scored):
-    """Cells whose pct_of_waiv was WITHHELD as unresolvable-by-construction.
+    """Cells whose pct_of_reference was WITHHELD as unresolvable-by-construction.
 
     These are reported the only honest way available: as a raw delta vs base with a
     95% CI from the measured seed-SD, alongside the denominator that makes the
     percentage form meaningless.  Read the CI, not a point estimate.
     """
     print("\n%s" % _hr("="))
-    print("  UNRESOLVABLE-BY-CONSTRUCTION -- pct_of_waiv WITHHELD, raw delta shown")
+    print("  UNRESOLVABLE-BY-CONSTRUCTION -- pct_of_reference WITHHELD, raw delta shown")
     print("%s" % _hr("="))
-    print("  Trigger: one seed-SD > %.0f pct_of_waiv points (identical to 2SD > 20%% of gain)." % UNRESOLVABLE_SD_PCT_LIMIT)
-    print("  A percentage here divides by a Waiv gain so small that ordinary seed jitter")
+    print("  Trigger: one seed-SD > %.0f pct_of_reference points (identical to 2SD > 20%% of gain)." % UNRESOLVABLE_SD_PCT_LIMIT)
+    print("  A percentage here divides by a Reference gain so small that ordinary seed jitter")
     print("  swings the score by tens of points.  The raw delta is the measurement; the")
     print("  percentage is an artefact of the denominator.  Cells are NOT dropped from the")
-    print("  scoreboard -- they print as UNRES -- but they are excluded from avg_pct_of_waiv.")
+    print("  scoreboard -- they print as UNRES -- but they are excluded from avg_pct_of_reference.")
     print()
     hdr = "  %-34s %-9s %-6s %9s %11s %11s %8s %7s" % (
         "run", "arm", "metric", "ours", "raw_delta", "+/-95%CI", "denom", "1SD_pct")
@@ -1008,8 +1008,8 @@ def print_raw_delta_report(scored):
             any_row = True
             arm = r.get("arm")
             base_v = (RI_BASE if metric == "ri" else HEST_BASE).get(arm)
-            waiv_v = WAIV.get(arm, {}).get(metric)
-            denom = _waiv_gain(base_v, waiv_v)
+            reference_v = REFERENCE.get(arm, {}).get(metric)
+            denom = _reference_gain(base_v, reference_v)
             d = r.get("%s_raw_delta" % metric)
             ci = r.get("%s_raw_ci95" % metric)
             sig = ""
@@ -1030,9 +1030,9 @@ def print_raw_delta_report(scored):
 
 def print_unresolvable_report(scored):
     print("\n%s" % _hr("="))
-    print("  UNRESOLVABLE METRICS (2*seed_SD > 20% of Waiv's gain)")
+    print("  UNRESOLVABLE METRICS (2*seed_SD > 20% of Reference's gain)")
     print("%s" % _hr("="))
-    print("  A metric is UNRESOLVABLE when noise alone spans more than 20% of Waiv's gain.")
+    print("  A metric is UNRESOLVABLE when noise alone spans more than 20% of Reference's gain.")
     print("  This means 80% vs 100% CANNOT be distinguished -- any claim is within noise.")
     print()
 
@@ -1068,9 +1068,9 @@ def print_unresolvable_report(scored):
         print("  %s step=%d: %s" % (arm, step, "; ".join(issues)))
 
     print()
-    print("  THUNDER (backbone-level, independent of run -- from Waiv's published gain):")
+    print("  THUNDER (backbone-level, independent of run -- from Reference's published gain):")
     for arm in ARMS:
-        wt = WAIV_THUNDER.get(arm, {})
+        wt = REFERENCE_THUNDER.get(arm, {})
         bad = []
         for task in THUNDER_TASKS:
             wb, wf = wt.get("base", {}).get(task), wt.get("ft", {}).get(task)
@@ -1079,7 +1079,7 @@ def print_unresolvable_report(scored):
             gain = (wf - wb) / 100.0
             unres, npct, floor_unm = _thunder_unresolvable(gain, arm, task)
             if gain < 0:
-                bad.append("%s: Waiv REGRESSED (%+.1fpp) -> no denominator" % (task, gain * 100))
+                bad.append("%s: Reference REGRESSED (%+.1fpp) -> no denominator" % (task, gain * 100))
             elif floor_unm:
                 bad.append("%s: no measured seed floor -> UNMEASURED_FLOOR "
                            "(cannot pass or fail)" % task)
@@ -1089,7 +1089,7 @@ def print_unresolvable_report(scored):
         if bad:
             print("    %-10s %s" % (arm, "; ".join(bad)))
     print()
-    print("  GUARDED CELLS (pct_of_waiv = N/A):")
+    print("  GUARDED CELLS (pct_of_reference = N/A):")
     # Count guarded RI/HEST cells
     ri_guards = [(r["run_name"], r.get("ri_pct_guard")) for r in scored if r.get("ri_pct_guard")]
     hest_guards = [(r["run_name"], r.get("hest_pct_guard")) for r in scored if r.get("hest_pct_guard")]
@@ -1177,11 +1177,11 @@ _VERDICT_RANK = {"PASS": 0, "FAIL": 1, "INDETERMINATE": 2, "UNDERPOWERED": 3}
 def verdict_report(scored, step):
     """CURRENT pass criterion, per backbone and rolled up per recipe.
 
-        per backbone: EVERY metric (RI, HEST, THUNDER) >= 70% of Waiv's gain
+        per backbone: EVERY metric (RI, HEST, THUNDER) >= 70% of Reference's gain
                       AND mean of the three > 80%
         per recipe:   the WORST backbone decides.
 
-    Percentages are CAPPED at 100 (beating Waiv scores 100, not more), so an
+    Percentages are CAPPED at 100 (beating Reference scores 100, not more), so an
     overshoot on one metric can never mask a shortfall on another.  Any cell that is
     UNMEASURED_FLOOR or unresolvable forces INDETERMINATE -- never PASS.
     """
@@ -1246,7 +1246,7 @@ def print_summary_table(scored):
     hdr = "  %-40s %-9s %-5s %-7s %-7s %-7s %-7s %-6s %-10s %-7s %-7s %-5s" % (
         "Run", "BB", "@", "RI", "RI_pct", "noise", "HEST", "H_pct", "THmean", "TH_pct", "avgPct", "RI-fl")
     print("\n%s" % _hr("="))
-    print("  SCOREBOARD -- pct_of_waiv headline | Rule 1: one checkpoint/row | Rule 2: ours|Waiv|diff")
+    print("  SCOREBOARD -- pct_of_reference headline | Rule 1: one checkpoint/row | Rule 2: ours|Reference|diff")
     print("%s" % _hr("="))
     print(hdr)
     print("%s" % _hr("-"))
@@ -1260,9 +1260,9 @@ def print_summary_table(scored):
         ri_s = "%.4f" % ri if ri is not None else "MISSING"
         ri_pct_s = _pct_str(r.get("ri_pct"), r.get("ri_pct_guard"), 7, r.get("ri_pct_uncapped"))
 
-        # Noise annotation on RI vs Waiv
+        # Noise annotation on RI vs Reference
         sd_ri = _sd_for(arm, step, "ri")
-        w_ri = WAIV.get(arm, {}).get("ri")
+        w_ri = REFERENCE.get(arm, {}).get("ri")
         ri_noise = ""
         if ri is not None and w_ri is not None:
             ri_noise = _noise_tag(abs(ri - w_ri), sd_ri)
@@ -1284,7 +1284,7 @@ def print_summary_table(scored):
         else:
             t_s = "MISSING"
 
-        avg_pct = r.get("avg_pct_of_waiv")
+        avg_pct = r.get("avg_pct_of_reference")
         avg_s = "%.1f" % avg_pct if avg_pct is not None else "N/A"
 
         bud = r.get("ri_budget", "N/A")
@@ -1305,7 +1305,7 @@ def print_summary_table(scored):
 def print_run_block(r):
     arm = r.get("arm") or "?"
     step = r.get("step")
-    waiv_dict = WAIV.get(arm, {})
+    reference_dict = REFERENCE.get(arm, {})
     base_ri = RI_BASE.get(arm)
     base_hest = HEST_BASE.get(arm)
 
@@ -1327,22 +1327,22 @@ def print_run_block(r):
     sd_ri = _sd_for(arm, step, "ri")
 
     if ri is not None:
-        w_ri = waiv_dict.get("ri")
+        w_ri = reference_dict.get("ri")
         diff_w = ri - w_ri if w_ri is not None else None
         diff_b = ri - base_ri if base_ri is not None else None
         noise = _noise_tag(abs(diff_w), sd_ri) if diff_w is not None else ""
-        pct_s = "%.1f%% of Waiv gain" % ri_pct if ri_pct is not None else "N/A (%s)" % (ri_guard or "")
+        pct_s = "%.1f%% of Reference gain" % ri_pct if ri_pct is not None else "N/A (%s)" % (ri_guard or "")
         unres_str = "  *** UNRESOLVABLE ***" if ri_un else ""
-        print("  RI: %s | Waiv %s | diff %s %s  %sbase %s  [%s]%s" % (
+        print("  RI: %s | Reference %s | diff %s %s  %sbase %s  [%s]%s" % (
             _fmt(ri, "%.5f"), _fmt(w_ri, "%.3f"), _fmt(diff_w), noise, "",
             _fmt(diff_b), pct_s, unres_str))
-        waiv_ds = waiv_dict.get("ri_ds", {})
+        reference_ds = reference_dict.get("ri_ds", {})
         for ds in ("tcga", "camelyon", "tolkach_esca"):
             val = r.get("ri_ds", {}).get(ds)
-            wv = waiv_ds.get(ds)
+            wv = reference_ds.get(ds)
             if val is not None:
                 dws = val - wv if wv is not None else None
-                print("    RI.-%12s  %s | Waiv %s | diff %s" % (
+                print("    RI.-%12s  %s | Reference %s | diff %s" % (
                     ds, _fmt(val, "%.5f"), _fmt(wv, "%.3f"), _fmt(dws)))
             else:
                 print("    RI.-%12s  MISSING" % ds)
@@ -1357,13 +1357,13 @@ def print_run_block(r):
     sd_hest = _sd_for(arm, step, "hest")
 
     if hest is not None:
-        w_h = waiv_dict.get("hest")
+        w_h = reference_dict.get("hest")
         diff_w = hest - w_h if w_h is not None else None
         diff_b = hest - base_hest if base_hest is not None else None
         noise = _noise_tag(abs(diff_w), sd_hest) if diff_w is not None else ""
-        pct_s = "%.1f%% of Waiv gain" % hest_pct if hest_pct is not None else "N/A (%s)" % (hest_guard or "")
+        pct_s = "%.1f%% of Reference gain" % hest_pct if hest_pct is not None else "N/A (%s)" % (hest_guard or "")
         unres_str = "  *** UNRESOLVABLE ***" if hest_un else ""
-        print("  HEST: %s | Waiv %s | diff %s %s  %sbase %s  [%s]%s" % (
+        print("  HEST: %s | Reference %s | diff %s %s  %sbase %s  [%s]%s" % (
             _fmt(hest, "%.5f"), _fmt(w_h, "%.4f"), _fmt(diff_w), noise, "",
             _fmt(diff_b), pct_s, unres_str))
     else:
@@ -1373,7 +1373,7 @@ def print_run_block(r):
     thunder = r.get("thunder", {})
     base_thunder = r.get("base_thunder", {})
     th_pct = r.get("thunder_pct", {})
-    print("  THUNDER  [pct_of_waiv = (ours - OUR_base) / (Waiv_ft - Waiv_base); %s]" % WAIV_THUNDER_SOURCE)
+    print("  THUNDER  [pct_of_reference = (ours - OUR_base) / (Reference_ft - Reference_base); %s]" % REFERENCE_THUNDER_SOURCE)
     task_means = []
     all_complete = True
     for task in THUNDER_TASKS:
@@ -1404,9 +1404,9 @@ def print_run_block(r):
                 noise = _noise_tag(delta if delta >= 0 else -delta, t_floor)
             ds_str = "  %sbase %+.5f %s" % ("", delta, noise) if delta is not None else ""
             tp = th_pct.get(task, {})
-            wf, gain = tp.get("waiv_ft"), tp.get("waiv_gain")
+            wf, gain = tp.get("reference_ft"), tp.get("reference_gain")
             if tp.get("pct") is not None:
-                pct_s = "%.1f%% of Waiv gain" % tp["pct"]
+                pct_s = "%.1f%% of Reference gain" % tp["pct"]
                 if tp.get("pct_uncapped") is not None and tp["pct_uncapped"] > tp["pct"] + 1e-9:
                     pct_s += " (capped; raw %.1f%%)" % tp["pct_uncapped"]
                 if tp.get("unmeasured_floor"):
@@ -1415,7 +1415,7 @@ def print_run_block(r):
                     pct_s += " *** UNRESOLVABLE (2SE=%.0f%% of gain) ***" % tp["noise_pct_of_gain"]
             else:
                 pct_s = "N/A (%s)" % (tp.get("guard") or "")
-            wv_s = " | Waiv %.5f (gain %+.5f)" % (wf, gain) if wf is not None and gain is not None else ""
+            wv_s = " | Reference %.5f (gain %+.5f)" % (wf, gain) if wf is not None and gain is not None else ""
             sup = "  ^support_2v4" if tp.get("support_mismatch") else ""
             print("    %-18s  %.5f (%d/%d)%s%s  [%s]%s" % (
                 task, mean, n, total, ds_str, wv_s, pct_s, sup))
@@ -1428,7 +1428,7 @@ def print_run_block(r):
         base_str = "  %sbase %+.5f" % ("", t_mean - base_t) if base_t is not None else ""
         tmp = r.get("thunder_mean_pct")
         if tmp is not None:
-            pct_s = "%.1f%% of Waiv gain" % tmp
+            pct_s = "%.1f%% of Reference gain" % tmp
             if r.get("thunder_mean_pct_uncapped") is not None and \
                     r["thunder_mean_pct_uncapped"] > tmp + 1e-9:
                 pct_s += " (capped; raw %.1f%%)" % r["thunder_mean_pct_uncapped"]
@@ -1455,12 +1455,12 @@ def print_run_block(r):
     if ri is not None and ri_floor is not None:
         g = ri - ri_floor
         gap = "  (gap=%+.5f)" % g
-    print("  RI-floor: %s (base + 80%% of Waiv gain)  %s%s" % (floor_str, bud, gap))
+    print("  RI-floor: %s (base + 80%% of Reference gain)  %s%s" % (floor_str, bud, gap))
 
-    # avg pct_of_waiv
-    avg = r.get("avg_pct_of_waiv")
+    # avg pct_of_reference
+    avg = r.get("avg_pct_of_reference")
     avg_s = "%.1f%%" % avg if avg is not None else "N/A"
-    print("  avg_pct_of_waiv (RI + HEST + THUNDER task-mean): %s" % avg_s)
+    print("  avg_pct_of_reference (RI + HEST + THUNDER task-mean): %s" % avg_s)
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
@@ -1480,7 +1480,7 @@ def main():
     ap.add_argument("--sort-by",
                     choices=["avg_pct", "ri", "ri_pct", "hest", "hest_pct", "thunder", "name"],
                     default="avg_pct",
-                    help="Sort key (default: avg_pct = average pct_of_waiv across metrics)")
+                    help="Sort key (default: avg_pct = average pct_of_reference across metrics)")
     ap.add_argument("--runs-dir", default=None,
                     help="Override runs directory")
     ap.add_argument("--no-detail", action="store_true",
@@ -1494,7 +1494,7 @@ def main():
 
     print("scoreboard v3  |  step=%d  |  runs_dir=%s" % (args.step, runs_dir))
     print("RULE 1: single (run_name, step) per row -- MISSING if absent")
-    print("RULE 2: ours | Waiv | diff visible; pct_of_waiv headline")
+    print("RULE 2: ours | Reference | diff visible; pct_of_reference headline")
     print("FIX: virchow2 base_hest = 0.40324 (was 0.4034)")
     print()
 
@@ -1511,7 +1511,7 @@ def main():
     def _sort_key(r):
         sb = args.sort_by
         if sb == "avg_pct":
-            return -(r.get("avg_pct_of_waiv") or -999)
+            return -(r.get("avg_pct_of_reference") or -999)
         if sb == "ri":
             return -(r.get("ri") or -9)
         if sb == "ri_pct":
@@ -1556,12 +1556,12 @@ def main():
 
     print("\n%s" % _hr("="))
     print("Total rows: %d" % len(scored))
-    print("pct_of_waiv = (ours - base) / (Waiv - base) * 100, CAPPED at 100")
+    print("pct_of_reference = (ours - base) / (Reference - base) * 100, CAPPED at 100")
     print("PASS (per backbone): every metric >= %.0f%% AND mean of the three > %.0f%%"
           % (VERDICT_MIN_PCT, VERDICT_MEAN_PCT))
     print("PASS (per recipe):   scored by the WORST backbone")
-    print("RI floor = base + 0.80 * (Waiv - base)   [legacy row, not the verdict]")
-    print("UNRESOLVABLE: 2*seed_SD > 20% of Waiv's gain")
+    print("RI floor = base + 0.80 * (Reference - base)   [legacy row, not the verdict]")
+    print("UNRESOLVABLE: 2*seed_SD > 20% of Reference's gain")
     print("THUNDER seed floors: docs/thunder_seed_floor_12ds.md -- offset-2SE of the")
     print("                  12-dataset PAPER_CLS task mean, n=5 final5 training seeds,")
     print("                  keyed by (backbone, task).  Supersedes the 5-dataset n=2 floor.")

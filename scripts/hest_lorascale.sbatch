@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hestls
+#SBATCH --job-name=spectra-hestls
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

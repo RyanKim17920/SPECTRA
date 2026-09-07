@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-gridcmp
+#SBATCH --job-name=spectra-gridcmp
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -29,7 +29,7 @@
 #
 # Budget: 1500 x 5.85 s = 2.44 h of training plus the follower draining behind it.
 #
-#   SPECTRA_ARM=ctrl   sbatch --job-name=waiv-gridcmp-ctrl   scripts/gridcmp.sbatch
+#   SPECTRA_ARM=ctrl   sbatch --job-name=spectra-gridcmp-ctrl   scripts/gridcmp.sbatch
 
 set -euo pipefail
 

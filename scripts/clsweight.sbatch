@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-clsw
+#SBATCH --job-name=spectra-clsw
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -14,7 +14,7 @@
 # FINAL CONFIG, THREE BACKBONES, FIVE SEEDS -- ONE IDENTICAL RECIPE
 # ======================================================================================
 #
-# WHY THIS EXISTS. The three-backbone table in docs/FINAL_RESULTS.md sec.2 is confounded:
+# WHY THIS EXISTS. The three-backbone table in docs/archive/FINAL_RESULTS.md sec.2 is confounded:
 # the three runs behind it do not share a recipe.
 #
 #   splitgrid-386374  phikon-v2   C=2 T=1800  1500 steps  pool_head=mean

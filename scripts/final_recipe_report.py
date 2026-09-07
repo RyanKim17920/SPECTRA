@@ -12,9 +12,9 @@ Checkpoint selection is a RULE, not a number: the FIRST checkpoint whose mean
 the step is hardcoded, so re-running this after more seeds land needs no edit.
 
 The criterion this script grades against (deliberately NOT softened):
-    pct_of_waiv = (ours - base) / (waiv - base) * 100, UNCAPPED.
+    pct_of_reference = (ours - base) / (reference - base) * 100, UNCAPPED.
     F-C fix (2026-08-26): the >=70 per-cell test and the >80 average are now functions of
-    the SAME quantity -- the uncapped pct.  The 100 cap ("exceeding Waiv counts as 100")
+    the SAME quantity -- the uncapped pct.  The 100 cap ("exceeding Reference counts as 100")
     survives as PRESENTATION ONLY: it is printed beside the graded value and enters no
     arithmetic.  Previously the test ran on the uncapped interval while the averages
     summed the capped value, so one cell had three different published numbers
@@ -32,10 +32,10 @@ collector:
     mean over fewer datasets averages away less per-dataset noise and is therefore
     NOISIER, so applying a 12ds floor to it would understate the noise and manufacture
     resolvability.
-  * A cell whose Waiv denominator is smaller than the benchmark's own seed noise is
-    INDETERMINATE, not a score.  Detected generally as |waiv_gain| < floor, never by
+  * A cell whose Reference denominator is smaller than the benchmark's own seed noise is
+    INDETERMINATE, not a score.  Detected generally as |reference_gain| < floor, never by
     naming the offending cells.  (Today that catches midnight/linear_probing,
-    virchow2/knn -- where Waiv REGRESSED, making the denominator negative -- and
+    virchow2/knn -- where Reference REGRESSED, making the denominator negative -- and
     virchow2/linear_probing.)
   * Every cell carries a 95% CI.  A cell whose CI straddles the 70 bar is NOT RESOLVED:
     the data cannot tell PASS from FAIL, and saying either would be a claim the error
@@ -54,9 +54,9 @@ collector:
     The three THUNDER tasks read the same checkpoints over the same 12 datasets.
   * THUNDER half-widths come from the across-SEED SD of the 12-dataset task mean, not
     from the offset-2SE resolvability floor (whose SD is over DATASETS).  The floor
-    keeps its own, separate job: gating cells whose Waiv denominator is itself noise.
+    keeps its own, separate job: gating cells whose Reference denominator is itself noise.
 
-See docs/EVAL_FIXES_2026-08-26.md for the audit these last five rules came from.
+See docs/archive/EVAL_FIXES_2026-08-26.md for the audit these last five rules came from.
 
 Usage:
     python3 scripts/final_recipe_report.py
@@ -90,11 +90,11 @@ import scoreboard as _sb              # noqa: E402
 # ---------------------------------------------------------------------------
 # CLASSIFICATION ROSTER (2026-08-26).  Owned by collect_final5; selected here.
 # ---------------------------------------------------------------------------
-# DEFAULT IS THE 16-SET WAIV ROSTER.  Waiv's published THUNDER classification numbers
+# DEFAULT IS THE 16-SET REFERENCE ROSTER.  Reference's published THUNDER classification numbers
 # (arXiv:2607.22861 Table 2) are means over 16 datasets -- the THUNDER paper's 12 plus
 # the 4 SPIDER organ subsets, which postdate that paper.  We averaged over 12.  That
-# mismatch put our base task means 0.86-3.72 points BELOW Waiv's published bases on all
-# 9 (backbone, task) cells, and since pct_of_waiv = (ours - our_base) / waiv_gain, a base
+# mismatch put our base task means 0.86-3.72 points BELOW Reference's published bases on all
+# 9 (backbone, task) cells, and since pct_of_reference = (ours - our_base) / reference_gain, a base
 # that is not the same quantity as theirs is not a comparison at all.  On the 16-set
 # roster the same 9 gaps collapse to -0.61..+0.43 -- i.e. the base gap IS the roster.
 #
@@ -107,13 +107,13 @@ import scoreboard as _sb              # noqa: E402
 # is used rather than rescaled because no 5-seed SPIDER cohort exists to measure with.
 CLS_ROSTERS = {
     "12": _c5.PAPER_CLS_THUNDER12,   # THUNDER paper panel; what the seed floors were measured on
-    "16": _c5.PAPER_CLS_WAIV16,      # Waiv's Table-2 panel = 12 + 4 SPIDER
+    "16": _c5.PAPER_CLS_REFERENCE16,      # Reference's Table-2 panel = 12 + 4 SPIDER
 }
 CLS_ROSTER_DEFAULT = "16"
 PAPER_CLS = CLS_ROSTERS[CLS_ROSTER_DEFAULT]
 THUNDER_ROOT = _c5.THUNDER_ROOT
-WAIV_THUNDER = _sb.WAIV_THUNDER                 # published Table 2, 0-100 scale
-WAIV_THUNDER_SOURCE = _sb.WAIV_THUNDER_SOURCE
+REFERENCE_THUNDER = _sb.REFERENCE_THUNDER                 # published Table 2, 0-100 scale
+REFERENCE_THUNDER_SOURCE = _sb.REFERENCE_THUNDER_SOURCE
 
 # Arms this report can GRADE, derived -- not typed.  Grading a cell needs three
 # denominators that only exist once the corresponding measurement has been made:
@@ -176,7 +176,7 @@ RI_SE: float | None = None          # set only by --ri-se; never defaulted to a 
 # assertion is made once, with its source, instead of being retyped on a command line:
 #
 #   0.0070 = the MEASURED between-seed floor of the 3-dataset avg robustness index,
-#   max |ctrl - ctrlseed| over checkpoints, n=2 (docs/RESULTS.md section 12.3, quoted in
+#   max |ctrl - ctrlseed| over checkpoints, n=2 (docs/archive/RESULTS.md section 12.3, quoted in
 #   docs/CAVEATS.md: "the avg-RI floor (0.0070)").  It is the noise of exactly the
 #   quantity this rule scores -- the same mean over the same three PathoROB datasets --
 #   which is why it is used rather than scoreboard.NOISE_SD's per-(backbone, step) RI SDs
@@ -192,7 +192,7 @@ RI_SE: float | None = None          # set only by --ri-se; never defaulted to a 
 # SE 0.006-0.0085 on four of five backbones.
 RI_SE_SCOREBOARD_DEFAULT = 0.0070
 RI_SE_SCOREBOARD_SOURCE = (
-    "docs/RESULTS.md section 12.3 measured between-seed avg-RI floor 0.0070 "
+    "docs/archive/RESULTS.md section 12.3 measured between-seed avg-RI floor 0.0070 "
     "(max |ctrl - ctrlseed| over checkpoints, n=2); OPERATOR INPUT, not a "
     "per-checkpoint bootstrap SE -- PathoROB's bootstrap fields are on no curve on disk")
 # The rule cannot declare a plateau off a single checkpoint: at t=1 the "improvement
@@ -213,7 +213,7 @@ OVERALL_BAR = 80.0        # ... and the mean of the three benchmark means must e
 HEST_BASE = _c5.HEST_BASE
 HEST_BASE_SOURCE = _c5.HEST_BASE_SOURCE
 
-# F-F fix (2026-08-26): RI_BASE and RI_WAIV are no longer literals here.
+# F-F fix (2026-08-26): RI_BASE and RI_REFERENCE are no longer literals here.
 #
 #   RI_BASE  used to be {phikon 0.4686, midnight 0.7589, virchow2 0.8582} in FIVE files,
 #            attributed by collect_final5's comment to probe_before.json.  THAT
@@ -221,21 +221,21 @@ HEST_BASE_SOURCE = _c5.HEST_BASE_SOURCE
 #            cross-stain probe and has no robustness_index field.  The real measurement
 #            is PathoROB's own results_summary.json for the untuned feature dirs, and
 #            that is what eval_common.load_ri_base() reads.
-#   RI_WAIV  used to be re-typed here; it is a transcription of Waiv Table 1 that already
+#   RI_REFERENCE  used to be re-typed here; it is a transcription of Reference Table 1 that already
 #            has exactly one owner, src/spectra/eval/pathorob_adapter.TARGETS.
-#   HEST_WAIV likewise now has one owner (eval_common), for the same reason.
+#   HEST_REFERENCE likewise now has one owner (eval_common), for the same reason.
 #
 # The literals are kept ONLY as an assertion target: a disagreement between the value on
 # disk and the value that was published is itself a bug, so it is measured and reported
 # rather than quietly absorbed.
 RI_BASE, RI_BASE_SOURCE = _ec.load_ri_base()
-RI_WAIV, RI_WAIV_SOURCE = _ec.load_ri_waiv()
-HEST_WAIV = _ec.HEST_WAIV
-HEST_WAIV_SOURCE = _ec.HEST_WAIV_SOURCE
+RI_REFERENCE, RI_REFERENCE_SOURCE = _ec.load_ri_reference()
+HEST_REFERENCE = _ec.HEST_REFERENCE
+HEST_REFERENCE_SOURCE = _ec.HEST_REFERENCE_SOURCE
 
 _RETIRED_LITERALS = {
     "RI_BASE": {"phikon": 0.4686, "midnight": 0.7589, "virchow2": 0.8582},
-    "RI_WAIV": {"phikon": 0.806, "midnight": 0.924, "virchow2": 0.918},
+    "RI_REFERENCE": {"phikon": 0.806, "midnight": 0.924, "virchow2": 0.918},
 }
 
 
@@ -243,7 +243,7 @@ def _literal_agreement():
     """Compare every retired literal against the value now read from disk."""
     out = {}
     for name, lit in _RETIRED_LITERALS.items():
-        live = {"RI_BASE": RI_BASE, "RI_WAIV": RI_WAIV}[name]
+        live = {"RI_BASE": RI_BASE, "RI_REFERENCE": RI_REFERENCE}[name]
         for a, v in lit.items():
             d = live[a] - v
             out["%s/%s" % (name, a)] = {
@@ -265,7 +265,7 @@ def _literal_agreement():
 # across-seed SD, sqrt(sum df_f sd_f^2 / sum df_f)), read from docs/hest_seed_sd.json --
 # mirroring how docs/thunder_seed_floor_12ds.json is produced and consumed.
 #
-# It is stored in RAW metric units, per (backbone, step), and converted to pct-of-waiv
+# It is stored in RAW metric units, per (backbone, step), and converted to pct-of-reference
 # points at the point of use, because that conversion depends on the per-backbone gain.
 HEST_SEED_SD, HEST_SEED_SD_PATH, _HEST_SD_BLOB = _ec.load_hest_seed_sd()
 HEST_SEED_SD_SOURCE = "%s (estimator: %s)" % (HEST_SEED_SD_PATH, _HEST_SD_BLOB["estimator"])
@@ -304,7 +304,7 @@ THUNDER_FLOOR_SOURCE = (
 # --- F4 fix (2026-08-26): THUNDER error bars -------------------------------------
 # THUNDER_FLOOR above is `offset_2se` = |mean(d)| + 2*SD(d)/sqrt(12), where d is the
 # PER-DATASET F1 delta between two seed replicates and the SD is taken OVER THE 12
-# DATASETS.  That is a resolvability floor -- "is Waiv's own gain even bigger than
+# DATASETS.  That is a resolvability floor -- "is Reference's own gain even bigger than
 # seed noise" -- and it is what the INDETERMINATE gate below still uses.  It is NOT a
 # 95% half-width on our task mean: SD-over-datasets is the wrong variance component
 # for that, and dividing it by sqrt(n_runs) (as this script used to) compounds the
@@ -338,7 +338,7 @@ HEST_POOLING = {a: _c5.hest_pooling(a) for a in ALL_ARMS}
 # ---------------------------------------------------------------------------
 # This used to be one all-or-nothing list per arm: an arm missing ANY denominator was
 # struck from EVERY table.  The only input the two gated backbones lack is the THUNDER
-# seed floor -- their RI base, HEST base and both Waiv targets have been on disk since
+# seed floor -- their RI base, HEST base and both Reference targets have been on disk since
 # the gated-backbone eval landed -- so the old rule silently deleted ten perfectly
 # measurable RI/HEST cells because a third benchmark was unmeasured.  A missing
 # denominator now removes exactly the cells it actually blocks.
@@ -348,18 +348,18 @@ def _missing_denominators_for(arm: str, bench: str) -> list[str]:
     if bench == "RI":
         if arm not in RI_BASE:
             missing.append("RI base (eval_common.RI_BASE_MODEL_DIRS)")
-        if arm not in RI_WAIV:
-            missing.append("Waiv RI target (pathorob_adapter.TARGETS)")
+        if arm not in RI_REFERENCE:
+            missing.append("Reference RI target (pathorob_adapter.TARGETS)")
     elif bench == "HEST":
         if arm not in HEST_BASE:
             missing.append("HEST base (collect_final5.HEST_BASE_FILES)")
-        if arm not in HEST_WAIV:
-            missing.append("Waiv HEST target (eval_common.HEST_WAIV)")
+        if arm not in HEST_REFERENCE:
+            missing.append("Reference HEST target (eval_common.HEST_REFERENCE)")
     elif bench == "THUNDER":
         if arm not in THUNDER_FLOOR:
             missing.append("THUNDER seed floor (docs/thunder_seed_floor_12ds.md)")
-        if arm not in WAIV_THUNDER:
-            missing.append("Waiv THUNDER target (docs/waiv_published.json Table 2)")
+        if arm not in REFERENCE_THUNDER:
+            missing.append("Reference THUNDER target (docs/reference_published.json Table 2)")
     return missing
 
 
@@ -735,19 +735,19 @@ def thunder_base_12ds(backbone: str) -> dict[str, tuple[float | None, int]]:
 
 
 def thunder_base_gap() -> dict:
-    """OUR base task mean MINUS Waiv's PUBLISHED base, on both rosters.
+    """OUR base task mean MINUS Reference's PUBLISHED base, on both rosters.
 
-    This is the validity test for every THUNDER pct_of_waiv in this report.  pct_of_waiv
-    subtracts OUR base from OUR score and divides by WAIV's gain; if our base is not
+    This is the validity test for every THUNDER pct_of_reference in this report.  pct_of_reference
+    subtracts OUR base from OUR score and divides by REFERENCE's gain; if our base is not
     measuring the same quantity as their base, the numerator carries a constant offset
     that has nothing to do with the recipe.  A roster that closes this gap is the only
     evidence that the two sides are like-for-like.
 
     Nothing here is hardcoded: our side is read from disk through the same
-    _thunder_base_per_ds path the cells use, and Waiv's side comes from
-    scoreboard.WAIV_THUNDER, which is loaded from docs/waiv_published.json.
+    _thunder_base_per_ds path the cells use, and Reference's side comes from
+    scoreboard.REFERENCE_THUNDER, which is loaded from docs/reference_published.json.
     """
-    out: dict = {"waiv_source": WAIV_THUNDER_SOURCE, "rosters": {}}
+    out: dict = {"reference_source": REFERENCE_THUNDER_SOURCE, "rosters": {}}
     for label, roster in CLS_ROSTERS.items():
         per_roster: dict = {}
         for a in THUNDER_ARMS:
@@ -756,12 +756,12 @@ def thunder_base_gap() -> dict:
                 vals = [v for k, v in (per_ds.get(task) or {}).items()
                         if k in roster and v is not None]
                 ours = (100.0 * sum(vals) / len(vals)) if len(vals) == len(roster) else None
-                waiv = WAIV_THUNDER[a]["base"][task]
+                reference = REFERENCE_THUNDER[a]["base"][task]
                 per_roster["%s/%s" % (a, task)] = {
                     "our_base_pct": ours,
                     "coverage": "%d/%d" % (len(vals), len(roster)),
-                    "waiv_published_base_pct": waiv,
-                    "gap_pct_points": (None if ours is None else ours - waiv),
+                    "reference_published_base_pct": reference,
+                    "gap_pct_points": (None if ours is None else ours - reference),
                 }
         gaps = [v["gap_pct_points"] for v in per_roster.values()
                 if v["gap_pct_points"] is not None]
@@ -777,21 +777,21 @@ def thunder_base_gap() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# pct_of_waiv + resolution
+# pct_of_reference + resolution
 # ---------------------------------------------------------------------------
-def pct_of_waiv_uncapped(ours: float, base: float, waiv: float) -> float:
-    """(ours - base) / (waiv - base) * 100, NOT capped.
+def pct_of_reference_uncapped(ours: float, base: float, reference: float) -> float:
+    """(ours - base) / (reference - base) * 100, NOT capped.
 
     This is the MEASUREMENT.  The 100 cap is a reporting convention, applied later by
     cap100() -- see the note there.
     """
-    return (ours - base) / (waiv - base) * 100.0
+    return (ours - base) / (reference - base) * 100.0
 
 
 def cap100(pct: float) -> float:
-    """Apply the reporting cap: 'exceeded Waiv' counts as 100.
+    """Apply the reporting cap: 'exceeded Reference' counts as 100.
 
-    Capped because 'exceeded Waiv' is still just 'matched the target' for a criterion
+    Capped because 'exceeded Reference' is still just 'matched the target' for a criterion
     that asks whether we reached them; letting a cell run to 140 would let one backbone
     buy off another's shortfall in the average.  This is a REPORTING/AGGREGATION rule,
     NOT a measurement: it must never be applied before the >=70 resolution test, because
@@ -802,14 +802,14 @@ def cap100(pct: float) -> float:
 
 
 # Backwards-compatible alias kept intentionally NOT defined: any remaining caller of the
-# old capped-then-tested `pct_of_waiv` should fail loudly rather than silently regress.
+# old capped-then-tested `pct_of_reference` should fail loudly rather than silently regress.
 
 
 def resolve(pct: float | None, ci: float | None, n: int | None = None) -> str:
     """Grade one cell against the 70 bar, honouring its error bar.
 
     `pct` MUST be the UNCAPPED point estimate.  The bar is a statement about the true
-    fraction of Waiv's gain we captured, and the cap does not change that fraction.
+    fraction of Reference's gain we captured, and the cap does not change that fraction.
     """
     if pct is None:
         return "NO_DATA"
@@ -839,7 +839,7 @@ def grade(pct_uncapped: float | None, ci: float | None, n: int | None = None) ->
     changes the point estimate but not the error bar, so a capped point with an uncapped
     interval is not an interval for anything; and averaging censored values makes the
     benchmark mean a function of how far ABOVE the target the best cells landed being
-    thrown away, which is a different quantity from "the fraction of Waiv's gain we
+    thrown away, which is a different quantity from "the fraction of Reference's gain we
     captured".  The cap survives ONLY as presentation: `pct_capped` is printed next to
     the uncapped value and marked with a star, so the old convention stays legible
     without ever entering an arithmetic path.
@@ -885,9 +885,9 @@ def gate_denominator(bench: str, arm: str, gain: float | None, seed_sd: float | 
                      sd_note: str = "") -> dict | None:
     """Run THE shared denominator gate.  Returns a withheld cell, or None to continue.
 
-    F-B fix (2026-08-26).  This report used to gate THUNDER (|waiv_gain| < offset-2SE
+    F-B fix (2026-08-26).  This report used to gate THUNDER (|reference_gain| < offset-2SE
     floor) and NOT gate RI or HEST at all, while scoreboard.py gated RI and HEST on
-    `one seed-SD > 10 pct_of_waiv points` and never printed the offending cell.  The two
+    `one seed-SD > 10 pct_of_reference points` and never printed the offending cell.  The two
     files therefore disagreed on the SAME cell: scoreboard WITHHELD virchow2/HEST while
     this report printed 72.9 for it and averaged it into the HEST mean.  There is now one
     implementation (eval_common.denominator_unresolvable) and one threshold, applied to
@@ -899,8 +899,8 @@ def gate_denominator(bench: str, arm: str, gain: float | None, seed_sd: float | 
         return None
     return withheld(
         "%s/%s denominator gate: %s%s" % (arm, bench, why, (" [%s]" % sd_note) if sd_note else ""),
-        {"waiv_gain": gain, "seed_sd": seed_sd, "seed_sd_pct_points": sd_pct,
-         "gate": "one seed-SD > %.0f pct_of_waiv points (eval_common)"
+        {"reference_gain": gain, "seed_sd": seed_sd, "seed_sd_pct_points": sd_pct,
+         "gate": "one seed-SD > %.0f pct_of_reference points (eval_common)"
                  % _ec.UNRESOLVABLE_SD_PCT_LIMIT})
 
 
@@ -909,12 +909,12 @@ def percell_gate_diagnostic(bench: str, arm: str, gain: float | None,
     """The old PER-CELL denominator gate, retained as a DIAGNOSTIC ONLY.
 
     F-P fix (2026-08-26).  Until now this gate VETOED a cell whenever one seed-SD
-    exceeded 10 pct_of_waiv points, i.e. whenever 2*SD_waiv > 20% of Waiv's own gain.
+    exceeded 10 pct_of_reference points, i.e. whenever 2*SD_reference > 20% of Reference's own gain.
     Two things were wrong with using it as a veto:
 
       * It is not the test its own docstring describes.  "The denominator is noise"
         means the denominator's SIGN is not determined (|gain| <= 2*SD); the 10-point
-        bar instead asks whether Waiv's gain is known to better than +/-20% relative,
+        bar instead asks whether Reference's gain is known to better than +/-20% relative,
         which is a PRECISION question, not an is-it-real question.  The two differ by a
         factor of five, and every THUNDER cell sits between them: phikon/knn's gain is
         5.8 seed-SD -- unambiguously real -- yet the 10-point bar rejected it.
@@ -927,19 +927,19 @@ def percell_gate_diagnostic(bench: str, arm: str, gain: float | None,
         still clears 70.
 
     So the number below is still computed and still printed -- an honest reader wants to
-    know that Waiv's phikon/knn gain is known only to +/-35% -- but it no longer decides
+    know that Reference's phikon/knn gain is known only to +/-35% -- but it no longer decides
     whether a cell is graded.  Grading is decided by eval_common.pooled_denominator_
     unresolvable applied to the POOLED denominator.
     """
     unres, sd_pct, why = _ec.denominator_unresolvable(gain, seed_sd)
     return {
-        "waiv_gain": gain,
+        "reference_gain": gain,
         "seed_sd": seed_sd,
         "seed_sd_pct_points": sd_pct,
-        "waiv_gain_over_1sd": (abs(gain) / seed_sd) if (gain and seed_sd) else None,
+        "reference_gain_over_1sd": (abs(gain) / seed_sd) if (gain and seed_sd) else None,
         "percell_precision_flag": unres,
         "percell_precision_note": why,
-        "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > %.0f pct_of_waiv points; "
+        "percell_gate": "DIAGNOSTIC ONLY -- one seed-SD > %.0f pct_of_reference points; "
                         "does NOT withhold the cell (see percell_gate_diagnostic)"
                         % _ec.UNRESOLVABLE_SD_PCT_LIMIT,
         "sd_note": sd_note,
@@ -976,7 +976,7 @@ def build_report(hest_assume_step: int | None = None,
     `rule` / `ri_se` select the checkpoint rule (see RI_SE above).  `run_glob` selects
     the run family (default RUN_GLOB = the finalised c50 sweep).
 
-    `cls_roster` selects the THUNDER classification panel: "16" (default, Waiv's
+    `cls_roster` selects the THUNDER classification panel: "16" (default, Reference's
     Table-2 roster) or "12" (the THUNDER paper's, which is what the seed floors were
     measured on).  See CLS_ROSTERS above.
 
@@ -1028,10 +1028,10 @@ def build_report(hest_assume_step: int | None = None,
             "selected": cls_roster,
             "n_datasets": len(PAPER_CLS),
             "datasets": list(PAPER_CLS),
-            "why": ("Waiv average THUNDER classification over 16 datasets (the THUNDER "
+            "why": ("Reference average THUNDER classification over 16 datasets (the THUNDER "
                     "paper's 12 + the 4 SPIDER organ subsets, which postdate that paper). "
                     "Averaging over 12 while comparing to their 16-set figures is a roster "
-                    "mismatch that biases every pct_of_waiv numerator."),
+                    "mismatch that biases every pct_of_reference numerator."),
             "seed_floor_caveat": ("THUNDER_FLOOR / THUNDER_SEED_SD were measured on the "
                                   "12-dataset task mean (n=5 seeds).  A 16-dataset mean is "
                                   "LESS noisy, so reusing the 12ds SD OVER-states the error "
@@ -1050,9 +1050,9 @@ def build_report(hest_assume_step: int | None = None,
                                          "ANY arithmetic.  The >=70 per-cell test, the "
                                          "benchmark means, the overall average and the "
                                          "worst-cell search all run on the UNCAPPED "
-                                         "pct_of_waiv.  pct_capped is printed beside it "
+                                         "pct_of_reference.  pct_capped is printed beside it "
                                          "so the old convention stays legible."),
-            "graded_quantity": "pct_of_waiv, UNCAPPED, identical for the >=70 test and "
+            "graded_quantity": "pct_of_reference, UNCAPPED, identical for the >=70 test and "
                                "for every average",
             "scored_by": "worst (backbone, benchmark) cell",
         },
@@ -1061,14 +1061,14 @@ def build_report(hest_assume_step: int | None = None,
                           "RETIRED: first checkpoint with mean "
                           "confounder_insensitivity >= %s" % CI_TARGET),
         "sources": {
-            "waiv_thunder": WAIV_THUNDER_SOURCE,
+            "reference_thunder": REFERENCE_THUNDER_SOURCE,
             "thunder_floors": THUNDER_FLOOR_SOURCE,
             "hest_seed_sd": HEST_SEED_SD_SOURCE,
             "ri_base": RI_BASE_SOURCE,
-            "ri_waiv": RI_WAIV_SOURCE,
-            "hest_waiv": HEST_WAIV_SOURCE,
+            "ri_reference": RI_REFERENCE_SOURCE,
+            "hest_reference": HEST_REFERENCE_SOURCE,
             "aggregation": ("eval_common.pool_cells -- RATIO OF MEANS: aggregate the "
-                            "numerator (our raw delta) and the denominator (Waiv's raw "
+                            "numerator (our raw delta) and the denominator (Reference's raw "
                             "gain) over the group, then divide ONCE.  Per-cell "
                             "percentages are never averaged.  Applied at both levels: "
                             "3 tasks -> backbone/THUNDER, 3 backbones -> benchmark."),
@@ -1078,12 +1078,12 @@ def build_report(hest_assume_step: int | None = None,
                                  "to the POOLED denominator (not per cell): %s"
                                  % _ec.POOLED_DENOMINATOR_GATE),
             "denominator_gate_change_2026_08_26": (
-                "F-P: the per-cell 'one seed-SD > %.0f pct_of_waiv points' veto is "
+                "F-P: the per-cell 'one seed-SD > %.0f pct_of_reference points' veto is "
                 "RETIRED as a gate and kept as a diagnostic. It was a PRECISION test "
-                "(is Waiv's gain known to better than +/-20%% relative), not the "
+                "(is Reference's gain known to better than +/-20%% relative), not the "
                 "is-the-denominator-real test its own docstring described, and it "
                 "rejected cells whose denominators are unambiguously real -- "
-                "phikon/knn's Waiv gain is 5.8 seed-SD. Denominator imprecision is now "
+                "phikon/knn's Reference gain is 5.8 seed-SD. Denominator imprecision is now "
                 "PROPAGATED into the interval (delta method on both terms) instead of "
                 "vetoing the cell." % _ec.UNRESOLVABLE_SD_PCT_LIMIT),
             "ci_construction": ("per-cell: eval_common.ci95 -- max(empirical "
@@ -1197,13 +1197,13 @@ def build_report(hest_assume_step: int | None = None,
         # over-estimate by construction, the safe direction for an error bar.
         ri_per_step = {st: v.get("ri") for st, v in (_sb.NOISE_SD.get(a, {}) or {}).items()}
         raw_sd, sd_note = seed_sd_over_steps(ri_per_step, steps_a)
-        gain = RI_WAIV[a] - RI_BASE[a]
+        gain = RI_REFERENCE[a] - RI_BASE[a]
 
         # F-P: the per-cell gate is now a DIAGNOSTIC (see percell_gate_diagnostic).
         # Withholding is decided on the POOLED denominator, in the aggregate section.
         diag = percell_gate_diagnostic("RI", a, gain, raw_sd, sd_note)
 
-        pcts_unc = [pct_of_waiv_uncapped(v, RI_BASE[a], RI_WAIV[a]) for v in vals]
+        pcts_unc = [pct_of_reference_uncapped(v, RI_BASE[a], RI_REFERENCE[a]) for v in vals]
         mean_pct_unc = sum(pcts_unc) / n
         # F-D: ONE CI construction for all three benchmarks -- max(empirical, floor).
         # The empirical across-seed SD alone is not trustworthy (one degree of freedom at
@@ -1215,12 +1215,12 @@ def build_report(hest_assume_step: int | None = None,
         capped = sum(1 for q in pcts_unc if q >= 100.0)
         ci_src += " [floor %s]" % sd_note
         if capped:
-            ci_src += "; %d/%d seeds exceed Waiv (uncapped values are used, so the " \
+            ci_src += "; %d/%d seeds exceed Reference (uncapped values are used, so the " \
                       "spread is NOT censored)" % (capped, n)
         cell = grade(mean_pct_unc, ci, n)
         cell.update({
             "n": n,
-            "raw_mean": sum(vals) / n, "base": RI_BASE[a], "waiv": RI_WAIV[a],
+            "raw_mean": sum(vals) / n, "base": RI_BASE[a], "reference": RI_REFERENCE[a],
             "selected_step": step_a,
             "selected_steps": steps_a,
             "steps_mixed": len(steps_a) > 1,
@@ -1233,9 +1233,9 @@ def build_report(hest_assume_step: int | None = None,
             # Raw ABSOLUTE quantities -- these, not the percentage, are what the pooled
             # (ratio-of-means) grading rule aggregates.
             "our_delta": sum(vals) / n - RI_BASE[a],
-            "waiv_gain": gain,
+            "reference_gain": gain,
             "se_our_delta": (raw_sd / math.sqrt(n)) if raw_sd is not None else None,
-            "sd_waiv_gain": raw_sd,
+            "sd_reference_gain": raw_sd,
             "percell_denominator_diagnostic": diag,
         })
         report["cells"].setdefault(a, {})["RI"] = cell
@@ -1252,11 +1252,11 @@ def build_report(hest_assume_step: int | None = None,
         # F-A: derived from disk, same estimator as scoreboard.NOISE_SD, same step rule
         # as RI above.
         raw_sd, sd_note = seed_sd_over_steps(HEST_SEED_SD.get(a, {}), steps_a)
-        gain = HEST_WAIV[a] - HEST_BASE[a]
+        gain = HEST_REFERENCE[a] - HEST_BASE[a]
 
         diag = percell_gate_diagnostic("HEST", a, gain, raw_sd, sd_note)
 
-        pcts_unc = [pct_of_waiv_uncapped(v, HEST_BASE[a], HEST_WAIV[a]) for v in vals]
+        pcts_unc = [pct_of_reference_uncapped(v, HEST_BASE[a], HEST_REFERENCE[a]) for v in vals]
         mean_pct_unc = sum(pcts_unc) / n
         # 2026-09-01: None-guard, matching the RI cell above.  HEST_SEED_SD is keyed by
         # backbone and the two gated backbones have no measured HEST seed SD at all, so
@@ -1269,7 +1269,7 @@ def build_report(hest_assume_step: int | None = None,
         cell = grade(mean_pct_unc, ci, n)
         cell.update({
             "n": n,
-            "raw_mean": sum(vals) / n, "base": HEST_BASE[a], "waiv": HEST_WAIV[a],
+            "raw_mean": sum(vals) / n, "base": HEST_BASE[a], "reference": HEST_REFERENCE[a],
             "selected_step": step_a,
             "selected_steps": steps_a,
             "steps_mixed": len(steps_a) > 1,
@@ -1285,9 +1285,9 @@ def build_report(hest_assume_step: int | None = None,
             "empirical_ci": emp_ci, "floor_ci": floor_ci,
             "ci_source": ci_src + " [floor %s]" % sd_note,
             "our_delta": sum(vals) / n - HEST_BASE[a],
-            "waiv_gain": gain,
+            "reference_gain": gain,
             "se_our_delta": (raw_sd / math.sqrt(n)) if raw_sd is not None else None,
-            "sd_waiv_gain": raw_sd,
+            "sd_reference_gain": raw_sd,
             "percell_denominator_diagnostic": diag,
         })
         report["cells"].setdefault(a, {})["HEST"] = cell
@@ -1302,12 +1302,12 @@ def build_report(hest_assume_step: int | None = None,
         if len(sup_rows) > n:
             sv = [x["hest"] for x in sup_rows]
             sn = len(sv)
-            s_unc = [pct_of_waiv_uncapped(v, HEST_BASE[a], HEST_WAIV[a]) for v in sv]
+            s_unc = [pct_of_reference_uncapped(v, HEST_BASE[a], HEST_REFERENCE[a]) for v in sv]
             s_ci, _, _, s_src = _ec.ci95(s_unc, floor_sd_pct)
             scell = grade(sum(s_unc) / sn, s_ci, sn)
             scell.update({
                 "n": sn,
-                "raw_mean": sum(sv) / sn, "base": HEST_BASE[a], "waiv": HEST_WAIV[a],
+                "raw_mean": sum(sv) / sn, "base": HEST_BASE[a], "reference": HEST_REFERENCE[a],
                 "per_seed_pct": s_unc, "per_seed_pct_uncapped": s_unc,
                 "pooling": HEST_POOLING[a],
                 "step_source": f"stopping rule where available, ASSUMED step "
@@ -1329,9 +1329,9 @@ def build_report(hest_assume_step: int | None = None,
         for task in CLS_TASKS:
             floor = THUNDER_FLOOR[a][task]
             base, base_cov = base12[task]
-            waiv_gain = (WAIV_THUNDER[a]["ft"][task] - WAIV_THUNDER[a]["base"][task]) / 100.0
+            reference_gain = (REFERENCE_THUNDER[a]["ft"][task] - REFERENCE_THUNDER[a]["base"][task]) / 100.0
             entry = {
-                "waiv_gain": waiv_gain, "floor": floor,
+                "reference_gain": reference_gain, "floor": floor,
                 "our_base": base, "our_base_coverage": f"{base_cov}/{len(PAPER_CLS)}",
                 "pct": None, "pct_capped": None, "pct_uncapped": None, "ci": None,
                 "lower_uncapped": None, "upper_uncapped": None, "was_capped": False,
@@ -1342,8 +1342,8 @@ def build_report(hest_assume_step: int | None = None,
             #
             # F-B fix (2026-08-26): this test is now the SHARED gate, identical to the
             # one RI and HEST run above, instead of THUNDER's own private
-            # `|waiv_gain| < offset_2se`.  Two things changed and both were wrong before:
-            #   * the THRESHOLD.  The old test asked only "is Waiv's gain bigger than the
+            # `|reference_gain| < offset_2se`.  Two things changed and both were wrong before:
+            #   * the THRESHOLD.  The old test asked only "is Reference's gain bigger than the
             #     noise", i.e. can a full-gain arm be told from a zero-gain arm.  RI and
             #     HEST have always been held to the harder question the 70/80 criterion
             #     actually poses -- can 80% of the gain be told from 100% -- which is
@@ -1358,14 +1358,14 @@ def build_report(hest_assume_step: int | None = None,
             entry["resolvability_floor_offset_2se"] = floor
             entry["seed_sd_of_task_mean"] = seed_sd
             # F-P: per-cell precision is a DIAGNOSTIC, not a veto.  virchow2's three
-            # per-task Waiv gains are +0.0270 / -0.0030 / +0.0030 -- individually two are
+            # per-task Reference gains are +0.0270 / -0.0030 / +0.0030 -- individually two are
             # below the seed floor and one is NEGATIVE, so no per-task ratio means
             # anything -- but their POOLED denominator is +0.0090 and is well
             # conditioned.  Withholding is decided on the pooled denominator below.
             entry["percell_denominator_diagnostic"] = percell_gate_diagnostic(
-                "THUNDER/%s" % task, a, waiv_gain, seed_sd)
-            entry["waiv_gain"] = waiv_gain
-            entry["sd_waiv_gain"] = seed_sd
+                "THUNDER/%s" % task, a, reference_gain, seed_sd)
+            entry["reference_gain"] = reference_gain
+            entry["sd_reference_gain"] = seed_sd
             if base is None:
                 entry.update({"pct": None, "ci": None, "n": 0, "status": "PARTIAL",
                               "reason": f"our BASE covers only {base_cov}/{len(PAPER_CLS)}"})
@@ -1391,13 +1391,13 @@ def build_report(hest_assume_step: int | None = None,
                                         f"12ds floor invalid below 12/12" + where})
                 tasks_out[task] = entry
                 continue
-            pcts_unc = [pct_of_waiv_uncapped(x["thunder"][task]["mean"], base, base + waiv_gain)
+            pcts_unc = [pct_of_reference_uncapped(x["thunder"][task]["mean"], base, base + reference_gain)
                         for x in full]
             mean_pct_unc = sum(pcts_unc) / n
-            # F4 fix (2026-08-26).  This used to be abs(floor/waiv_gain)*100/sqrt(n),
+            # F4 fix (2026-08-26).  This used to be abs(floor/reference_gain)*100/sqrt(n),
             # where `floor` is offset_2se = |mean(d)| + 2*SD(d)/sqrt(12), with the SD
             # taken OVER THE 12 DATASETS.  That is the resolvability floor -- correct
-            # for the INDETERMINATE gate just above, which asks whether Waiv's own gain
+            # for the INDETERMINATE gate just above, which asks whether Reference's own gain
             # is even bigger than seed noise -- but it is NOT a 95% half-width on our
             # 12-dataset task mean, and dividing an already-sqrt(12)-shrunk
             # dataset-level SD again by sqrt(n_runs) compounds the error.  The correct
@@ -1408,14 +1408,14 @@ def build_report(hest_assume_step: int | None = None,
             # floor is the measured across-seed SD of the 12-dataset task mean, expressed
             # in pct points; the empirical term is the spread of our own n seeds.  This
             # cell used to be floor-only and never consulted the observed spread.
-            floor_sd_pct = (seed_sd / abs(waiv_gain) * 100.0) if seed_sd is not None else None
+            floor_sd_pct = (seed_sd / abs(reference_gain) * 100.0) if seed_sd is not None else None
             ci, emp_ci, floor_ci, ci_src = _ec.ci95(pcts_unc, floor_sd_pct)
             entry["seed_sd_pct_points"] = floor_sd_pct
             entry["empirical_ci"] = emp_ci
             entry["floor_ci"] = floor_ci
             entry["ci_source"] = ci_src + (
-                " [floor = 2 * seed_SD_12ds(%.6f) / |waiv_gain|(%.4f) * 100 / sqrt(%d)]"
-                % (seed_sd, abs(waiv_gain), n) if seed_sd is not None
+                " [floor = 2 * seed_SD_12ds(%.6f) / |reference_gain|(%.4f) * 100 / sqrt(%d)]"
+                % (seed_sd, abs(reference_gain), n) if seed_sd is not None
                 else " [no measured seed SD for this (backbone, task)]")
             entry.update(grade(mean_pct_unc, ci, n))
             if entry["status"] == "UNDERPOWERED":
@@ -1436,18 +1436,18 @@ def build_report(hest_assume_step: int | None = None,
         # F-P fix (2026-08-26).  This used to be the MEAN OF THE THREE PER-TASK
         # PERCENTAGES, which is the wrong aggregation for the user's grading rule and is
         # what made this cell ungradeable on two of three backbones.  A per-task ratio
-        # divides by that task's own Waiv gain; when one of those gains is +0.0030 the
+        # divides by that task's own Reference gain; when one of those gains is +0.0030 the
         # ratio explodes, and when one is NEGATIVE it rewards regressing.  Pooling first
-        # -- mean(our delta) / mean(waiv gain) -- divides by +0.0090 instead, which is a
+        # -- mean(our delta) / mean(reference gain) -- divides by +0.0090 instead, which is a
         # real scale.  ALL THREE tasks are required: a pooled number over two of them
         # silently re-weights the benchmark.
         pooled = _ec.pool_cells(
             [{
                 "key": t,
                 "delta": tasks_out[t].get("our_delta"),
-                "gain": tasks_out[t].get("waiv_gain"),
+                "gain": tasks_out[t].get("reference_gain"),
                 "se_delta": tasks_out[t].get("se_our_delta"),
-                "sd_gain": tasks_out[t].get("sd_waiv_gain"),
+                "sd_gain": tasks_out[t].get("sd_reference_gain"),
                 "complete": tasks_out[t].get("our_delta") is not None
                             and tasks_out[t].get("n", 0) >= MIN_N_FOR_VERDICT,
                 "note": tasks_out[t].get("status") or tasks_out[t].get("reason"),
@@ -1469,11 +1469,11 @@ def build_report(hest_assume_step: int | None = None,
                 "tasks": tasks_out,
                 "pooled": pooled,
                 "our_avg_delta": pooled["our_avg_delta"],
-                "waiv_avg_gain": pooled["waiv_avg_gain"],
+                "reference_avg_gain": pooled["reference_avg_gain"],
                 "our_delta": pooled["our_avg_delta"],
-                "waiv_gain": pooled["waiv_avg_gain"],
+                "reference_gain": pooled["reference_avg_gain"],
                 "se_our_delta": pooled["se_our_avg_delta"],
-                "sd_waiv_gain": pooled["sd_waiv_avg_gain"],
+                "sd_reference_gain": pooled["sd_reference_avg_gain"],
                 "concentration_flags": pooled["concentration_flags"],
                 "ci_source": pooled["ci_source"],
                 "aggregation": pooled["rule"],
@@ -1504,7 +1504,7 @@ def build_report(hest_assume_step: int | None = None,
         # ---- POOL across the three backbones: one numerator, one denominator ------
         # F-P fix (2026-08-26).  This was the MEAN OF THE PER-BACKBONE PERCENTAGES.
         # Under the user's grading rule a benchmark mean is the ratio of the two
-        # ABSOLUTE averages -- mean(our raw delta) / mean(Waiv's raw gain) -- divided
+        # ABSOLUTE averages -- mean(our raw delta) / mean(Reference's raw gain) -- divided
         # once.  The two spellings differ whenever the per-backbone denominators differ,
         # which they always do (RI gains run 0.337 / 0.061 / 0.021 across the trio, a
         # 16x spread, so a mean of ratios silently weights virchow2 16x heavier than
@@ -1515,9 +1515,9 @@ def build_report(hest_assume_step: int | None = None,
             [{
                 "key": a,
                 "delta": (report["cells"].get(a, {}).get(b, {}) or {}).get("our_delta"),
-                "gain": (report["cells"].get(a, {}).get(b, {}) or {}).get("waiv_gain"),
+                "gain": (report["cells"].get(a, {}).get(b, {}) or {}).get("reference_gain"),
                 "se_delta": (report["cells"].get(a, {}).get(b, {}) or {}).get("se_our_delta"),
-                "sd_gain": (report["cells"].get(a, {}).get(b, {}) or {}).get("sd_waiv_gain"),
+                "sd_gain": (report["cells"].get(a, {}).get(b, {}) or {}).get("sd_reference_gain"),
                 "complete": (report["cells"].get(a, {}).get(b, {}) or {}).get("pct") is not None,
                 "note": (report["cells"].get(a, {}).get(b, {}) or {}).get("status", "NO_DATA"),
             } for a in BENCH_ARMS[b]],
@@ -1527,7 +1527,7 @@ def build_report(hest_assume_step: int | None = None,
         bench_avg[b] = {
             "mean": pooled.get("pct"),
             "our_avg_delta": pooled.get("our_avg_delta"),
-            "waiv_avg_gain": pooled.get("waiv_avg_gain"),
+            "reference_avg_gain": pooled.get("reference_avg_gain"),
             "ci": pooled.get("ci"),
             "lower": pooled.get("lower"),
             "upper": pooled.get("upper"),
@@ -1600,7 +1600,7 @@ def build_report(hest_assume_step: int | None = None,
                   f"(CI lower bound {worst[2]['lower_uncapped']:.1f}) >= {PASS_BAR}; "
                   f"overall average {overall:.1f} > {OVERALL_BAR}")
 
-    # --- floor-quality disclosure (see docs/FORMULA_UNIFICATION_2026-08-26.md, F-A) ---
+    # --- floor-quality disclosure (see docs/archive/FORMULA_UNIFICATION_2026-08-26.md, F-A) ---
     weak = []
     for a in ARMS:
         c = report["cells"].get(a, {}).get("HEST") or {}
@@ -1640,7 +1640,7 @@ def build_report(hest_assume_step: int | None = None,
 
     # ---- THE CRITERION: PER MODEL, not pooled across models -----------------
     # Corrected 2026-08-26.  The bar is applied to EACH backbone on its own:
-    #   * pct_of_waiv >= 70 on EACH of RI, HEST, THUNDER, and
+    #   * pct_of_reference >= 70 on EACH of RI, HEST, THUNDER, and
     #   * the mean of that backbone's three benchmark percentages > 80.
     # Pooling still happens WITHIN a cell (the 3 THUNDER tasks are pooled by
     # ratio-of-means), but NOT across backbones.  The pooled-across-backbones block in
@@ -1730,7 +1730,7 @@ def build_report(hest_assume_step: int | None = None,
             }
     report["per_model"] = per_model
     report["per_model_criterion"] = (
-        "THE CRITERION.  Each backbone independently: pct_of_waiv >= %g on EACH of "
+        "THE CRITERION.  Each backbone independently: pct_of_reference >= %g on EACH of "
         "RI/HEST/THUNDER AND the mean of its three percentages > %g.  No pooling across "
         "backbones." % (PASS_BAR, OVERALL_BAR))
     pm_v = [per_model[a]["verdict"] for a in ARMS]
@@ -1778,9 +1778,9 @@ def print_report(rep: dict) -> None:
               f"| bootstrap SE found on disk: {cr.get('se_measured_on_disk')}")
         if not cr.get("se_measured_on_disk"):
             print(f"                {cr.get('se_unmeasured_note')}")
-    print(f"Criterion     : pct_of_waiv >= {PASS_BAR:.0f} on EVERY cell (worst cell, not a mean),")
+    print(f"Criterion     : pct_of_reference >= {PASS_BAR:.0f} on EVERY cell (worst cell, not a mean),")
     print(f"                AND mean of the three benchmark means > {OVERALL_BAR:.0f}.")
-    print("                ONE quantity is graded and averaged: the UNCAPPED pct_of_waiv.")
+    print("                ONE quantity is graded and averaged: the UNCAPPED pct_of_reference.")
     print("                The 100 cap is presentation only and enters no arithmetic (F-C).")
     print("                Scorecard cells read:  uncapped (capped*) +/-CI n=  status")
     print()
@@ -1830,7 +1830,7 @@ def print_report(rep: dict) -> None:
         print("   need has not been measured yet -- not because they scored badly.")
         print()
 
-    print("-- SCORECARD (pct_of_waiv, +/-95% CI) " + "-" * 40)
+    print("-- SCORECARD (pct_of_reference, +/-95% CI) " + "-" * 40)
     print(f"{'backbone':<10} {'RI':<42} {'HEST':<42} THUNDER")
     for a in ARMS:
         cells = rep["cells"].get(a, {})
@@ -1866,15 +1866,15 @@ def print_report(rep: dict) -> None:
     print("  Pooled (ratio-of-means): ONE numerator and ONE denominator per benchmark,")
     print("  divided ONCE.  Per-cell percentages are NEVER averaged.")
     print()
-    print(f"  {'benchmark':<9} {'OUR avg increase':>17} {'WAIV avg increase':>18} "
+    print(f"  {'benchmark':<9} {'OUR avg increase':>17} {'REFERENCE avg increase':>18} "
           f"{'pct':>8} {'+/-95%':>8}  coverage")
     for b in ("RI", "HEST", "THUNDER"):
         m = rep["benchmark_averages"][b]
         ours = f"{m['our_avg_delta']:+.5f}" if m.get("our_avg_delta") is not None else "--"
-        waiv = f"{m['waiv_avg_gain']:+.5f}" if m.get("waiv_avg_gain") is not None else "--"
+        reference = f"{m['reference_avg_gain']:+.5f}" if m.get("reference_avg_gain") is not None else "--"
         v = f"{m['mean']:.1f}" if m["mean"] is not None else "WITHHELD"
         ci = f"{m['ci']:.1f}" if m.get("ci") is not None else "--"
-        print(f"  {b:<9} {ours:>17} {waiv:>18} {v:>8} {ci:>8}  "
+        print(f"  {b:<9} {ours:>17} {reference:>18} {v:>8} {ci:>8}  "
               f"{m['n_backbones']}/3 backbones")
         if m.get("withheld_reason"):
             print(f"            WITHHELD: {m['withheld_reason']}")
@@ -1929,7 +1929,7 @@ def print_report(rep: dict) -> None:
     # group prints each cell's signed share of its numerator and of its denominator.
     print()
     print("-- CONCENTRATION: each cell's share of its pooled numerator / denominator " + "-" * 3)
-    print(f"   {'group':<26} {'cell':<16} {'our delta':>10} {'waiv gain':>10} "
+    print(f"   {'group':<26} {'cell':<16} {'our delta':>10} {'reference gain':>10} "
           f"{'num%':>7} {'den%':>7}")
     any_flag = False
     for grp, pooled in iter_pooled_groups(rep):
@@ -1965,7 +1965,7 @@ def print_report(rep: dict) -> None:
     print(f"REASON: {rep['verdict_reason']}")
     print("=" * W)
     print()
-    print(f"Waiv THUNDER denominators: {rep['sources']['waiv_thunder']}")
+    print(f"Reference THUNDER denominators: {rep['sources']['reference_thunder']}")
     print(f"THUNDER seed floors      : {rep['sources']['thunder_floors']}")
     print(f"HEST seed SD (raw, disk) : {rep['sources']['hest_seed_sd']}")
     print(f"RI base (disk)           : phikon/midnight/virchow2 = " +
@@ -1982,15 +1982,15 @@ def print_report(rep: dict) -> None:
     print(f"   segmentation          : {r['segmentation']}")
     print(f"   seed-floor caveat     : {r['seed_floor_caveat']}")
     print()
-    print("-- BASE GAP: OUR BASE minus WAIV'S PUBLISHED BASE (pct points) " + "-" * 15)
+    print("-- BASE GAP: OUR BASE minus REFERENCE'S PUBLISHED BASE (pct points) " + "-" * 15)
     keys = sorted(rep["thunder_base_gap_validation"]["rosters"]["12"]["cells"])
-    print(f"   {'cell':<28} {'ours12':>8} {'ours16':>8} {'waiv':>8} {'gap12':>8} {'gap16':>8}")
+    print(f"   {'cell':<28} {'ours12':>8} {'ours16':>8} {'reference':>8} {'gap12':>8} {'gap16':>8}")
     for k in keys:
         c12 = rep["thunder_base_gap_validation"]["rosters"]["12"]["cells"][k]
         c16 = rep["thunder_base_gap_validation"]["rosters"]["16"]["cells"][k]
         f = lambda x: "    --  " if x is None else f"{x:8.2f}"
         print(f"   {k:<28} {f(c12['our_base_pct'])} {f(c16['our_base_pct'])} "
-              f"{f(c12['waiv_published_base_pct'])} {f(c12['gap_pct_points'])} "
+              f"{f(c12['reference_published_base_pct'])} {f(c12['gap_pct_points'])} "
               f"{f(c16['gap_pct_points'])}")
     for lab in ("12", "16"):
         b = rep["thunder_base_gap_validation"]["rosters"][lab]
@@ -2051,7 +2051,7 @@ def main() -> None:
                     help=f"run family under runs/ (default {RUN_GLOB} = the finalised "
                          "5-backbone 50-step sweep).")
     ap.add_argument("--cls-roster", choices=sorted(CLS_ROSTERS), default=CLS_ROSTER_DEFAULT,
-                    help="THUNDER classification panel: 16 = Waiv's Table-2 roster "
+                    help="THUNDER classification panel: 16 = Reference's Table-2 roster "
                          "(12 THUNDER-paper sets + 4 SPIDER), the default and the only "
                          "one on which our base is comparable to their published base; "
                          "12 = the THUNDER paper's panel, which reproduces every "

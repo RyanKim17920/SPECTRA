@@ -474,7 +474,7 @@ matches the hub repo's actual `apache-2.0`.
   `encoder.py:BACKBONE_LOCAL_DIRS` binds `paige-ai/Virchow` to the pinned hub snapshot
   `/data/Virchow/models--paige-ai--Virchow/snapshots/19eebc84.../model.safetensors`
   (2,524,960,072 B), but all three evaluation cells load
-  `/data/Virchow_conv/pytorch_model.bin` (2,525,055,291 B) instead. **No script in the waiv
+  `/data/Virchow_conv/pytorch_model.bin` (2,525,055,291 B) instead. **No script in this
   repo produces or references `/data/Virchow_conv`** (`rg "Virchow_conv"` over the repo
   returns nothing outside the cells), so the conversion remains undocumented -- but its
   output is now verified bit-identical to the pinned snapshot (see above), so this changes

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-perhead
+#SBATCH --job-name=spectra-perhead
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

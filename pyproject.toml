@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Diagnostic PLISM retrieval eval (see PLAN.md 1: PLISM is TRAINING data for us,
+# Diagnostic PLISM retrieval eval (see the design spec 1: PLISM is TRAINING data for us,
 # so plismbench numbers are diagnostics only and are never leaderboard-comparable).
 plism = ["owkin-plismbench"]
 # PathoROB (PRIMARY metric) is cloned into third_party/, not pip-depended on -- but its

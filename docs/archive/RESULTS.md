@@ -383,7 +383,7 @@ step 500 is not Midnight's best either.
 **Hypothesis for the intrinsic gap — a missing loss term, untested.** The loss as built is a
 single InfoNCE term with **no retention component**: no frozen-teacher anchor, no
 distillation, no replay, no L2-to-base penalty. LoRA's implicit bounding of drift is the
-entire anti-forgetting mechanism. `PLAN.md` §2 scoped "TCGA replay tiles, frozen-teacher
+entire anti-forgetting mechanism. the design spec §2 scoped "TCGA replay tiles, frozen-teacher
 anchor" as optional and neither was implemented. Given that the gap survives checkpoint
 selection on both backbones, that missing term is the leading hypothesis for it. We have not
 tested it; this is a stated gap in the reconstruction, not a result.
@@ -636,7 +636,7 @@ its most favourable checkpoint. No rank closes the gap.
 
 The standing hypothesis is therefore unchanged and still untested: the loss is a single InfoNCE
 term with no retention component — no frozen-teacher anchor, no distillation, no replay, no
-L2-to-base penalty — and `PLAN.md` §2 scoped exactly those as optional and never built them.
+L2-to-base penalty — and the design spec §2 scoped exactly those as optional and never built them.
 Adding one is a method change, not a sweep, and nothing here tests it.
 
 ### Method notes
@@ -673,7 +673,7 @@ SLURM jobs 372330 (features) + 372476 (metric):
 
 **Waiv Table 1 base: 0.858. Ours: 0.858240, Δ +0.00024.**
 
-This is the base-reproduction gate (PLAN.md §3 phase 5) passing on a third backbone, and it
+This is the base-reproduction gate (the design spec §3 phase 5) passing on a third backbone, and it
 is a sharp test rather than a loose one — four independent things had to be right at once and
 each fails silently rather than loudly:
 
@@ -872,7 +872,7 @@ consistency of the sign across datasets, not on any per-cell interval.
 Every negative result above points the same way: robustness reproduces, retention does not,
 and it is not the checkpoint (§2 sweep), not the LoRA rank (§5), and not full fine-tuning
 (§4). The loss has no retention component at all — a single masked InfoNCE term — and
-`PLAN.md` §2 scoped a frozen-teacher anchor as optional and never built it. This tests it.
+the design spec §2 scoped a frozen-teacher anchor as optional and never built it. This tests it.
 
 **Design.** Relational, not an L2 pull to base: a pull toward the frozen base embedding would
 fight the objective, since robustness is bought precisely by moving embeddings to collapse
@@ -945,7 +945,7 @@ training path when off.
 ## 8. Batch geometry — negatives per row, not query rows
 
 Every result above varies the loss, the rank, or the checkpoint. None varies how the batch is
-*shaped*. The same-condition constraint (`PLAN.md` §2) makes that shape load-bearing in a way
+*shaped*. The same-condition constraint (the design spec §2) makes that shape load-bearing in a way
 standard InfoNCE does not: negatives come only from within a condition-homogeneous group, so
 negatives per row is `group_size - 1`, capped by the group rather than the batch, and the
 positives are **query-only** — they never serve as negatives, because each carries a different
@@ -1896,7 +1896,7 @@ is outright retracted — see §12.6.
 
 **Reproducibility gap.** The arm→checkpoint mapping for these runs lives only in an ephemeral
 scratchpad `hest_arms.sbatch`, not in the repo's `scripts/`, and none of these HEST values appear
-in `waiv_published.json`, `PLAN.md` or `README.md`. Recording them here is the only durable copy.
+in `waiv_published.json`, the design spec or `README.md`. Recording them here is the only durable copy.
 
 ### 12.3 Per-metric seed floors — measured, n=2
 

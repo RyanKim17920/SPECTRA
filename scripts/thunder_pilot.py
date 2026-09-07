@@ -83,7 +83,7 @@ DATASET_HOURS = {
 }
 
 #: Datasets the pilot must never touch, even when they sit held with a matching prefix.
-#: Segmentation is out of scope for this round: our segmentation mean covers 2 of Waiv's 4
+#: Segmentation is out of scope for this round: our segmentation mean covers 2 of Reference's 4
 #: datasets so it is non-comparable regardless (support_2v4), and the few-shot bar does not
 #: read it at all -- so a 9 h ocelot job is pure opportunity cost against classification.
 #: Excluded jobs are dropped from the job list ENTIRELY rather than merely sorted last, so

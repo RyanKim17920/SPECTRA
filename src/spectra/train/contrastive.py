@@ -1,6 +1,6 @@
 """InfoNCE over PLISM registered pairs, with the same-condition negative constraint.
 
-The loss (PLAN.md 2)
+The loss (the design spec 2)
 ----------------------
 Standard InfoNCE would use *every* other sample in the batch as a negative. We must not:
 negatives have to share the anchor's (scanner, stain), or "different scanner" becomes a
@@ -26,7 +26,7 @@ scanner" repulsion.
 
 Run it the other way (``anchor_k`` against all ``positive_j``) and the candidates span
 conditions again -- a negative can be pushed away because it was scanned differently
-rather than because it is different tissue, which is precisely the shortcut PLAN.md 2
+rather than because it is different tissue, which is precisely the shortcut the design spec 2
 forbids. Worse, in a mixed row containing the anchor's own same-condition siblings, "pick
 the candidate whose acquisition differs from mine" *is* the correct answer, so the
 objective would actively reward retaining scanner signal. ``symmetric=True`` adds that
@@ -78,7 +78,7 @@ def masked_info_nce(
         positive_z: ``(B, D)`` projections of the registered positives (different
             condition, same tile). They are the **queries**.
         group_id: ``(B,)`` group membership.
-        temperature: softmax temperature. Unknown hyperparameter (PLAN.md 3 risk 4).
+        temperature: softmax temperature. Unknown hyperparameter (the design spec 3 risk 4).
         symmetric: also average in the anchor->positive direction. Its candidate row
             spans conditions, so it reintroduces the acquisition shortcut; off by
             default, kept for ablation only (see the module docstring).
@@ -248,7 +248,7 @@ def grid_info_nce(
     -- one single condition. Acquisition is constant down the candidate row and therefore
     carries zero discriminative information; the only way to find the match is tissue
     identity. Transposing this would make the candidate row span conditions and hand the
-    objective back the acquisition shortcut PLAN.md 2 forbids. ``a == b`` is excluded: its
+    objective back the acquisition shortcut the design spec 2 forbids. ``a == b`` is excluded: its
     "positive" is the image itself, at similarity 1 by construction.
 
     Both orderings ``(a,b)`` and ``(b,a)`` ARE included -- unlike ``masked_info_nce``'s
@@ -351,7 +351,7 @@ def grid_info_nce_split(
 
 
 # --------------------------------------------------------------------------------------
-# Split loss heads: CLS and mean scored SEPARATELY (PLAN.md 2's pooling mismatch)
+# Split loss heads: CLS and mean scored SEPARATELY (the design spec 2's pooling mismatch)
 # --------------------------------------------------------------------------------------
 # Training pools ``clsmean`` = cat([CLS, mean(patch_tokens)]) -> 2048-d -> ONE
 # ProjectionHead -> ONE InfoNCE. Two things that hides:
@@ -508,7 +508,7 @@ def split_head_info_nce(
 
 
 # --------------------------------------------------------------------------------------
-# Retention term: relational KL against the frozen base model (PLAN.md 2, "frozen-teacher
+# Retention term: relational KL against the frozen base model (the design spec 2, "frozen-teacher
 # anchor" -- scoped there as optional, never built until now). OFF by default.
 #
 # Why RELATIONAL and not an L2/cosine pull toward the base embedding
@@ -516,7 +516,7 @@ def split_head_info_nce(
 # The robustness gain this repo reproduces comes precisely from MOVING embeddings: the
 # fine-tune collapses the scanner/stain directions that the base model happily encodes.
 # A pull toward the frozen base embedding opposes that move directly -- it would buy
-# retention by giving back robustness, which is the one trade PLAN.md 6 forbids.
+# retention by giving back robustness, which is the one trade the design spec 6 forbids.
 #
 # So we constrain the RELATIVE geometry instead of the absolute position. Take the
 # pairwise similarity matrix over the batch's anchors under the student and under the
@@ -575,7 +575,7 @@ def relational_kl(
         teacher_emb: ``(B, D)`` pooled backbone embeddings from the frozen base model.
         group_id: optional ``(B,)`` group membership; restricts candidates to the anchor's
             own condition-homogeneous group. ``None`` = whole batch.
-        temperature: distillation temperature. Unknown hyperparameter (PLAN.md 3 risk 4).
+        temperature: distillation temperature. Unknown hyperparameter (the design spec 3 risk 4).
 
     Returns:
         (loss, metrics). ``loss`` is a 0-dim tensor carrying gradient only through
@@ -695,7 +695,7 @@ def retention_teacher_embed(model, images: torch.Tensor) -> torch.Tensor:
 
 @dataclass
 class TrainConfig:
-    """Every value here is a guess. PLAN.md 3 risk 4: "no recipe means hyperparameter
+    """Every value here is a guess. the design spec 3 risk 4: "no recipe means hyperparameter
     search, not a single run" -- LR / steps / LoRA rank / temperature are all unknown."""
 
     #: ``$SPECTRA_PACKED_DIR``, read per-instantiation rather than at import so the library
@@ -787,14 +787,14 @@ class TrainConfig:
     #: Ordered condition pairs per block when ``grid_blocked_loss`` is on. Peak logit bytes
     #: are ``4 * grid_pair_block * T^2``, independent of C.
     grid_pair_block: int = 8
-    #: PLAN.md 3 phase 8: "evaluate retention at every checkpoint, not just at the end".
+    #: the design spec 3 phase 8: "evaluate retention at every checkpoint, not just at the end".
     #: A robustness win that costs retention is a failed reproduction (risk 1). Point this
     #: at a callable (or leave None and let the caller hook `on_checkpoint`).
     eval_heldout: bool = True
-    #: Retention term (PLAN.md 2 "frozen-teacher anchor", optional). 0.0 = OFF and the
+    #: Retention term (the design spec 2 "frozen-teacher anchor", optional). 0.0 = OFF and the
     #: training path is bit-identical to the pre-retention implementation -- the published
     #: numbers are all at 0.0. Lambda in ``total = infonce + lambda * relational_kl``.
-    #: Unknown hyperparameter (PLAN.md 3 risk 4), same class as lr / temperature / rank.
+    #: Unknown hyperparameter (the design spec 3 risk 4), same class as lr / temperature / rank.
     retention_kl_weight: float = 0.0
     #: Distillation temperature for the relational KL. Defaults to the CONTRASTIVE
     #: temperature rather than 1.0: the similarity matrix is cosine, so it lives in
@@ -958,10 +958,10 @@ def cosine_lr(step: int, cfg: TrainConfig) -> float:
 def evaluate_heldout(model, loader, cfg: TrainConfig, device, n_batches: int) -> dict[str, float]:
     """Same objective, held-out *conditions*.
 
-    PLAN.md 3 risk 3: 16,278 tile locations is a small instance-discrimination set and
+    the design spec 3 risk 3: 16,278 tile locations is a small instance-discrimination set and
     "memorization of tile identity won't show in training loss" -- held-out-condition
     splits are the only in-training check. This is NOT a robustness metric; PathoROB is
-    (PLAN.md 1).
+    (the design spec 1).
     """
     model.eval()
     tot, n = {"loss": 0.0, "top1": 0.0}, 0
@@ -1476,8 +1476,8 @@ def train(
     """Run the contrastive fine-tune. Returns the final metrics dict.
 
     ``on_checkpoint(model, step, metrics, ckpt_dir)`` is where the retention evals
-    (HEST / THUNDER / Patho-Bench) and PathoROB hang -- PLAN.md 3 phase 8 requires them
-    at *every* checkpoint, and PLAN.md 6 requires retention reported alongside every
+    (HEST / THUNDER / Patho-Bench) and PathoROB hang -- the design spec 3 phase 8 requires them
+    at *every* checkpoint, and the design spec 6 requires retention reported alongside every
     robustness claim, always as a pair.
     """
     device = torch.device(device)
@@ -1593,7 +1593,7 @@ def train(
         for batch in train_loader:
             if step >= cfg.max_steps:
                 break
-            # PLAN.md 2's load-bearing detail, asserted rather than assumed. Runs every
+            # the design spec 2's load-bearing detail, asserted rather than assumed. Runs every
             # step: it is a few microseconds on CPU-side index tensors, and a violation
             # here would still produce a perfectly plausible falling loss curve. The grid
             # path adds one more silent-failure mode -- tile lists that differ between

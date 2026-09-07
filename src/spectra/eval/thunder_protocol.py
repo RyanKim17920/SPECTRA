@@ -27,7 +27,7 @@ def _readouts() -> dict[str, str]:
     return readout_table()
 
 
-#: THUNDER pooling is **per backbone**, and it is not our choice -- it is Waiv's.
+#: THUNDER pooling is **per backbone**, and it is not our choice -- it is Reference's.
 #: arXiv:2607.22861 3, line 106: CLS+mean-pool concatenation was used for ALL models in
 #: PathoROB, but in THUNDER only for Virchow2, AquaViT, H0-mini and **Midnight-12k**.
 #: So phikon-v2 must be scored CLS-only here (which is also THUNDER's own published
@@ -44,7 +44,7 @@ THUNDER_CLSMEAN_BACKBONES = frozenset(
     r for r, p in _readouts().items() if p == "clsmean"
 )
 
-#: The other half of the same published table: backbones Waiv scored CLS-only.
+#: The other half of the same published table: backbones Reference scored CLS-only.
 #: Both sets are transcriptions of a paper, so membership cannot be inferred for a
 #: backbone that is not in the paper -- which is why an unlisted backbone is an error
 #: below rather than a default. Silently taking "cls" would produce a number that looks
@@ -53,7 +53,7 @@ THUNDER_CLSMEAN_BACKBONES = frozenset(
 #: ``bioptimus/H-optimus-0`` and ``MahmoodLab/UNI2-h`` are both in Table 2 and NEITHER is
 #: in the line-106 clsmean list, so both are cls. The trap is ``H0-mini``, which IS in
 #: that list: it is a *distillation of* H-Optimus-0 and a separate row of Table 2
-#: (see ``docs/waiv_published.json`` -- "H0-mini" and "H-Optimus-0" are distinct models
+#: (see ``docs/reference_published.json`` -- "H0-mini" and "H-Optimus-0" are distinct models
 #: with distinct numbers). Reading H0-mini's protocol onto H-Optimus-0 would silently
 #: double its THUNDER feature width and put it on a different protocol from the paper.
 THUNDER_CLS_BACKBONES = frozenset(

@@ -6,7 +6,7 @@ RULE 1 — ONE ROW = ONE (run_name, step). Never pair best-RI from one run with
           reports ALL metrics for THAT checkpoint. Missing metrics print MISSING,
           never substituted from another arm or step.
 
-RULE 2 — Raw scores as  ours | Waiv | diff.  Gain-vs-base appears as an EXTRA
+RULE 2 — Raw scores as  ours | Reference | diff.  Gain-vs-base appears as an EXTRA
           column, never as the headline figure.
 
 Usage:
@@ -47,33 +47,33 @@ from collect_final5 import (  # noqa: E402 — intentional after sys.path insert
 )
 
 # ---------------------------------------------------------------------------
-# Waiv arXiv:2607.22861 Tables 1+3  (base → Waiv fine-tuned)
+# Reference arXiv:2607.22861 Tables 1+3  (base → Reference fine-tuned)
 # NOTE: virchow2 base_hest was 0.4034 in the old scoreboard.py — that was
 # rounded incorrectly. The correct value is 0.40324, which is what
 # collect_final5.HEST_BASE["virchow2"] carries (source: vbase_clsmean_summary.json).
 # ---------------------------------------------------------------------------
-WAIV: dict[str, dict] = {}
+REFERENCE: dict[str, dict] = {}
 # F-J (2026-08-31): the three per-arm blocks that used to sit here were hand-typed
 # literals covering phikon/midnight/virchow2 ONLY, so any run on a gated backbone
 # (hoptimus / hopt / uni2) crashed main() with KeyError.  Same numbers, now built for
 # EVERY arm eval_common knows, and every value read from a loader or from
-# docs/waiv_published.json -- no literal survives here.
-_WAIV_PUB = json.loads(_ec.WAIV_PUBLISHED_JSON.read_text())
-_WAIV_PUB_IDX = {(m["name"], m["variant"]): m for m in _WAIV_PUB["models"]}
-for _arm, (_base_row, _ft_row) in _ec.WAIV_ROWS.items():
-    _pub_base = _WAIV_PUB_IDX[tuple(_base_row)]
-    _pub_ft   = _WAIV_PUB_IDX[tuple(_ft_row)]
-    WAIV[_arm] = {
+# docs/reference_published.json -- no literal survives here.
+_REFERENCE_PUB = json.loads(_ec.REFERENCE_PUBLISHED_JSON.read_text())
+_REFERENCE_PUB_IDX = {(m["name"], m["variant"]): m for m in _REFERENCE_PUB["models"]}
+for _arm, (_base_row, _ft_row) in _ec.REFERENCE_ROWS.items():
+    _pub_base = _REFERENCE_PUB_IDX[tuple(_base_row)]
+    _pub_ft   = _REFERENCE_PUB_IDX[tuple(_ft_row)]
+    REFERENCE[_arm] = {
         "base_ri":   _c5.RI_BASE[_arm],      # F-E/F-F: read from PathoROB results on disk
-        "waiv_ri":   _c5.RI_WAIV[_arm],      # docs/waiv_published.json Table 1
+        "reference_ri":   _c5.RI_REFERENCE[_arm],      # docs/reference_published.json Table 1
         "base_hest": _c5.HEST_BASE[_arm],    # F-E: loader, not a literal
-        "waiv_hest": _ec.HEST_WAIV[_arm],    # docs/waiv_published.json Table 1
-        # Waiv print per-dataset RI under their own dataset names; WAIV_RI_DS is the
+        "reference_hest": _ec.HEST_REFERENCE[_arm],    # docs/reference_published.json Table 1
+        # Reference print per-dataset RI under their own dataset names; REFERENCE_RI_DS is the
         # published-name -> our-name map eval_common already owns.
         "base_ds": {_ours: _pub_base["ri"].get(_theirs)
-                    for _theirs, _ours in _ec.WAIV_RI_DS.items()},
-        "waiv_ds": {_ours: _pub_ft["ri"].get(_theirs)
-                    for _theirs, _ours in _ec.WAIV_RI_DS.items()},
+                    for _theirs, _ours in _ec.REFERENCE_RI_DS.items()},
+        "reference_ds": {_ours: _pub_ft["ri"].get(_theirs)
+                    for _theirs, _ours in _ec.REFERENCE_RI_DS.items()},
         "pool": _c5.hest_pooling(_arm),      # HEST_POOLING table, not a literal
     }
 
@@ -100,7 +100,7 @@ RI_BUDGET_WARNING = ("RI-budget column is a TUNED constant with no on-disk sourc
 
 # ---------------------------------------------------------------------------
 # Seed-SD noise floors, per backbone × step.
-# Source: memory waiv-ri-seed-noise-floor; measured from on-disk seed replicates.
+# Source: memory reference-ri-seed-noise-floor; measured from on-disk seed replicates.
 # "~noise" = |diff| < 2 SD.
 # ---------------------------------------------------------------------------
 SEED_FLOORS: dict[str, dict[int, dict[str, float]]] = {
@@ -154,7 +154,7 @@ _BACKBONES = ("phikon", "midnight", "virchow2", "hoptimus", "hopt", "uni2")
 
 # F-J (2026-08-31): "hopt" is a run-name ABBREVIATION for the same backbone as
 # "hoptimus", not a fourth arm.  Returning it verbatim made every downstream lookup
-# (WAIV, SEED_FLOORS, hest_pooling, THUNDER_SEED_SD) miss, and WAIV[...] raised
+# (REFERENCE, SEED_FLOORS, hest_pooling, THUNDER_SEED_SD) miss, and REFERENCE[...] raised
 # KeyError: 'hopt' before the footer could print.  Canonicalise at the one place the
 # name is resolved; --backbones still accepts either spelling.
 _BACKBONE_ALIASES = {"hopt": "hoptimus"}
@@ -241,7 +241,7 @@ def _arm_desc(meta: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def _noise_label(diff: float | None, metric: str, backbone: str, step: int) -> str:
-    """Return 'Xσ' or '~noise' for a difference vs Waiv (or vs base).
+    """Return 'Xσ' or '~noise' for a difference vs Reference (or vs base).
 
     metric is 'ri', 'hest', or 'thunder_mean'.
     Returns empty string when the floor is unknown (don't annotate what we
@@ -319,7 +319,7 @@ def collect_run(run_dir: Path, step: int) -> dict:
     name = run_dir.name
     meta = _parse_run_meta(name)
     backbone = meta["backbone"]
-    pool = WAIV.get(backbone, {}).get("pool", "cls")
+    pool = REFERENCE.get(backbone, {}).get("pool", "cls")
 
     result: dict = {
         "name":              name,
@@ -356,7 +356,7 @@ def collect_run(run_dir: Path, step: int) -> dict:
 
     # --- HEST --------------------------------------------------------------
     # _hest_score derives pooling from arm internally (exactly as collect_final5 does)
-    if backbone in WAIV:
+    if backbone in REFERENCE:
         result["hest"] = _hest_score(name, step, backbone)
 
     # --- THUNDER -----------------------------------------------------------
@@ -379,19 +379,19 @@ def collect_run(run_dir: Path, step: int) -> dict:
 # Display helpers
 # ---------------------------------------------------------------------------
 
-def _raw_line(ours: float | None, waiv: float | None, base: float | None,
+def _raw_line(ours: float | None, reference: float | None, base: float | None,
               metric: str, backbone: str, step: int,
-              extra_vs_waiv_label: str = "") -> str:
-    """Format:  ours=X | Waiv=Y | diff=Z(Nσ) | Δbase=W"""
+              extra_vs_reference_label: str = "") -> str:
+    """Format:  ours=X | Reference=Y | diff=Z(Nσ) | Δbase=W"""
     def _f4(v: float | None) -> str:
         return f"{v:.4f}" if v is not None else "MISSING"
 
     o_s  = _f4(ours)
-    w_s  = _f4(waiv)
+    w_s  = _f4(reference)
     b_s  = _f4(base)
 
-    if ours is not None and waiv is not None:
-        diff_f = ours - waiv
+    if ours is not None and reference is not None:
+        diff_f = ours - reference
         noise  = _noise_label(diff_f, metric, backbone, step)
         diff_s = f"{diff_f:+.4f}"
         if noise:
@@ -404,9 +404,9 @@ def _raw_line(ours: float | None, waiv: float | None, base: float | None,
     else:
         base_d = "?"
 
-    label = f"ours={o_s} | Waiv={w_s} | diff={diff_s} | Δbase={base_d}"
-    if extra_vs_waiv_label:
-        label += f"  [{extra_vs_waiv_label}]"
+    label = f"ours={o_s} | Reference={w_s} | diff={diff_s} | Δbase={base_d}"
+    if extra_vs_reference_label:
+        label += f"  [{extra_vs_reference_label}]"
     return label
 
 
@@ -520,13 +520,13 @@ def main() -> None:
     W = 110
     print()
     print("=" * W)
-    print(f"  WAIV SCOREBOARD  |  step={args.step}  |  {len(rows)} row(s)")
+    print(f"  REFERENCE SCOREBOARD  |  step={args.step}  |  {len(rows)} row(s)")
     print(f"  RULE 1: every row is one (run, step); MISSING = not available, never substituted.")
-    print(f"  RULE 2: raw scores as  ours | Waiv | diff.  Δbase is an extra column.")
+    print(f"  RULE 2: raw scores as  ours | Reference | diff.  Δbase is an extra column.")
     print("=" * W)
 
     for backbone in backbones_present:
-        w      = WAIV[backbone]
+        w      = REFERENCE[backbone]
         bb_rows = [r for r in rows if r["backbone"] == backbone]
 
         print()
@@ -547,7 +547,7 @@ def main() -> None:
                   f"budget={budget}{pre}{avail}")
 
             # RI
-            ri_line = _raw_line(r["ri"], w["waiv_ri"], w["base_ri"],
+            ri_line = _raw_line(r["ri"], w["reference_ri"], w["base_ri"],
                                  "ri", backbone, args.step)
             print(f"  ┃   RI:    {ri_line}")
 
@@ -555,18 +555,18 @@ def main() -> None:
             ds_parts = []
             for dsname in ("tcga", "camelyon", "tolkach_esca"):
                 v  = r["ri_datasets"].get(dsname)
-                wv = w["waiv_ds"].get(dsname)
+                wv = w["reference_ds"].get(dsname)
                 bv = w["base_ds"].get(dsname)
                 if v is not None:
-                    d_waiv = f"Δ{v - wv:+.4f}" if wv else ""
+                    d_reference = f"Δ{v - wv:+.4f}" if wv else ""
                     d_base = f"(Δbase{v - bv:+.4f})" if bv else ""
-                    ds_parts.append(f"{dsname}={v:.4f}{d_waiv}{d_base}")
+                    ds_parts.append(f"{dsname}={v:.4f}{d_reference}{d_base}")
                 else:
                     ds_parts.append(f"{dsname}=MISSING")
             print(f"  ┃     ds: {' | '.join(ds_parts)}")
 
             # HEST
-            hest_line = _raw_line(r["hest"], w["waiv_hest"], w["base_hest"],
+            hest_line = _raw_line(r["hest"], w["reference_hest"], w["base_hest"],
                                    "hest", backbone, args.step)
             print(f"  ┃   HEST: {hest_line}")
 
@@ -582,22 +582,22 @@ def main() -> None:
 
         # -- Summary across this backbone --------------------------------
         print(f"  ┃  ── {backbone.upper()} summary (mean ± SD of rows with data) ──")
-        for metric, key, waiv_key, base_key in [
-            ("RI",   "ri",   "waiv_ri",   "base_ri"),
-            ("HEST", "hest", "waiv_hest", "base_hest"),
+        for metric, key, reference_key, base_key in [
+            ("RI",   "ri",   "reference_ri",   "base_ri"),
+            ("HEST", "hest", "reference_hest", "base_hest"),
         ]:
             vals = [r[key] for r in bb_rows if r[key] is not None]
             if vals:
                 mn = sum(vals) / len(vals)
                 sd = (sum((v - mn) ** 2 for v in vals) / max(len(vals) - 1, 1)) ** 0.5
-                wv = w[waiv_key]
+                wv = w[reference_key]
                 bv = w[base_key]
                 diff_w = mn - wv
                 diff_b = mn - bv
                 noise  = _noise_label(diff_w, key, backbone, args.step)
                 noise_s = f"({noise})" if noise else ""
                 print(f"  ┃    {metric}:  mean={mn:.4f} sd={sd:.4f}  "
-                      f"ours={mn:.4f} | Waiv={wv:.4f} | diff={diff_w:+.4f}{noise_s} | "
+                      f"ours={mn:.4f} | Reference={wv:.4f} | diff={diff_w:+.4f}{noise_s} | "
                       f"Δbase={diff_b:+.4f}  n={len(vals)}")
             else:
                 print(f"  ┃    {metric}:  -- no data --")
@@ -608,7 +608,7 @@ def main() -> None:
     print("Notes:")
     print("  MISSING       = metric not found for this (run, step); never substituted.")
     print("  PARTIAL(n/N)  = checkpoint has n of N expected datasets; task-mean suppressed.")
-    print(f"  ~noise / Xσ  = annotates diff vs Waiv in seed-SD units (2SD threshold).")
+    print(f"  ~noise / Xσ  = annotates diff vs Reference in seed-SD units (2SD threshold).")
     if RI_BUDGET_ENABLED:
         print(f"  budget=PASS/FAIL: RI ≥ floor (Virchow2 ≥ 0.9134, midnight ≥ 0.9140).")
         print(f"  !!! {RI_BUDGET_WARNING}")

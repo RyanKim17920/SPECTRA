@@ -12,23 +12,23 @@ command joined up:
 
   1. scripts/final_recipe_report.py -- RI / HEST / THUNDER{knn,linear,few-shot} for the
      three ungated backbones, checkpoint chosen by the CI>=0.75 RULE, graded as
-     pct_of_waiv.  Reads the OLD harness: $SPECTRA_HEST_WORK/results/ (HEST),
+     pct_of_reference.  Reads the OLD harness: $SPECTRA_HEST_WORK/results/ (HEST),
      $SPECTRA_THUNDER/outputs/res/ (THUNDER), third_party/PathoROB (base RI).
   2. $SPECTRA_EVALS/ -- a SECOND, newer corpus that no script in this
      repo read: THUNDER with segmentation + calibration + adversarial, PathoROB for all
-     five backbones, and CPTAC.  Its own base-controls reproduce Waiv's published base
+     five backbones, and CPTAC.  Its own base-controls reproduce Reference's published base
      far more closely than the old harness does (see section 2's base-gap column), so
      within-corpus deltas are the defensible ones.
-  3. docs/waiv_published.json -- the published targets.  NEVER hardcoded here.
+  3. docs/reference_published.json -- the published targets.  NEVER hardcoded here.
 
 RULES CARRIED OVER FROM scoreboard2.py / final_recipe_report.py:
   * ONE ROW = ONE (run, step).  Never best-RI from one checkpoint and best-HEST from
     another.
   * MISSING is printed, never substituted or silently dropped.
-  * Raw scores first (ours | our base | Waiv base | Waiv fine-tuned); pct_of_waiv
-    ( = (ours - our base) / (Waiv ft - Waiv base) ) is an EXTRA column.
+  * Raw scores first (ours | our base | Reference base | Reference fine-tuned); pct_of_reference
+    ( = (ours - our base) / (Reference ft - Reference base) ) is an EXTRA column.
   * A pct is not printed when the two sides do not measure the same thing, or when
-    Waiv's own gain -- the denominator -- is at the print precision of their table.
+    Reference's own gain -- the denominator -- is at the print precision of their table.
     Section 2 gates both cases explicitly rather than emitting a large ratio.
 """
 
@@ -70,8 +70,8 @@ ARM_ORDER = ["phikon", "midnight", "virchow2", "hoptimus", "uni2"]
 ARM_LABEL = {"phikon": "Phikon-v2", "midnight": "Midnight-12k", "virchow2": "Virchow2",
              "hoptimus": "H-Optimus-0", "uni2": "UNI2-h"}
 
-# THUNDER: the six tasks Waiv publish in Table 2.  Our side reads the harness's own
-# benchmark_* roll-up rows, which are the same quantity Waiv tabulate.
+# THUNDER: the six tasks Reference publish in Table 2.  Our side reads the harness's own
+# benchmark_* roll-up rows, which are the same quantity Reference tabulate.
 #   our (dataset, task, metric, setting)                 -> published key
 THUNDER_ROWS = [
     ("knn",           "benchmark_knn",               "knn",               "f1",  "",            "knn",           True),
@@ -87,26 +87,26 @@ LOWER_IS_BETTER = {"calibration", "adversarial"}
 RECIPE_ARM_PREFIX = "c3s-"
 
 # --- Adversarial sanity gate -----------------------------------------------
-# The adversarial column is the f1 DROP under attack, and it is comparable to Waiv's
-# for four of the five backbones (ours 19-32, Waiv 23-42).  On Virchow2 -- and ONLY on
+# The adversarial column is the f1 DROP under attack, and it is comparable to Reference's
+# for four of the five backbones (ours 19-32, Reference 23-42).  On Virchow2 -- and ONLY on
 # Virchow2 -- every model in the corpus reports a drop of 0.1-0.3pp against a published
 # 31.1 for the very same base weights, i.e. the attack did not bite at all.  That is a
 # broken attack, not a robust model, and quoting it as a 100x win would be the single
 # most misleading number in the paper.  So the cell is measured, printed, and gated:
-# any drop below this floor while Waiv report a large one is flagged, not scored.
+# any drop below this floor while Reference report a large one is flagged, not scored.
 ADVERSARIAL_DEAD_ATTACK_DROP = 5.0
 
 # --- Denominator gate ------------------------------------------------------
-# pct_of_waiv divides by Waiv's own gain.  Their Table 2 is printed to 0.1pp, so a gain
+# pct_of_reference divides by Reference's own gain.  Their Table 2 is printed to 0.1pp, so a gain
 # read off two rounded numbers carries +/-0.1pp of pure print error; once |gain| falls to
 # that scale the RATIO's relative error exceeds 100% and the percentage is an artefact of
 # rounding, not a measurement (it is what turned a +1.0pp linear-probing move into
-# "500% of Waiv" in the first draft of this table).  Not a tuned threshold: it is twice
+# "500% of Reference" in the first draft of this table).  Not a tuned threshold: it is twice
 # the print granularity of the source table.
-WAIV_PRINT_GRANULARITY_PP = 0.1
-DENOMINATOR_FLOOR_PP = 2 * WAIV_PRINT_GRANULARITY_PP
+REFERENCE_PRINT_GRANULARITY_PP = 0.1
+DENOMINATOR_FLOOR_PP = 2 * REFERENCE_PRINT_GRANULARITY_PP
 ADVERSARIAL_SUSPECT_NOTE = (
-    "attack ineffective: our f1 drop is <%.0fpp where Waiv report a large drop for the "
+    "attack ineffective: our f1 drop is <%.0fpp where Reference report a large drop for the "
     "same base weights, so the drop measures the attack, not the model.  Printed, not "
     "scored." % ADVERSARIAL_DEAD_ATTACK_DROP)
 
@@ -117,11 +117,11 @@ def _fmt(v, nd=4, pct=False):
     return f"{v:.1f}" if pct else f"{v:.{nd}f}"
 
 
-def _pct_of_waiv(ours, our_base, waiv_base, waiv_ft):
-    """(ours - our base) / (Waiv ft - Waiv base) * 100, uncapped.  None if undefined."""
-    if None in (ours, our_base, waiv_base, waiv_ft):
+def _pct_of_reference(ours, our_base, reference_base, reference_ft):
+    """(ours - our base) / (Reference ft - Reference base) * 100, uncapped.  None if undefined."""
+    if None in (ours, our_base, reference_base, reference_ft):
         return None
-    den = waiv_ft - waiv_base
+    den = reference_ft - reference_base
     if den == 0:
         return None
     return (ours - our_base) / den * 100.0
@@ -155,10 +155,10 @@ def section1(rep: dict) -> list[str]:
          "THUNDER for a given run.  Best-RI from one checkpoint and best-HEST from another",
          "is never combined.  Where two seeds of one backbone plateau at different steps",
          "the `step` cell lists both and the cell's floor is the larger of the two.", "",
-         "`pct` = (our mean - our base) / (Waiv ft - Waiv base) x 100, UNCAPPED.", ""]
+         "`pct` = (our mean - our base) / (Reference ft - Reference base) x 100, UNCAPPED.", ""]
     L += _checkpoint_tables(rep)
-    hdr = ("| backbone | benchmark | step | ours | our base | Waiv base | Waiv ft | "
-           "our gain | Waiv gain | pct of Waiv | +/-95% | n | status |")
+    hdr = ("| backbone | benchmark | step | ours | our base | Reference base | Reference ft | "
+           "our gain | Reference gain | pct of Reference | +/-95% | n | status |")
     L += [hdr, "|" + "---|" * 13]
     for arm in ARM_ORDER:
         cells = rep.get("cells", {}).get(arm)
@@ -173,20 +173,20 @@ def section1(rep: dict) -> list[str]:
             c = cells.get(bench) or {}
             ours = c.get("raw_mean")
             base = c.get("base")
-            waiv = c.get("waiv")
+            reference = c.get("reference")
             if bench == "THUNDER":
                 # THUNDER is a pooled ratio over its tasks: raw absolutes are per-task,
                 # so the honest absolute columns here are the pooled deltas.
-                ours = base = waiv = waiv_base = None
+                ours = base = reference = reference_base = None
             else:
-                waiv_base = rep_waiv_base(arm, bench)
+                reference_base = rep_reference_base(arm, bench)
             # Always the graded quantities the report itself divided, never re-derived.
             gain_o = c.get("our_delta", c.get("our_avg_delta"))
-            gain_w = c.get("waiv_gain", c.get("waiv_avg_gain"))
+            gain_w = c.get("reference_gain", c.get("reference_avg_gain"))
             L.append(
                 f"| {ARM_LABEL[arm]} | {bench} | {c.get('selected_step', '-')} | "
-                f"{_fmt(ours, 5)} | {_fmt(base, 5)} | {_fmt(waiv_base, 5)} | "
-                f"{_fmt(waiv, 5)} | {_fmt(gain_o, 5)} | {_fmt(gain_w, 5)} | "
+                f"{_fmt(ours, 5)} | {_fmt(base, 5)} | {_fmt(reference_base, 5)} | "
+                f"{_fmt(reference, 5)} | {_fmt(gain_o, 5)} | {_fmt(gain_w, 5)} | "
                 f"{_fmt(c.get('pct'), pct=True)} | {_fmt(c.get('ci'), pct=True)} | "
                 f"{c.get('n', 0)} | {c.get('status', 'MISSING')} |")
     L += ["", "Per-model verdict (THE criterion: pct >= 70 on each of RI/HEST/THUNDER "
@@ -241,9 +241,9 @@ def _checkpoint_tables(rep: dict) -> list[str]:
     return L
 
 
-def rep_waiv_base(arm: str, bench: str):
-    """Waiv's published base for this arm/benchmark (RI and HEST only)."""
-    w = _ec.WAIV.get(arm) or {}
+def rep_reference_base(arm: str, bench: str):
+    """Reference's published base for this arm/benchmark (RI and HEST only)."""
+    w = _ec.REFERENCE.get(arm) or {}
     return w.get("ri_base") if bench == "RI" else w.get("hest_base")
 
 
@@ -281,10 +281,10 @@ def split_model(model: str) -> tuple[str | None, str]:
 def section2(pfe: dict) -> list[str]:
     L = ["## 2. THUNDER, all six published tasks (second corpus)", "",
          f"Source: `{PFE_THUNDER_CSV}` -- the harness's own `benchmark_*` roll-up rows,",
-         "which are the same quantity Waiv tabulate in their Table 2.  This corpus is",
+         "which are the same quantity Reference tabulate in their Table 2.  This corpus is",
          "the ONLY place segmentation, calibration (ECE) and adversarial exist on our",
          "side; the old harness computes none of them.  Its base-controls also sit much",
-         "closer to Waiv's published base than the old harness does (`base gap` column),",
+         "closer to Reference's published base than the old harness does (`base gap` column),",
          "so the within-corpus base-vs-tuned delta is the defensible one.", ""]
     if not pfe:
         return L + [f"**MISSING** -- {PFE_THUNDER_CSV} not readable.", ""]
@@ -303,16 +303,16 @@ def section2(pfe: dict) -> list[str]:
             L += ["**MISSING** -- no model dirs for this backbone in the corpus.", ""]
             continue
         base = arms.get("base-control")
-        pub = _ec.load_waiv_published()  # (WAIV, WAIV_THUNDER) -- only the raw json here
-        blob = json.loads(_ec.WAIV_PUBLISHED_JSON.read_text())
+        pub = _ec.load_reference_published()  # (REFERENCE, REFERENCE_THUNDER) -- only the raw json here
+        blob = json.loads(_ec.REFERENCE_PUBLISHED_JSON.read_text())
         idx = {(m["name"], m["variant"]): m for m in blob["models"]}
-        base_row, ft_row = _ec.WAIV_ROWS[arm]
+        base_row, ft_row = _ec.REFERENCE_ROWS[arm]
         wb, wf = idx[tuple(base_row)]["thunder"], idx[tuple(ft_row)]["thunder"]
         del pub
 
-        L.append("| task | our base | Waiv base | base gap | Waiv ft | Waiv gain | " +
+        L.append("| task | our base | Reference base | base gap | Reference ft | Reference gain | " +
                  " | ".join(sorted(a for a in arms if a != "base-control")) +
-                 " | pct of Waiv (recipe arm, mean over seeds) |")
+                 " | pct of Reference (recipe arm, mean over seeds) |")
         L.append("|" + "---|" * (7 + len([a for a in arms if a != "base-control"])))
         tuned_names = sorted(a for a in arms if a != "base-control")
         suspect: set[str] = set()
@@ -326,13 +326,13 @@ def section2(pfe: dict) -> list[str]:
                            and ob < ADVERSARIAL_DEAD_ATTACK_DROP
                            and wbv is not None and wbv >= ADVERSARIAL_DEAD_ATTACK_DROP)
             # rounded to the table's own precision: 68.0 - 68.2 is -0.2, not -0.20000000000000284
-            waiv_gain = None if (wbv is None or wfv is None) else round(wfv - wbv, 1)
+            reference_gain = None if (wbv is None or wfv is None) else round(wfv - wbv, 1)
             if dead_attack:
                 suspect.add(key)
                 pct_s = "SUSPECT -- not scored"
-            elif waiv_gain is not None and round(abs(waiv_gain), 6) <= DENOMINATOR_FLOOR_PP:
+            elif reference_gain is not None and round(abs(reference_gain), 6) <= DENOMINATOR_FLOOR_PP:
                 gated = True
-                pct_s = (f"INDETERMINATE (Waiv gain {waiv_gain:+.1f}pp is within "
+                pct_s = (f"INDETERMINATE (Reference gain {reference_gain:+.1f}pp is within "
                          f"{DENOMINATOR_FLOOR_PP:.1f}pp print error)")
             elif not comparable:
                 pct_s = "NOT COMPARABLE"
@@ -347,20 +347,20 @@ def section2(pfe: dict) -> list[str]:
                 if not got or ob is None:
                     pct_s = "MISSING"
                 else:
-                    p = _pct_of_waiv(sum(got) / len(got), ob, wbv, wfv)
+                    p = _pct_of_reference(sum(got) / len(got), ob, wbv, wfv)
                     pct_s = f"{_fmt(p, pct=True)} (n={len(got)})"
             lo = " (lower is better)" if key in LOWER_IS_BETTER else ""
             L.append(f"| {key}{lo} | {_fmt(ob, 1)} | {_fmt(wbv, 1)} | {_fmt(gap, 1)} | "
-                     f"{_fmt(wfv, 1)} | {_fmt(waiv_gain, 1)} | " +
+                     f"{_fmt(wfv, 1)} | {_fmt(reference_gain, 1)} | " +
                      " | ".join(_fmt(v, 1) for v in tuned_vals) + f" | {pct_s} |")
         L.append("")
         for k in sorted(suspect):
             L.append(f"* **{k} SUSPECT for {ARM_LABEL[arm]}** -- {ADVERSARIAL_SUSPECT_NOTE}")
             L.append("")
         if gated:
-            L.append(f"* INDETERMINATE cells above: Waiv's own published gain for that "
+            L.append(f"* INDETERMINATE cells above: Reference's own published gain for that "
                      f"task is at or below {DENOMINATOR_FLOOR_PP:.1f}pp, twice the "
-                     f"{WAIV_PRINT_GRANULARITY_PP:.1f}pp granularity their table is "
+                     f"{REFERENCE_PRINT_GRANULARITY_PP:.1f}pp granularity their table is "
                      f"printed to, so the ratio is rounding, not a measurement.  Read the "
                      f"raw columns for these tasks.")
             L.append("")
@@ -395,20 +395,20 @@ def section3() -> list[str]:
                 except (KeyError, json.JSONDecodeError):
                     pass
         by_arm[arm][tuned] = (sum(vals) / len(vals)) if len(vals) == len(datasets) else None
-    L += ["| backbone | our base-control | Waiv base | Waiv ft | " +
-          "best tuned (arm) | pct of Waiv |", "|" + "---|" * 6]
+    L += ["| backbone | our base-control | Reference base | Reference ft | " +
+          "best tuned (arm) | pct of Reference |", "|" + "---|" * 6]
     for arm in ARM_ORDER:
         cells = by_arm.get(arm, {})
         base = cells.get("base-control")
-        wb = (_ec.WAIV.get(arm) or {}).get("ri_base")
-        wf = (_ec.WAIV.get(arm) or {}).get("ri")
+        wb = (_ec.REFERENCE.get(arm) or {}).get("ri_base")
+        wf = (_ec.REFERENCE.get(arm) or {}).get("ri")
         tuned = {k: v for k, v in cells.items() if k != "base-control" and v is not None}
         if tuned:
             bk = max(tuned, key=lambda k: tuned[k])
             best_s = f"{tuned[bk]:.4f} ({bk})"
         else:
             bk, best_s = None, "MISSING"
-        pct = _pct_of_waiv(tuned.get(bk) if bk else None, base, wb, wf)
+        pct = _pct_of_reference(tuned.get(bk) if bk else None, base, wb, wf)
         L.append(f"| {ARM_LABEL[arm]} | {_fmt(base)} | {_fmt(wb)} | {_fmt(wf)} | "
                  f"{best_s} | {_fmt(pct, pct=True)} |")
     L += ["", "Note: `phikon2-base-control_clsmean` is absent from this corpus, so the",
@@ -430,20 +430,20 @@ def _pub_cptac_key(ours: str) -> str | None:
         return f"[CPTAC {coh}][{task[: -len('_mutation')]}][AUC]"
     if task == "MSI_H":
         return f"[CPTAC {coh}][MSI-H][AUC]"
-    return None   # Immune_class is bAcc for Waiv but AUC for us; subtype has no row
+    return None   # Immune_class is bAcc for Reference but AUC for us; subtype has no row
 
 
 def section4() -> list[str]:
     L = ["## 4. CPTAC / Patho-Bench", "",
          f"Source: `{PFE_CPTAC}/<model>/aggregate.json`, key `classification_macro_ovr_auc`.",
-         "Waiv's side is `docs/waiv_published.json -> table4_pathobench`.  Only the",
-         "mutation/MSI AUC tasks are metric-compatible: Waiv score `Immune class` as",
+         "Reference's side is `docs/reference_published.json -> table4_pathobench`.  Only the",
+         "mutation/MSI AUC tasks are metric-compatible: Reference score `Immune class` as",
          "balanced accuracy while we score it as macro-OvR AUC, and their survival cells",
          "are a C-index we compute per-alpha, so both groups are excluded from the paired",
          "mean and listed as MISSING rather than silently averaged in.", ""]
     if not PFE_CPTAC.exists():
         return L + [f"**MISSING** -- {PFE_CPTAC} not readable.", ""]
-    blob = json.loads(_ec.WAIV_PUBLISHED_JSON.read_text())
+    blob = json.loads(_ec.REFERENCE_PUBLISHED_JSON.read_text())
     t4 = blob["table4_pathobench"]
     cols = t4["column_order"]
     pub_by_task = {t["task"]: t["scores"] for t in t4["tasks"]}
@@ -460,14 +460,14 @@ def section4() -> list[str]:
         except json.JSONDecodeError:
             by_arm[arm][tuned] = None
 
-    L += ["| backbone | arm | n matched tasks | our mean AUC (matched) | Waiv base | "
-          "Waiv ft | pct of Waiv |", "|" + "---|" * 7]
+    L += ["| backbone | arm | n matched tasks | our mean AUC (matched) | Reference base | "
+          "Reference ft | pct of Reference |", "|" + "---|" * 7]
     for arm in ARM_ORDER:
         cells = by_arm.get(arm)
         if not cells:
             L.append(f"| {ARM_LABEL[arm]} | - | 0 | MISSING | MISSING | MISSING | MISSING |")
             continue
-        base_row, ft_row = _ec.WAIV_ROWS[arm]
+        base_row, ft_row = _ec.REFERENCE_ROWS[arm]
         try:
             bi = cols.index(f"{base_row[0]}|{base_row[1]}")
             fi = cols.index(f"{ft_row[0]}|{ft_row[1]}")
@@ -494,7 +494,7 @@ def section4() -> list[str]:
                 bm = [base_scores[k] for k, _v, p in matched if k in base_scores]
                 if len(bm) == len(matched):
                     ob = sum(bm) / len(bm) * 100.0
-            pct = _pct_of_waiv(our_mean, ob, wbv, wfv) if tuned != "base-control" else None
+            pct = _pct_of_reference(our_mean, ob, wbv, wfv) if tuned != "base-control" else None
             note = "" if (ob is not None or tuned == "base-control") else " (no base-control)"
             L.append(f"| {ARM_LABEL[arm]} | {tuned}{note} | {len(matched)} | "
                      f"{_fmt(our_mean, 2)} | {_fmt(wbv, 2)} | {_fmt(wfv, 2)} | "
@@ -520,7 +520,7 @@ def section5(rep: dict, pfe: dict) -> list[str]:
          "not run for every arm; the 16-set roster has no SPIDER segmentation task at all. "
          "Section 2 carries segmentation from the second corpus instead."),
         ("THUNDER calibration / adversarial (section 1)", "NOT COMPUTED",
-         "`eval_common.WAIV_THUNDER_TASKS` deliberately covers four tasks; the old harness "
+         "`eval_common.REFERENCE_THUNDER_TASKS` deliberately covers four tasks; the old harness "
          "never computed ECE or an attack.  Section 2 carries both."),
         ("THUNDER adversarial, Virchow2 only", "SUSPECT",
          ADVERSARIAL_SUSPECT_NOTE + "  All three Virchow2 models report a 0.1-0.3pp drop "
@@ -535,9 +535,9 @@ def section5(rep: dict, pfe: dict) -> list[str]:
          "hoptimus0-bm3-s0-step100 and hoptimus0-c50-s0-step{50,100,150} have no "
          "`.complete`, no aggregate.json and zero task dirs."),
         ("CPTAC Immune class / survival", "NOT COMPARED",
-         "metric mismatch: Waiv report balanced accuracy and C-index, we compute macro-OvR "
+         "metric mismatch: Reference report balanced accuracy and C-index, we compute macro-OvR "
          "AUC and a per-alpha C-index."),
-        ("Waiv Patho-Bench grand average (63 tasks)", "NOT COMPARABLE",
+        ("Reference Patho-Bench grand average (63 tasks)", "NOT COMPARABLE",
          "our CPTAC corpus covers 38 tasks, 26 of which map onto their table; their grand "
          "average also spans Hancock / PANDA / BC-Therapy cohorts we never ran."),
     ]
@@ -633,7 +633,7 @@ def main() -> None:
     pfe = load_pfe_thunder()
 
     body = [
-        "# Waiv final scoreboard",
+        "# Reference final scoreboard",
         "",
         "**Generated file -- do not hand-edit.**  Regenerate with:",
         "",
@@ -641,7 +641,7 @@ def main() -> None:
         "./.venv/bin/python scripts/final_scoreboard.py",
         "```",
         "",
-        f"Waiv targets: `{_ec.WAIV_SOURCE}`.",
+        f"Reference targets: `{_ec.REFERENCE_SOURCE}`.",
         "Every number below is read from disk at generation time.  `MISSING` means the",
         "metric is not on disk for that cell; it is never substituted from another",
         "checkpoint, another step, or another arm.",

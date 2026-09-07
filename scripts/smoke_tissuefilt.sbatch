@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-smoke-tissuefilt
+#SBATCH --job-name=spectra-smoke-tissuefilt
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

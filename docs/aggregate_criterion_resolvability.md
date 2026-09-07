@@ -15,7 +15,7 @@ Generated 2026-08-25 by `scripts/aggregate_criterion_resolvability.py`. Sources 
 - HEST: `/data/ryan.kim/hest_work/results/f5_final5-<bb>-s{0..4}-t900-*_s0000500_<pool>_summary.json`,
   key `results.avg` (9-task mean). Pooling cls / cls / clsmean per `collect_final5.py::HEST_BASE`.
 - RI: `runs/final5-<bb>-s{0..4}-t900-*/ri_curve.json`, `points[step==500].avg_robustness_index`.
-- Waiv targets: `scripts/scoreboard.py::WAIV`, `::WAIV_THUNDER`.
+- Reference targets: `scripts/scoreboard.py::REFERENCE`, `::REFERENCE_THUNDER`.
 
 Replicates: the **final5** family, 3 backbones × 5 training seeds, checkpoint step 500,
 15 independent SLURM jobs, config-verified identical except seed/backbone
@@ -29,13 +29,13 @@ Replicates: the **final5** family, 3 backbones × 5 training seeds, checkpoint s
 Per cell, following `scripts/scoreboard.py`:
 
 ```
-RI       pct(b)    = (ours_RI(b)   - RI_BASE[b])   / (WAIV_RI[b]   - RI_BASE[b])   * 100
-HEST     pct(b)    = (ours_HEST(b) - HEST_BASE[b]) / (WAIV_HEST[b] - HEST_BASE[b]) * 100
-THUNDER  pct(b,t)  = (ours_F1(b,t) - OUR_BASE(b,t)) / (WAIV_ft(b,t) - WAIV_base(b,t)) * 100
+RI       pct(b)    = (ours_RI(b)   - RI_BASE[b])   / (REFERENCE_RI[b]   - RI_BASE[b])   * 100
+HEST     pct(b)    = (ours_HEST(b) - HEST_BASE[b]) / (REFERENCE_HEST[b] - HEST_BASE[b]) * 100
+THUNDER  pct(b,t)  = (ours_F1(b,t) - OUR_BASE(b,t)) / (REFERENCE_ft(b,t) - REFERENCE_base(b,t)) * 100
 ```
 
 THUNDER uses the **two-base gain ratio** because our measured THUNDER base does not
-reproduce Waiv's (documented at `scripts/scoreboard.py:~120`); RI and HEST use the
+reproduce Reference's (documented at `scripts/scoreboard.py:~120`); RI and HEST use the
 single-base form because their bases agree to 4 decimals. `ours_F1(b,t)` is the mean over
 the 12 `PAPER_CLS` datasets. Every cell is **capped at 100**. Segmentation is excluded
 throughout (2-vs-4 dataset support mismatch).
@@ -55,19 +55,19 @@ below and agree to 0.01 except under cell exclusion.
 
 ### The three degenerate THUNDER cells
 
-| cell | Waiv gain (F1) | our 12ds pairdiff-2SD | ratio | status |
+| cell | Reference gain (F1) | our 12ds pairdiff-2SD | ratio | status |
 |---|---|---|---|---|
 | virchow2 / knn | **−0.003** | 0.0060 | 1.99 | denominator NEGATIVE |
 | midnight / linear_probing | +0.002 | 0.0060 | 3.01 | denominator < our noise |
 | virchow2 / linear_probing | +0.003 | 0.0067 | 2.24 | denominator < our noise |
 
-**virchow2/knn must be dropped unconditionally**, not as a judgement call: Waiv *regressed*
+**virchow2/knn must be dropped unconditionally**, not as a judgement call: Reference *regressed*
 on this cell, and `scripts/scoreboard.py` already guards negative denominators to N/A with
-reason `waiv_regressed`. Including it means "matching a regression scores 100%".
+reason `reference_regressed`. Including it means "matching a regression scores 100%".
 
 **The other two are permanently unresolvable**, and more seeds on our side cannot fix them:
 
-1. The denominator is a **single published point estimate with no error bar**. Waiv report
+1. The denominator is a **single published point estimate with no error bar**. Reference report
    +0.002 and +0.003 F1. Our own seed noise on the identical quantity is 0.006–0.007 F1
    (2σ on a single-run difference). Whatever their run-to-run noise is, it is not plausibly
    ≥3× smaller than ours on the same benchmark — so the *numerator target itself* is
@@ -84,7 +84,7 @@ virchow2 / knn              474, 553, 442, 572, 611     (SD  70 pct points)
 virchow2 / linear_probing    69, -40,  81, -100, -52     (SD  79 pct points)
 ```
 
-A single training seed moves virchow2/linear_probing from **+81% to −100% of Waiv**.
+A single training seed moves virchow2/linear_probing from **+81% to −100% of Reference**.
 
 The **6 surviving cells** — phikon/{knn, lp, simple_shot}, midnight/{knn, simple_shot},
 virchow2/simple_shot — are exactly the 6 that `docs/thunder_seed_floor_12ds.md` independently
@@ -117,7 +117,7 @@ Cross-benchmark within a backbone: THUNDER~RI r = −0.55 / +0.97 / +0.81,
 THUNDER~HEST r ≈ 0, HEST~RI r = +0.66 / −0.03 / −0.66. Sign-unstable at n = 5 — do not read
 these as real couplings, read them as "not safely zero".
 
-### Aggregate 2SE at n = 1 seed per (recipe, backbone), in pct-of-waiv POINTS
+### Aggregate 2SE at n = 1 seed per (recipe, backbone), in pct-of-reference POINTS
 
 Estimator (B), capped cells. 95% CI is on the 2SE itself (chi-square, Satterthwaite df).
 
@@ -253,18 +253,18 @@ Read these before quoting any number above.
 4. **Estimator (B) assumes independence across backbones only.** Justified — 15 separate
    SLURM jobs, different seeds and different encoders. It is checked against estimator (A),
    which assumes nothing; the two agree on every line.
-5. **The denominators carry unreported error.** Every pct is divided by a Waiv published
+5. **The denominators carry unreported error.** Every pct is divided by a Reference published
    gain quoted to 3–4 significant figures with no error bar. This document propagates *our*
    noise only. For the 6 surviving THUNDER cells the denominators (0.014–0.037 F1) are 2–6×
    our per-cell noise so this is a second-order worry; for HEST (denominators 0.0103–0.0215)
    and for the 3 excluded cells it is not.
-6. **HEST's virchow2 cell is the fragile one.** Waiv's virchow2 HEST gain is +0.0103 against
+6. **HEST's virchow2 cell is the fragile one.** Reference's virchow2 HEST gain is +0.0103 against
    our per-seed HEST SD of 0.00115 — a ratio of only 9, and it carries 46% of the HEST
    aggregate variance. This matches the existing note
-   `waiv-pct-of-waiv-amplifies-noise-on-virchow2-hest`.
+   `reference-pct-of-reference-amplifies-noise-on-virchow2-hest`.
 7. **Not addressed here:** segmentation (support mismatch), checkpoints other than step 500,
    and whether the seed-noise magnitude is stable across training steps
-   (`waiv-seed-floor-is-not-a-constant` says it varies up to 4× by step — so these bars are
+   (`reference-seed-floor-is-not-a-constant` says it varies up to 4× by step — so these bars are
    step-500 bars only).
 
 ---

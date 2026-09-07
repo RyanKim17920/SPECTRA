@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hest-final5
+#SBATCH --job-name=spectra-hest-final5
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -13,9 +13,9 @@
 # script instead of the per-checkpoint copies (hest_splitgrid_*.sbatch) that made the
 # earlier round hard to audit.
 #
-# POOLING IS PER-BACKBONE AND IS NOT A FREE CHOICE. Waiv's published HEST numbers use a
+# POOLING IS PER-BACKBONE AND IS NOT A FREE CHOICE. Reference's published HEST numbers use a
 # different pooling protocol per backbone and never say so; matching it is what turned the
-# Midnight "null" into a real +0.0166 result (docs/FINAL_RESULTS.md sec.4.1). Scoring a
+# Midnight "null" into a real +0.0166 result (docs/archive/FINAL_RESULTS.md sec.4.1). Scoring a
 # backbone under the wrong pooling silently manufactures or erases the effect:
 #   phikon-v2 -> cls       (base 0.37470 reproduces published 0.3747 exactly)
 #   midnight  -> cls       (base 0.39521 reproduces published 0.3952 exactly)

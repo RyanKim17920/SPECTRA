@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-finalgem
+#SBATCH --job-name=spectra-finalgem
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -98,7 +98,7 @@
 # --max-wait-s idle-clock fix (fa1083c). The pin is read-only; do NOT edit it.
 #
 #   SPECTRA_ARM=phikon sbatch --account=max --qos=high \
-#     --job-name=waiv-finalgem-phikon scripts/finalgem.sbatch
+#     --job-name=spectra-finalgem-phikon scripts/finalgem.sbatch
 
 set -euo pipefail
 

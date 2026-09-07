@@ -28,7 +28,7 @@
   ],
   "n_seeds": 2,
   "caveat": "n_seeds = 2 (a single seed pair).  The 3-backbone floor in thunder_seed_floor_12ds.md uses n_seeds = 5 / 10 pairs.  offset_2se still has df = n_datasets - 1 = 11 and is usable; pairdiff_2sd has df = 1 across seeds and is indicative only.",
-  "waiv_gain_f1": {
+  "reference_gain_f1": {
     "hoptimus0/c3s-step125|knn": 0.004,
     "hoptimus0/c3s-step125|linear_probing": 0.003,
     "hoptimus0/c3s-step125|simple_shot": 0.012,

@@ -39,7 +39,7 @@
     "seed_sd_of_task_mean": "SD across seeds of the task mean itself.",
     "pairdiff_2sd": "2*sqrt(2)*seed_sd -- 2-sigma bar on the difference of two independent single runs."
   },
-  "waiv_gain_f1": {
+  "reference_gain_f1": {
     "phikon/knn": 0.037,
     "phikon/linear_probing": 0.014,
     "phikon/simple_shot": 0.015,

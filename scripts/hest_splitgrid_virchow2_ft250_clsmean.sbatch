@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hest-sg-virchow2-clsmean
+#SBATCH --job-name=spectra-hest-sg-virchow2-clsmean
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -19,7 +19,7 @@
 # vft250_* exist. They exist for the OTHER model.
 #
 # POOLING = clsmean, and that is not the same choice as the other two backbones.
-# Waiv never state a pooling protocol; it was determined empirically by scoring each
+# Reference never state a pooling protocol; it was determined empirically by scoring each
 # base under both poolings and keeping whichever reproduces their published base:
 #   phikon-v2 -> cls      (ours 0.37470 vs their 0.3747, exact)
 #   midnight  -> cls      (ours 0.39521 vs their 0.3952, exact)

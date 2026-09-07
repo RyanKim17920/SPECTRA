@@ -5,7 +5,7 @@ Why a streaming loop instead of "download everything, then repack everything"
 -----------------------------------------------------------------------------
 The raw ``.h5`` set is ~224 GB and the repacked memmaps are ~208 GiB. Holding both
 at once costs ~432 GB and buys nothing: once a slide is repacked *and byte-verified*
-against its source, the ``.h5`` is dead weight (PLAN.md 5 -- the repack is the training
+against its source, the ``.h5`` is dead weight (the design spec 5 -- the repack is the training
 input, the ``.h5`` never is). So we do one slide at a time and never let the two copies
 coexist beyond a single slide (~2.3 GB of overlap).
 
@@ -21,7 +21,7 @@ State lives in ``manifest.json`` next to the repacked slides. A slide is skipped
 if the manifest records ``verified: true`` **and** the ``.npy`` is present at the exact
 expected byte size. Anything weaker would let a truncated repack survive a crash, and a
 bad repack is undetectable downstream -- it feeds wrong pixels to a loss that cannot
-notice (same failure mode as misregistration, PLAN.md 4 phase 1 item 3).
+notice (same failure mode as misregistration, the design spec 4 phase 1 item 3).
 
 Usage::
 

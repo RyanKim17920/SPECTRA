@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-seedstudy
+#SBATCH --job-name=spectra-seedstudy
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -56,7 +56,7 @@
 # The pin is read-only and shared with completed runs. Do NOT edit it.
 #
 #   SPECTRA_ARM=split SPECTRA_SEED=1 sbatch --account=max --qos=high \
-#     --job-name=waiv-seedstudy-split-s1 scripts/seedstudy.sbatch
+#     --job-name=spectra-seedstudy-split-s1 scripts/seedstudy.sbatch
 
 set -euo pipefail
 

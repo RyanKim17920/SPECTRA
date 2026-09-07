@@ -55,7 +55,7 @@ def test_split_rejects_unknown_names():
 
 
 def test_positive_condition_never_equals_anchor():
-    """PLAN.md 2: a positive must be a *different* acquisition condition."""
+    """the design spec 2: a positive must be a *different* acquisition condition."""
     s = PairBatchSampler(all_conditions(), n_groups=32, group_size=16, batches_per_epoch=25)
     for b in s:
         assert not (b.positive_cond == b.anchor_cond[:, None]).any()
@@ -192,13 +192,13 @@ def test_infonce_queries_positives_against_the_condition_homogeneous_anchors():
 
 
 def test_symmetric_is_off_by_default():
-    """PLAN.md 2: the anchor->positive direction has cross-condition candidates."""
+    """the design spec 2: the anchor->positive direction has cross-condition candidates."""
     from spectra.train.contrastive import TrainConfig
     assert TrainConfig().symmetric is False
 
 
 # --------------------------------------------------------------------------------------
-# Backbone-agnostic encoder (PLAN.md §2: LoRA across the FULL depth, on any backbone).
+# Backbone-agnostic encoder (the design spec §2: LoRA across the FULL depth, on any backbone).
 #
 # These are the guards for the failure that would otherwise be invisible: a LoRA target
 # set that resolves to *fewer* modules on a new architecture. kaiko-ai/midnight sets
@@ -216,7 +216,7 @@ def test_block_index_parses_the_naming_schemes_we_target():
     assert _block_index("encoder.layers.3.mlp.fc1") == 3
     assert _block_index("blocks.11.attn.qkv") == 11
     # A Linear outside any numbered block must never be adapted: LoRA-on-the-head is
-    # exactly what PLAN.md §2 rules out.
+    # exactly what the design spec §2 rules out.
     assert _block_index("pooler.dense") is None
     assert _block_index("head.fc1") is None
 
@@ -673,13 +673,13 @@ def test_thunder_pooling_is_resolved_per_backbone_not_hardcoded():
     for Virchow2 / AquaViT / H0-mini / Midnight-12k. phikon-v2 is CLS there. Hardcoding
     either one makes the base-vs-fine-tuned rank sums non-comparable to their table."""
     src = Path(__file__).resolve().parents[1] / "src" / "spectra" / "eval" / "thunder_model.py"
-    spec = importlib.util.spec_from_file_location("_waiv_thunder_model_test", src)
+    spec = importlib.util.spec_from_file_location("_reference_thunder_model_test", src)
     mod = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(mod)
     except ImportError:  # thunder lives in .venv-thunder, not the default venv
         pytest.skip("thunder not importable in this interpreter")
-    sys.modules.pop("_waiv_thunder_model_test", None)
+    sys.modules.pop("_reference_thunder_model_test", None)
 
     assert mod._default_pooling(None) == "cls"                 # default = phikon-v2
     assert mod._default_pooling("owkin/phikon-v2") == "cls"
@@ -696,13 +696,13 @@ def test_thunder_auto_pooling_never_resolves_to_clsmean_for_segmentation():
     from pathlib import Path
 
     src = Path(__file__).resolve().parents[1] / "src" / "spectra" / "eval" / "thunder_model.py"
-    spec = importlib.util.spec_from_file_location("_waiv_thunder_seg_test", src)
+    spec = importlib.util.spec_from_file_location("_reference_thunder_seg_test", src)
     mod = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(mod)
     except ImportError:  # thunder lives in .venv-thunder, not the default venv
         pytest.skip("thunder not importable in this interpreter")
-    sys.modules.pop("_waiv_thunder_seg_test", None)
+    sys.modules.pop("_reference_thunder_seg_test", None)
 
     mid, phi = "kaiko-ai/midnight", "owkin/phikon-v2"
 
@@ -811,7 +811,7 @@ def test_thunder_segmentation_slice_is_bit_identical_on_the_published_backbones(
     so the result must be BITWISE the old expression -- every published segmentation
     number came from it."""
     _, hidden = backbone_hidden
-    mod = _load_thunder_model("_waiv_thunder_seg_identity")
+    mod = _load_thunder_model("_reference_thunder_seg_identity")
     torch.manual_seed(0)
     tokens = torch.randn(2, 197, hidden, dtype=torch.float64)
     x = torch.randn(2, 3, 224, 224, dtype=torch.float64)
@@ -833,7 +833,7 @@ def test_thunder_segmentation_drops_virchow2_register_tokens_and_calls_timm_posi
     2. ``[:, 1:]`` would hand THUNDER's segmentation decoder the 4 register tokens as if
        they were image patches -- right shape, right dtype, no warning, worse Dice.
     """
-    mod = _load_thunder_model("_waiv_thunder_seg_virchow2")
+    mod = _load_thunder_model("_reference_thunder_seg_virchow2")
     torch.manual_seed(0)
     tokens = torch.randn(2, 261, 1280, dtype=torch.float64)     # [CLS] + 4 reg + 256 patch
     x = torch.randn(2, 3, 224, 224, dtype=torch.float64)
@@ -850,11 +850,11 @@ def test_thunder_segmentation_drops_virchow2_register_tokens_and_calls_timm_posi
 
 
 def test_thunder_pooling_tables_cover_virchow2_without_moving_the_published_two():
-    """Waiv 3.3: CLS+mean is used in THUNDER for Virchow2 / AquaViT / H0-mini /
+    """Reference 3.3: CLS+mean is used in THUNDER for Virchow2 / AquaViT / H0-mini /
     Midnight-12k. Virchow2 is therefore clsmean, and -- because clsmean advertises
     emb_dim = 2*hidden (2560) while the segmentation branch returns hidden-d (1280) patch
     tokens -- the existing clsmean->cls segmentation correction applies to it unchanged."""
-    mod = _load_thunder_model("_waiv_thunder_virchow2_pooling")
+    mod = _load_thunder_model("_reference_thunder_virchow2_pooling")
     v, mid, phi = "paige-ai/Virchow2", "kaiko-ai/midnight", "owkin/phikon-v2"
 
     assert v in mod.THUNDER_CLSMEAN_BACKBONES
@@ -887,19 +887,19 @@ def test_thunder_pooling_tables_cover_virchow2_without_moving_the_published_two(
 
 
 def test_pathorob_virchow2_target_records_only_the_average():
-    """Waiv Table 1 gives Virchow2 Avg RI 0.858 -> 0.918 and this repo has no per-dataset
+    """Reference Table 1 gives Virchow2 Avg RI 0.858 -> 0.918 and this repo has no per-dataset
     breakdown behind it. Inventing three numbers that average to 0.858 is undetectable
     once written down, so the per-dataset keys must be ABSENT, and the published rows must
     not have moved."""
-    from spectra.eval.pathorob_adapter import DATASETS, TARGETS, waiv_target
+    from spectra.eval.pathorob_adapter import DATASETS, TARGETS, reference_target
 
     assert TARGETS["virchow2_base"] == {"avg": 0.858}
     assert TARGETS["virchow2_target"] == {"avg": 0.918}
     for key in ("virchow2_base", "virchow2_target"):
         for ds in DATASETS:
             assert ds not in TARGETS[key], f"fabricated per-dataset value {key}/{ds}"
-            assert waiv_target(key, ds) is None
-        assert waiv_target(key, "avg") == TARGETS[key]["avg"]
+            assert reference_target(key, ds) is None
+        assert reference_target(key, "avg") == TARGETS[key]["avg"]
 
     # The three rows every published number was gated against are byte-for-byte unchanged.
     assert TARGETS["phikon_v2_base"] == {
@@ -922,16 +922,16 @@ def test_thunder_run_name_and_job_prefix_conventions_are_consistent_across_the_t
     submit = (repo / "scripts" / "submit_thunder.sh").read_text()
 
     pilot = importlib.util.spec_from_file_location(
-        "_waiv_pilot", repo / "scripts" / "thunder_pilot.py")
+        "_reference_pilot", repo / "scripts" / "thunder_pilot.py")
     pmod = importlib.util.module_from_spec(pilot)
     pilot.loader.exec_module(pmod)
-    sys.modules.pop("_waiv_pilot", None)
+    sys.modules.pop("_reference_pilot", None)
 
     collect = importlib.util.spec_from_file_location(
-        "_waiv_collect", repo / "scripts" / "collect_thunder.py")
+        "_reference_collect", repo / "scripts" / "collect_thunder.py")
     cmod = importlib.util.module_from_spec(collect)
     collect.loader.exec_module(cmod)
-    sys.modules.pop("_waiv_collect", None)
+    sys.modules.pop("_reference_collect", None)
 
     # Job prefixes: declared in the submitter, known to the pilot.
     for prefix in ("thd-", "thdft1k-", "mthd-", "mthdft-", "vthd-", "vthdft-"):
@@ -1104,7 +1104,7 @@ def test_should_checkpoint_uses_ckpt_every_when_no_schedule():
 
 
 # --------------------------------------------------------------------------------------
-# Retention term: relational KL against the frozen base model (PLAN.md 2 frozen-teacher
+# Retention term: relational KL against the frozen base model (the design spec 2 frozen-teacher
 # anchor). OFF by default, and "off" has to mean BIT-IDENTICAL -- every published number
 # in this repo was produced by the pre-retention loss, so a default path that merely
 # "looks the same" would silently invalidate all of them.
@@ -1530,7 +1530,7 @@ def test_grid_batch_MUST_FAIL_on_a_heldout_condition_leak():
 
 
 def test_grid_batch_MUST_FAIL_when_a_candidate_block_is_not_condition_homogeneous():
-    """The original PLAN.md 2 constraint, carried over: a mixed candidate row lets
+    """The original the design spec 2 constraint, carried over: a mixed candidate row lets
     'different acquisition' stand in for 'different tile'."""
     from spectra.data.grid import assert_grid_batch
 

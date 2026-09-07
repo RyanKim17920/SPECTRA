@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-robls
+#SBATCH --job-name=spectra-robls
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

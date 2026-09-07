@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-armf-score
+#SBATCH --job-name=spectra-armf-score
 #SBATCH --partition=main
 #SBATCH --account=max
 #SBATCH --qos=high
@@ -55,7 +55,7 @@ case "$RUN_DIR" in /*) ;; *) RUN_DIR="$REPO/$RUN_DIR" ;; esac
 # --- SAME PIN THE ARM TRAINED AND SCORED UNDER ----------------------------------------
 # Load-bearing, not hygiene. eval_checkpoints.py derives REPO from its own __file__ and
 # builds PathoRobPaths from it, so the PIN's copy writes features/results into
-#   $PIN/third_party/PathoROB/{data/features,results/robustness_index}/waiv_<run>_s<step>/
+#   $PIN/third_party/PathoROB/{data/features,results/robustness_index}/reference_<run>_s<step>/
 # which is exactly where arm F's steps 250 and 500 already live. Running the working-tree
 # copy instead would score into a DIFFERENT PathoROB tree against a DIFFERENT source
 # snapshot, and the resulting number would not be comparable with the points it joins.
@@ -102,7 +102,7 @@ print(f"[plan] this pass will score         : {[s for s in ck if s not in have]}
 EOF
 
 # NO --model-prefix and NO --follow.
-#   --model-prefix: the default is "waiv_" + run-dir name with dashes as underscores,
+#   --model-prefix: the default is "reference_" + run-dir name with dashes as underscores,
 #     which is what named arm F's existing feature/result dirs. Passing a hand-built
 #     prefix would rename this point out of the comparison.
 #   --follow: this is a one-shot drain over what is already on disk. Without --follow the

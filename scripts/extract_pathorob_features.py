@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Extract PathoROB features with *our* encoder, in *their* npz layout (PLAN.md §4 phase 5).
+"""Extract PathoROB features with *our* encoder, in *their* npz layout (the design spec §4 phase 5).
 
 This is the extraction half of the Phase-2 gate. The metric half is PathoROB's own
 ``robustness_index`` module, which we never reimplement (see

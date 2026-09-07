@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-falseneg3k
+#SBATCH --job-name=spectra-falseneg3k
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

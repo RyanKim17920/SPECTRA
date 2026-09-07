@@ -30,7 +30,7 @@ ADAPTER="$REPO/runs/$RUN/step_$STEP"
 TAG="f5_${RUN}_s${STEP}"
 
 # Classification datasets get knn + linear_probing + simple_shot; the two segmentation
-# datasets get segmentation. This is the full 4-task protocol, matching what Waiv's
+# datasets get segmentation. This is the full 4-task protocol, matching what Reference's
 # leaderboard mean is computed over -- NOT the fast-5 subset, which is fine for arm
 # comparison but cannot feed the published-comparison chart.
 CLS_DS="bach bracs break_his ccrcc crc esca mhist patch_camelyon tcga_crc_msi tcga_tils tcga_uniform wilds"

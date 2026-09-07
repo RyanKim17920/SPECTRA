@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-tprobe
+#SBATCH --job-name=spectra-tprobe
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

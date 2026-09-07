@@ -276,7 +276,7 @@ def test_forward_widths_match_the_pooling_protocol(encoders, backbone):
 @pytest.mark.slow
 @pytest.mark.parametrize("backbone", LOCAL_BACKBONES)
 def test_lora_reaches_every_block_with_the_timm_leaf_names(encoders, backbone):
-    """LoRA-on-the-head is the failure mode PLAN.md 2 rules out, and an empty target set
+    """LoRA-on-the-head is the failure mode the design spec 2 rules out, and an empty target set
     reads downstream as "the method had no effect on this backbone".
 
     Both models are timm ViTs with fused qkv, so the resolved leaves must be exactly

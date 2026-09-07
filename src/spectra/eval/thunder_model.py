@@ -1,4 +1,4 @@
-"""THUNDER custom-model entry point -- our second RETENTION detector (PLAN.md §3 risk 1).
+"""THUNDER custom-model entry point -- our second RETENTION detector (the design spec §3 risk 1).
 
 Used as::
 
@@ -66,7 +66,7 @@ if str(_REPO / "src") not in sys.path:
 from thunder.models import PretrainedModel  # noqa: E402
 
 
-#: THUNDER pooling is **per backbone**, and it is not our choice -- it is Waiv's.
+#: THUNDER pooling is **per backbone**, and it is not our choice -- it is Reference's.
 #: arXiv:2607.22861 3, line 106: CLS+mean-pool concatenation was used for ALL models in
 #: PathoROB, but in THUNDER only for Virchow2, AquaViT, H0-mini and **Midnight-12k**.
 #: So phikon-v2 must be scored CLS-only here (which is also THUNDER's own published
@@ -90,7 +90,7 @@ from spectra.eval.thunder_protocol import (  # noqa: E402
     THUNDER_CLSMEAN_BACKBONES,
 )
 
-#: The other half of the same published table: backbones Waiv scored CLS-only.
+#: The other half of the same published table: backbones Reference scored CLS-only.
 #: Both sets are transcriptions of a paper, so membership cannot be inferred for a
 #: backbone that is not in the paper -- which is why an unlisted backbone is an error
 #: below rather than a default. Silently taking "cls" would produce a number that looks
@@ -197,7 +197,7 @@ class SpectraPhikonEncoder(PretrainedModel):
         self.t = build_transform(self.encoder.cfg.backbone)
 
         slug = self.encoder.cfg.backbone.split("/")[-1].replace("-", "").replace(".", "")
-        default_name = f"waiv_{slug}_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")
+        default_name = f"reference_{slug}_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")
         self.name = os.environ.get("SPECTRA_RUN_NAME", default_name)
         # Derived from the backbone: phikon-v2 1024/2048, midnight 1536/3072,
         # Virchow2 1280/2560 (cls/clsmean).

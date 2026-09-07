@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""How large can T get at C=2 before the grid step OOMs? (docs/RESULTS.md 8.6)
+"""How large can T get at C=2 before the grid step OOMs? (docs/archive/RESULTS.md 8.6)
 
 Why this exists
 ---------------
@@ -10,7 +10,7 @@ shared tiles the step forwards ``B = C*T`` images, every row gets ``T - 1`` nega
 there are ``B*(C-1)`` query rows. Negatives per row therefore depend ONLY on ``T``, so at
 a fixed memory budget they are maximised by spending the whole budget on tiles -- i.e.
 ``C = 2``, the smallest the sampler allows (``C = 1`` raises: a row's candidates must come
-from a *different* condition group). See docs/RESULTS.md 8.
+from a *different* condition group). See docs/archive/RESULTS.md 8.
 
 That turns the geometry question into a single sizing question: **how large can T get at
 C=2 before OOM?** This probe answers it by running the real grid training step (chunked

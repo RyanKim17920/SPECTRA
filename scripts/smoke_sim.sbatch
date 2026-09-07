@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-smoke-sim
+#SBATCH --job-name=spectra-smoke-sim
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

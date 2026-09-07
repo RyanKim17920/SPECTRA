@@ -26,7 +26,7 @@ Seed replicates: the **final5** study, 3 backbones x 5 training seeds, checkpoin
 | midnight | `f5_final5-midnight-s0-t900-386799_s0000500`, `f5_final5-midnight-s1-t900-386800_s0000500`, `f5_final5-midnight-s2-t900-386801_s0000500`, `f5_final5-midnight-s3-t900-386802_s0000500`, `f5_final5-midnight-s4-t900-386803_s0000500` |
 | virchow2 | `f5_final5-virchow2-s0-t900-386804_s0000500`, `f5_final5-virchow2-s1-t900-386805_s0000500`, `f5_final5-virchow2-s2-t900-386806_s0000500`, `f5_final5-virchow2-s3-t900-386807_s0000500`, `f5_final5-virchow2-s4-t900-386808_s0000500` |
 
-Training run dirs: `/data/ryan.kim/waiv_runs/final5-<backbone>-s{0..4}-t900-<jobid>`.
+Training run dirs: `/data/ryan.kim/reference_runs/final5-<backbone>-s{0..4}-t900-<jobid>`.
 
 **Contamination checks performed (all clean):**
 
@@ -155,13 +155,13 @@ computed within a single family and is therefore not affected by this offset.
 The published doc rested on n=2 seeds (1 pair, df=0 across seeds), so it is the
 *old* number that is low-confidence, not these. No cell here falls below n=4.
 
-## Resolvability against Waiv's published gains
+## Resolvability against Reference's published gains
 
-Waiv gains in F1 fractions from `scripts/scoreboard.py::WAIV_THUNDER`. `ratio` =
-12ds offset-2SE / |Waiv gain|. **ratio < 1 means the cell is resolvable**; < 0.5 means
+Reference gains in F1 fractions from `scripts/scoreboard.py::REFERENCE_THUNDER`. `ratio` =
+12ds offset-2SE / |Reference gain|. **ratio < 1 means the cell is resolvable**; < 0.5 means
 comfortably so.
 
-| backbone | task | Waiv gain | 12ds offset-2SE | ratio (offset) | 12ds pairdiff-2SD | ratio (pairdiff) | verdict under 12ds floor | verdict under old 5ds floor |
+| backbone | task | Reference gain | 12ds offset-2SE | ratio (offset) | 12ds pairdiff-2SD | ratio (pairdiff) | verdict under 12ds floor | verdict under old 5ds floor |
 |---|---|---|---|---|---|---|---|---|
 | phikon | knn | +0.037 | 0.0233 | 0.63 | 0.0181 | 0.49 | resolvable (marginal) | 0.80 -> RESOLVABLE |
 | phikon | linear_probing | +0.014 | 0.0097 | 0.69 | 0.0053 | 0.38 | resolvable (marginal) | 1.11 -> UNRESOLVABLE |
@@ -178,15 +178,15 @@ comfortably so.
 Under the corrected 12-dataset floor, **six of the nine cells become gradeable**:
 
 - **Comfortably resolvable (ratio < 0.5):** midnight/simple_shot (0.28) and
-  virchow2/simple_shot (0.24). Both are large Waiv gains against a small floor.
+  virchow2/simple_shot (0.24). Both are large Reference gains against a small floor.
 - **Resolvable but marginal (0.5 <= ratio < 1):** phikon/simple_shot (0.58),
   midnight/knn (0.59), phikon/knn (0.63), phikon/linear_probing (0.69). These are
-  gradeable, but a single-seed arm sitting at half the Waiv gain cannot be distinguished
+  gradeable, but a single-seed arm sitting at half the Reference gain cannot be distinguished
   from one sitting at the full gain. Grade them from the 5-seed mean, not one run.
 - **Still UNRESOLVABLE:** midnight/linear_probing (4.37), virchow2/knn (2.76),
-  virchow2/linear_probing (2.93). In all three, Waiv's own claimed gain (+0.002, -0.003,
+  virchow2/linear_probing (2.93). In all three, Reference's own claimed gain (+0.002, -0.003,
   +0.003) is smaller than our seed noise on the same benchmark. These cells cannot be
-  graded by any amount of care on our side; the effect Waiv reports is below the
+  graded by any amount of care on our side; the effect Reference reports is below the
   measurement resolution of the instrument. Do not report a verdict for them.
 
 **Change vs the old floor.** Under the published 5-dataset floor, only
@@ -288,7 +288,7 @@ H-Optimus-0 is the noisiest backbone measured to date on `linear_probing`
 The gated pair lives only in the new corpus, which uses the corrected
 transform (`Resize(256,bicubic)+CenterCrop` vs the old
 `Resize(224,bilinear)`, worth 1.3–2.3 pts of *absolute* score — see
-`docs/thunder_base_offset_investigation.md`). The floor above is therefore
+`docs/archive/thunder_base_offset_investigation.md`). The floor above is therefore
 measured under a different transform from the n=5 table at the top of this
 document. That is a real inconsistency, so it was checked rather than assumed.
 
@@ -345,12 +345,12 @@ is no way to tell in advance which one. **Do not quote a gated floor to more
 than one significant figure of confidence, and do not grade a gated cell
 whose margin is inside 2x of the floor.**
 
-## Resolvability against Waiv's published gains
+## Resolvability against Reference's published gains
 
-Waiv's Table 2 (`docs/waiv_published.json`) does cover both gated backbones.
+Reference's Table 2 (`docs/reference_published.json`) does cover both gated backbones.
 Gains in F1 fractions, base row vs fine-tuned row:
 
-| backbone | task | Waiv gain | 12ds offset-2SE | ratio = floor / \|gain\| | verdict |
+| backbone | task | Reference gain | 12ds offset-2SE | ratio = floor / \|gain\| | verdict |
 |---|---|---|---|---|---|
 | H-Optimus-0 | knn | +0.004 | 0.0170 | 4.25 | UNRESOLVABLE |
 | H-Optimus-0 | linear_probing | +0.003 | 0.0226 | 7.53 | UNRESOLVABLE |
@@ -359,11 +359,11 @@ Gains in F1 fractions, base row vs fine-tuned row:
 | UNI2-h | linear_probing | -0.008 | 0.0059 | 0.73 | resolvable (marginal) |
 | UNI2-h | simple_shot | -0.003 | 0.0031 | 1.02 | BORDERLINE — do not grade |
 
-Same pattern already seen on midnight and Virchow2: where Waiv's own claimed
+Same pattern already seen on midnight and Virchow2: where Reference's own claimed
 gain is a few tenths of a point, it is below the benchmark's seed noise and
 no amount of care on our side can grade it. Note also the standing denominator
-caveat — Waiv averages 16 classification datasets and we average 12
-(`waiv-thunder-pct-is-invalid-base-gap`) — which applies to these ratios as
+caveat — Reference averages 16 classification datasets and we average 12
+(`reference-thunder-pct-is-invalid-base-gap`) — which applies to these ratios as
 it does to the ones above.
 
 ## Our own fine-tuning deltas against the new floors
@@ -397,11 +397,11 @@ only 13% and 29%, which at n=2 is not a margin worth defending.
    scoreboard's gate for it should be updated to read this section.
    Any *other* missing inputs those rows have (RI, HEST) are untouched here.
 
-2. **Only 1 of 6 cells is genuinely gradeable against Waiv**, UNI2-h
+2. **Only 1 of 6 cells is genuinely gradeable against Reference**, UNI2-h
    `linear_probing` (floor/|gain| = 0.73), and it is marginal. Two more cells
    (H-Optimus-0 `simple_shot` 1.00, UNI2-h `simple_shot` 1.02) sit exactly on
    the bar and should be reported as measured-but-not-gradeable. Three cells
-   (both `knn`, H-Optimus-0 `linear_probing`) are UNRESOLVABLE because Waiv's
+   (both `knn`, H-Optimus-0 `linear_probing`) are UNRESOLVABLE because Reference's
    own claimed gain is smaller than the benchmark's seed noise.
 
 3. **Against our own base-control** the picture is cleaner but not flattering:

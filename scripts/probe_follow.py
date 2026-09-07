@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Tier-1 fast collapse detector for a full-FT run (PLAN.md 3 phase 8, tripwire half).
+"""Tier-1 fast collapse detector for a full-FT run (the design spec 3 phase 8, tripwire half).
 
 ``eval_checkpoints.py`` is the Tier-2 follower: embedding probe **plus** the full PathoROB
 RI on three datasets, ~15-20 min per checkpoint. That is the number we quote, but it is far

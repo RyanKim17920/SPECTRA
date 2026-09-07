@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-headcmp
+#SBATCH --job-name=spectra-headcmp
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -40,7 +40,7 @@
 # from the preflight so the BEFORE probe and the follower score the SAME condition set the
 # training run saw.
 #
-#   SPECTRA_ARM=split sbatch --job-name=waiv-headcmp-split scripts/headcmp.sbatch
+#   SPECTRA_ARM=split sbatch --job-name=spectra-headcmp-split scripts/headcmp.sbatch
 
 set -euo pipefail
 

@@ -29,11 +29,11 @@ from pathlib import Path
 
 def load(repo, n=64, pooling="clsmean"):
     for m in list(sys.modules):
-        if m.startswith("spectra") or m.startswith("_waiv"):
+        if m.startswith("spectra") or m.startswith("_reference"):
             del sys.modules[m]
     sys.path.insert(0, os.path.join(repo, "src"))
     src = os.path.join(repo, "scripts", "extract_pathorob_features.py")
-    spec = importlib.util.spec_from_file_location("_waiv_ex", src)
+    spec = importlib.util.spec_from_file_location("_reference_ex", src)
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     try:
         tf = mod.build_preprocess("owkin/phikon-v2")   # new signature

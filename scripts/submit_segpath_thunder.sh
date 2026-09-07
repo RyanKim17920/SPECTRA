@@ -2,7 +2,7 @@
 # THUNDER sweep for the two remaining SEGMENTATION datasets: segpath_epithelial and
 # segpath_lymphocytes, x {base, fine-tuned} x {phikon-v2, Midnight-12k} = 8 jobs.
 #
-# Closing these two rows takes our coverage to Waiv's full 16 datasets
+# Closing these two rows takes our coverage to Reference's full 16 datasets
 # (12 classification + 4 segmentation: ocelot, pannuke, segpath_epithelial,
 # segpath_lymphocytes).
 #

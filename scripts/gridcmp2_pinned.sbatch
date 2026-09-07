@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-gridcmp2
+#SBATCH --job-name=spectra-gridcmp2
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -10,7 +10,7 @@
 #SBATCH --error=logs/slurm-%x-%j.err
 #
 # GRIDCMP-2: the three follow-up arms to the completed gridcmp experiment
-# (380777/380778/380779, docs/RESULTS.md 8.2). That experiment found PathoROB RI tracks
+# (380777/380778/380779, docs/archive/RESULTS.md 8.2). That experiment found PathoROB RI tracks
 # negatives-per-row and runs INVERSELY to query rows:
 #
 #   CTRL   6x200      199 neg    1,200 rows   0.8127
@@ -41,7 +41,7 @@
 # from the preflight so the BEFORE probe and the follower score the SAME condition set
 # the training run saw.
 #
-#   SPECTRA_ARM=grid12 sbatch --job-name=waiv-gridcmp2-grid12 scripts/gridcmp2.sbatch
+#   SPECTRA_ARM=grid12 sbatch --job-name=spectra-gridcmp2-grid12 scripts/gridcmp2.sbatch
 
 set -euo pipefail
 

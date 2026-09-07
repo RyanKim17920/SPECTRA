@@ -26,7 +26,7 @@ def parse_args():
 def embed_all(packed_dir, device, batch_size, backbone="owkin/phikon-v2"):
     import os
     export_legacy_env()
-    # Add waiv source to path
+    # Add reference source to path
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
     from spectra.models.encoder import build_encoder
     import torchvision.transforms.functional as TF

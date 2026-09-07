@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""The PLAN.md §4 Phase-2 gate: does *our* pipeline reproduce PathoROB's own number?
+"""The design spec §4 Phase-2 gate: does *our* pipeline reproduce PathoROB's own number?
 
 Runs PathoROB's ``robustness_index`` module over features our extractor wrote, then puts
 three independent numbers side by side for each dataset:
@@ -7,7 +7,7 @@ three independent numbers side by side for each dataset:
 1. **ours**      -- ``results/robustness_index/{model}/{dataset}/-1_0/results_summary.json``
                     produced right now from our npz files.
 2. **reference** -- the ``phikonv2_clsmean`` row PathoROB *committed to their repo*.
-3. **Waiv**      -- the base-phikon-v2 row quoted in Waiv's Table 1 (PLAN.md §1).
+3. **Reference**      -- the base-phikon-v2 row quoted in Reference's Table 1 (the design spec §1).
 
 (2) and (3) are independent sources and are worth cross-checking against each other
 regardless of what we compute.
@@ -52,10 +52,10 @@ def main() -> int:
     ap.add_argument("--reference-model", default=REFERENCE_MODEL,
                     help="PathoROB's own committed features dir to gate against. "
                          "'none' when there is no committed row for this backbone -- "
-                         "then the only external check is --waiv-key, which is printed "
-                         "but NOT gated (Waiv quote 3 decimals; that is not a 0.005 gate).")
-    ap.add_argument("--waiv-key", default="phikon_v2_base", choices=sorted(TARGETS),
-                    help="which Waiv Table-1 row to print alongside; midnight_base for "
+                         "then the only external check is --reference-key, which is printed "
+                         "but NOT gated (Reference quote 3 decimals; that is not a 0.005 gate).")
+    ap.add_argument("--reference-key", default="phikon_v2_base", choices=sorted(TARGETS),
+                    help="which Reference Table-1 row to print alongside; midnight_base for "
                          "the kaiko-ai/midnight run")
     ap.add_argument("--root", default=str(REPO / "third_party" / "PathoROB"))
     ap.add_argument("--skip-run", action="store_true", help="read existing results only")
@@ -64,7 +64,7 @@ def main() -> int:
 
     paths = PathoRobPaths(root=Path(args.root))
     reference = None if args.reference_model.lower() == "none" else args.reference_model
-    waiv_row = TARGETS[args.waiv_key]
+    reference_row = TARGETS[args.reference_key]
 
     if not args.skip_run:
         run_robustness_index(args.model, args.datasets, paths=paths)
@@ -76,29 +76,29 @@ def main() -> int:
         ours_bal = res.get("balanced_accuracy", None)
         ref = (float(read_results(reference, ds, paths=paths)["robustness_index"])
                if reference else None)
-        # Not every published row has a per-dataset breakdown. Waiv's Table 1 gives
+        # Not every published row has a per-dataset breakdown. Reference's Table 1 gives
         # Virchow2 only as an average, and inventing camelyon/tolkach_esca/tcga values to
         # fill the schema would put fabricated numbers in a comparison column. Missing is
         # rendered as "-" and the delta is suppressed; the AVG row below still compares.
-        waiv = waiv_row.get(ds)
+        reference = reference_row.get(ds)
         d_ref = None if ref is None else ours - ref
-        d_waiv = None if waiv is None else ours - waiv
-        # No committed reference => nothing to gate on. Do NOT silently promote the Waiv
+        d_reference = None if reference is None else ours - reference
+        # No committed reference => nothing to gate on. Do NOT silently promote the Reference
         # 3-decimal row into the gate: it is a different-precision, different-pipeline
         # number and gating on it would manufacture a pass or a fail out of rounding.
         ok = True if ref is None else abs(d_ref) <= args.tolerance
         verdicts.append(ok)
         rows.append(
-            {"dataset": ds, "ours": ours, "pathorob_reference": ref, "waiv_table1": waiv,
-             "delta_vs_reference": d_ref, "delta_vs_waiv": d_waiv,
-             "reference_vs_waiv": None if (ref is None or waiv is None) else ref - waiv,
+            {"dataset": ds, "ours": ours, "pathorob_reference": ref, "reference_table1": reference,
+             "delta_vs_reference": d_ref, "delta_vs_reference": d_reference,
+             "reference_vs_published": None if (ref is None or reference is None) else ref - reference,
              "bal_acc": ours_bal, "pass": ok}
         )
 
     w = max(len(r["dataset"]) for r in rows) + 2
     print()
-    print(f"{'dataset':<{w}}{'ours':>10}{'PathoROB ref':>14}{'Waiv T1':>10}"
-          f"{'d(ref)':>10}{'d(Waiv)':>10}{'bal_acc':>10}   gate")
+    print(f"{'dataset':<{w}}{'ours':>10}{'PathoROB ref':>14}{'Reference T1':>10}"
+          f"{'d(ref)':>10}{'d(Reference)':>10}{'bal_acc':>10}   gate")
     print("-" * (w + 68))
     def _f(v, spec):
         return format(v, spec) if v is not None else "-"
@@ -106,20 +106,20 @@ def main() -> int:
     for r in rows:
         bal = f"{r['bal_acc']:.4f}" if r['bal_acc'] is not None else "-"
         print(f"{r['dataset']:<{w}}{r['ours']:>10.6f}{_f(r['pathorob_reference'], '14.6f'):>14}"
-              f"{_f(r['waiv_table1'], '10.3f'):>10}{_f(r['delta_vs_reference'], '+10.6f'):>10}"
-              f"{_f(r['delta_vs_waiv'], '+10.6f'):>10}{bal:>10}   {'PASS' if r['pass'] else 'n/a' if r['pathorob_reference'] is None else 'FAIL'}")
+              f"{_f(r['reference_table1'], '10.3f'):>10}{_f(r['delta_vs_reference'], '+10.6f'):>10}"
+              f"{_f(r['delta_vs_reference'], '+10.6f'):>10}{bal:>10}   {'PASS' if r['pass'] else 'n/a' if r['pathorob_reference'] is None else 'FAIL'}")
     if len(rows) == 3:
         avg = sum(r["ours"] for r in rows) / 3
         avg_ref = (sum(r["pathorob_reference"] for r in rows) / 3
                    if all(r["pathorob_reference"] is not None for r in rows) else None)
-        avg_waiv = waiv_row["avg"]
-        print(f"{'AVG':<{w}}{avg:>10.6f}{_f(avg_ref, '14.6f'):>14}{avg_waiv:>10.3f}"
+        avg_reference = reference_row["avg"]
+        print(f"{'AVG':<{w}}{avg:>10.6f}{_f(avg_ref, '14.6f'):>14}{avg_reference:>10.3f}"
               f"{_f(None if avg_ref is None else avg - avg_ref, '+10.6f'):>10}"
-              f"{avg - avg_waiv:>+10.6f}")
+              f"{avg - avg_reference:>+10.6f}")
     ok = all(verdicts)
     if reference is None:
         print(f"\nNO GATE: no committed PathoROB reference for model {args.model!r}. "
-              f"The Waiv '{args.waiv_key}' column above is the only external check and is "
+              f"The Reference '{args.reference_key}' column above is the only external check and is "
               "advisory (3 decimals, their pipeline).\n")
     else:
         print(f"\nGATE (|ours - {reference}| <= {args.tolerance}): "

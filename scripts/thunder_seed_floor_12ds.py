@@ -101,8 +101,8 @@ POOLING = {"phikon": "cls", "midnight": "clsmean", "virchow2": "clsmean"}
 # Seed floors for H-Optimus-0 / UNI2-h come from scripts/thunder_seed_floor_gated.py.
 DEFAULT_ROOT = str(THUNDER)
 
-# Waiv's published THUNDER gains, F1 fractions (scripts/scoreboard.py WAIV_THUNDER).
-WAIV_GAIN = {
+# Reference's published THUNDER gains, F1 fractions (scripts/scoreboard.py REFERENCE_THUNDER).
+REFERENCE_GAIN = {
     ("phikon", "knn"): 0.037,
     ("phikon", "linear_probing"): 0.014,
     ("phikon", "simple_shot"): 0.015,
@@ -259,7 +259,7 @@ def main():
             "seed_sd_of_task_mean": "SD across seeds of the task mean itself.",
             "pairdiff_2sd": "2*sqrt(2)*seed_sd -- 2-sigma bar on the difference of two independent single runs.",
         },
-        "waiv_gain_f1": {f"{k[0]}/{k[1]}": v for k, v in WAIV_GAIN.items()},
+        "reference_gain_f1": {f"{k[0]}/{k[1]}": v for k, v in REFERENCE_GAIN.items()},
         "cells": cells,
         "per_seed_scores": per_seed_dump,
     }
@@ -268,7 +268,7 @@ def main():
     Path(args.out_json).write_text(json.dumps(doc, indent=2) + "\n")
 
     # --- console table ---
-    hdr = f"{'backbone/task':<28}{'pool':<9}{'n':<4}{'5ds off2SE':>12}{'12ds off2SE':>13}{'ratio':>8}{'12ds sdSD':>11}{'pd2SD':>9}{'|Waiv|':>9}{'r12/W':>8}"
+    hdr = f"{'backbone/task':<28}{'pool':<9}{'n':<4}{'5ds off2SE':>12}{'12ds off2SE':>13}{'ratio':>8}{'12ds sdSD':>11}{'pd2SD':>9}{'|Reference|':>9}{'r12/W':>8}"
     print(hdr)
     print("-" * len(hdr))
     for key, c in cells.items():
@@ -276,7 +276,7 @@ def main():
         if "error" in a or "error" in b:
             print(f"{key:<28}{c['pooling']:<9}{c['n_seeds_12ds']:<4} insufficient")
             continue
-        w = abs(WAIV_GAIN.get((c["backbone"], c["task"]), float("nan")))
+        w = abs(REFERENCE_GAIN.get((c["backbone"], c["task"]), float("nan")))
         ratio = b["offset_2se_mean"] / a["offset_2se_mean"]
         print(f"{key:<28}{c['pooling']:<9}{b['n_seeds']:<4}"
               f"{a['offset_2se_mean']:>12.4f}{b['offset_2se_mean']:>13.4f}{ratio:>8.3f}"

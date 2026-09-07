@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-hest-phikon-split500-cls
+#SBATCH --job-name=spectra-hest-phikon-split500-cls
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -11,7 +11,7 @@
 #
 # HEST-Benchmark: phikon-v2, splitgrid final checkpoint, step 500 (RI 0.8335).
 # Run: runs/splitgrid-386374/step_0000500
-# Pooling: cls  (phikon-v2 HEST protocol -- verified base 0.37470 vs Waiv 0.3747, exact)
+# Pooling: cls  (phikon-v2 HEST protocol -- verified base 0.37470 vs Reference 0.3747, exact)
 # LoRA r32 / alpha64 / proj_out_dim 512 / clsmean at train time.
 #
 # CACHE KEY: exp_code `splitgrid_phikon_ft500_cls_v1` verified absent from

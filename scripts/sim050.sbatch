@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-sim050
+#SBATCH --job-name=spectra-sim050
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

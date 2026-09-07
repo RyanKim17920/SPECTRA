@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-combined3k
+#SBATCH --job-name=spectra-combined3k
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

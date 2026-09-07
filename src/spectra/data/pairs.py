@@ -1,6 +1,6 @@
 """Registered-pair sampler with the same-condition negative constraint.
 
-PLAN.md 2 in code
+the design spec 2 in code
 -------------------
 
 * **Positive** = same tile index ``i``, two *different* conditions ``c1 != c2``. PLISM's
@@ -31,7 +31,7 @@ unique within a group, so no "negative" is secretly the anchor's own tile.
 
 Per-anchor positive conditions are drawn *independently* so a group does not degenerate
 into a single (c_anchor -> c_pos) direction, which would let the model learn one
-pairwise offset instead of general invariance (PLAN.md 0, Fig 3: the shift is a
+pairwise offset instead of general invariance (the design spec 0, Fig 3: the shift is a
 near-linear offset per scanner -- easy to overfit one direction of).
 """
 
@@ -69,7 +69,7 @@ def assert_same_condition_negatives(
     constraint reduces to: **every entry sharing a ``group_id`` must share an
     ``anchor_cond``**. If that ever fails, InfoNCE is being handed cross-condition
     negatives and "different scanner" becomes a partially-correct shortcut for
-    "different tile" -- the failure mode PLAN.md 2 calls the one load-bearing detail.
+    "different tile" -- the failure mode the design spec 2 calls the one load-bearing detail.
 
     Returns a small dict of observed statistics so the caller can log evidence rather
     than trust.
@@ -135,7 +135,7 @@ class PairBatch:
 
         These are exactly the properties that fail *silently* -- a broken one still
         produces a plausible falling loss curve, which is why they are asserted rather
-        than eyeballed (PLAN.md 2, the "one load-bearing detail").
+        than eyeballed (the design spec 2, the "one load-bearing detail").
 
         1. tiles are unique within a group -> no in-group negative is the anchor's own
            tile, i.e. no false negative;
@@ -174,7 +174,7 @@ class PairBatchSampler(Sampler[PairBatch]):
 
     Args:
         conditions: the conditions to sample from. Pass ``split.train`` for training and
-            ``split.heldout`` for the held-out-condition eval -- PLAN.md 3 risk 3 says
+            ``split.heldout`` for the held-out-condition eval -- the design spec 3 risk 3 says
             held-out-*condition* splits are the only check against tile memorisation.
         n_groups: condition-homogeneous groups per batch.
         group_size: anchors per group. The in-group negative count is ``group_size - 1``,
@@ -369,7 +369,7 @@ def build_pair_loader(
     transform=None,
     conditions: Sequence[Condition] | None = None,
 ) -> torch.utils.data.DataLoader:
-    """Convenience wiring. ``subset`` is ``"train"`` or ``"heldout"`` (PLAN.md 3 phase 7)."""
+    """Convenience wiring. ``subset`` is ``"train"`` or ``"heldout"`` (the design spec 3 phase 7)."""
     if conditions is None:
         split = split or default_split()
         conditions = split.train if subset == "train" else split.heldout

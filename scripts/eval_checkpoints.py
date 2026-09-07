@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Evaluate every training checkpoint and emit the RI-vs-step curve (PLAN.md 3 phase 8).
+"""Evaluate every training checkpoint and emit the RI-vs-step curve (the design spec 3 phase 8).
 
 Phase 8 says "checkpoint often; evaluate retention at every checkpoint, not just at the
 end". This is that. It follows a run directory and, for each ``step_*`` that appears,
@@ -57,7 +57,7 @@ from _config import PLISM_PACKED, export_legacy_env  # noqa: E402
 DATASETS = ("camelyon", "tolkach_esca", "tcga")
 #: Keys of their ``results_summary.json`` worth carrying into the curve. ``robustness_index``
 #: is the headline; ``balanced_accuracy`` / ``prediction_performance`` are the forgetting
-#: detector (PLAN.md 3 risk 1: a robustness win that costs biology is a failed
+#: detector (the design spec 3 risk 1: a robustness win that costs biology is a failed
 #: reproduction); ``confounder_insensitivity`` is where the smoke run's entire gain landed.
 RESULT_KEYS = (
     "robustness_index", "balanced_accuracy", "k_opt", "generalization_index",
@@ -311,7 +311,7 @@ def main() -> int:
                     default=os.environ.get("SPECTRA_PACKED_DIR", str(PLISM_PACKED)))
     ap.add_argument("--datasets", nargs="+", default=list(DATASETS))
     ap.add_argument("--model-prefix", default=None,
-                    help="features/results dir prefix; defaults to waiv_<run-dir name>")
+                    help="features/results dir prefix; defaults to reference_<run-dir name>")
     # 32/64 are the phikon-v2 run geometry (job 369043) and are only meaningful for a LoRA
     # checkpoint; they are ignored for a full-FT one. Pass the values the run was TRAINED
     # with -- build_model hard-fails on a rank/alpha mismatch rather than silently
@@ -380,7 +380,7 @@ def main() -> int:
 
     export_legacy_env()
     if args.model_prefix is None:
-        args.model_prefix = "waiv_" + args.run_dir.name.replace("-", "_")
+        args.model_prefix = "reference_" + args.run_dir.name.replace("-", "_")
     paths = PathoRobPaths(root=REPO / "third_party" / "PathoROB")
     paths.check()
 

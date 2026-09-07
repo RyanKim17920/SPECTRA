@@ -5,7 +5,7 @@
 #
 # T is REQUIRED and has no default on purpose. A single shared T across all three
 # backbones is the entire point of this study: the previous three-backbone table
-# (docs/FINAL_RESULTS.md sec.2) ran phikon at T=1800, Virchow2 at T=600 and midnight at
+# (docs/archive/FINAL_RESULTS.md sec.2) ran phikon at T=1800, Virchow2 at T=600 and midnight at
 # T=450, which makes "the method helps phikon but not the others" inseparable from
 # "phikon got 4x the negatives". Defaulting T here would invite that confound straight
 # back in, so the caller must state it and it is recorded in every run name.

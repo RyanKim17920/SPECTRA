@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """DERIVE the HEST seed SD from disk.  Emits docs/hest_seed_sd.json.
 
-WHY THIS SCRIPT EXISTS (F-A of docs/FORMULA_UNIFICATION_2026-08-26.md)
+WHY THIS SCRIPT EXISTS (F-A of docs/archive/FORMULA_UNIFICATION_2026-08-26.md)
 ---------------------------------------------------------------------
 `final_recipe_report.HEST_SD_PCT = {phikon 5.8, midnight 8.3, virchow2 14.2}` was a
 hand-set literal with no on-disk source and no producing script, and it solely determined

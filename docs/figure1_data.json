@@ -1,12 +1,12 @@
 {
-  "_generated_by": "scripts/waiv_figure1.py",
+  "_generated_by": "scripts/figure1.py",
   "_date": "2026-08-18",
-  "_note": "thunder_rank in waiv_table is Waiv's 6-task rank (published). thunder_rank_4task is recomputed from their published per-task values for like-for-like comparison. our thunder ranks are also on 4 tasks. Patho-Bench is UNMEASURABLE \u2014 see scenarios.",
+  "_note": "thunder_rank in reference_table is Reference's 6-task rank (published). thunder_rank_4task is recomputed from their published per-task values for like-for-like comparison. our thunder ranks are also on 4 tasks. Patho-Bench is UNMEASURABLE \u2014 see scenarios.",
   "caveats": {
     "thunder_dataset_coverage": "Our THUNDER classification means are computed over 12/16 classification datasets (the 4 missing are not present in our outputs dir). This makes our absolute means systematically 1-4 points lower than a full-16 run. Rank comparisons are therefore conservative: our models would rank the same or higher on a full 16-dataset run.",
-    "thunder_rank_sum_not_reproducible": "Waiv's published thunder_rank_sum cannot be reproduced from the 6 per-task values in waiv_published.json under any combination of directionality or tie-breaking (brute-force: best 4/20 match). The per-task ordering is consistent with adversarial and calibration being lower-is-better (Spearman ~0.99), but the absolute sums differ. The 4-task like-for-like reranking uses the published per-task values directly and applies consistent rules to both their 20 and our models.",
+    "thunder_rank_sum_not_reproducible": "Reference's published thunder_rank_sum cannot be reproduced from the 6 per-task values in reference_published.json under any combination of directionality or tie-breaking (brute-force: best 4/20 match). The per-task ordering is consistent with adversarial and calibration being lower-is-better (Spearman ~0.99), but the absolute sums differ. The 4-task like-for-like reranking uses the published per-task values directly and applies consistent rules to both their 20 and our models.",
     "midnight_virchow2_segmentation": "Midnight and Virchow2 clsmean runs crash the ViT-g segmentation decoder. Segmentation scores for these models come from the sibling _cls run names (mft500_cls, vft250_cls), which ARE run and scored \u2014 see thunder_key seg field.",
-    "hest_protocol": "phikon-v2 HEST uses cls pooling \u2014 exact match to Waiv's protocol. Virchow2 HEST uses clsmean \u2014 within 0.00013 of Waiv's published base. Midnight HEST uses clsmean \u2014 +0.0169 above Waiv's published midnight base (known open discrepancy, documented)."
+    "hest_protocol": "phikon-v2 HEST uses cls pooling \u2014 exact match to Reference's protocol. Virchow2 HEST uses clsmean \u2014 within 0.00013 of Reference's published base. Midnight HEST uses clsmean \u2014 +0.0169 above Reference's published midnight base (known open discrepancy, documented)."
   },
   "figure1_y_formula": {
     "expr": "(58 - total) / 53",
@@ -26,7 +26,7 @@
     "thunder_rank_sum_reproducible": false,
     "thunder_rank_sum_note": "hest_rank + thunder_rank + pathobench_rank == total for all 20 models (verified). However, thunder_rank_sum itself cannot be rebuilt from the 6 per-task values in the JSON \u2014 the absolute sums disagree. The ranks are correct; the input sums are opaque."
   },
-  "waiv_table": [
+  "reference_table": [
     {
       "name": "UNI2-h",
       "variant": "base",
@@ -549,7 +549,7 @@
           "LYMPH_IDC": 0.26
         },
         "rank_in_21": 19,
-        "pooling_note": "cls \u2014 matches Waiv exactly for phikon-v2",
+        "pooling_note": "cls \u2014 matches Reference exactly for phikon-v2",
         "provenance": "/admin/home/ryan.kim/waiv/results_backup/hest_work_results/ft1000_cls_summary.json"
       },
       "thunder_4task": {
@@ -581,12 +581,12 @@
         },
         "mean": 73.258,
         "rank_in_21": 20,
-        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Waiv's 6-task thunder_rank",
+        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Reference's 6-task thunder_rank",
         "segmentation_pooling_note": "cls \u2014 same as classification"
       },
       "pathobench": {
         "status": "UNMEASURABLE",
-        "reason": "Waiv's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
+        "reason": "Reference's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
         "base_model_rank": 18
       },
       "scenarios": {
@@ -654,7 +654,7 @@
           "LYMPH_IDC": 0.2731
         },
         "rank_in_21": 9,
-        "pooling_note": "clsmean \u2014 +0.0169 off Waiv's published midnight HEST (known open discrepancy)",
+        "pooling_note": "clsmean \u2014 +0.0169 off Reference's published midnight HEST (known open discrepancy)",
         "provenance": "/admin/home/ryan.kim/waiv/results_backup/hest_work_results/mft500_clsmean_summary.json"
       },
       "thunder_4task": {
@@ -686,12 +686,12 @@
         },
         "mean": 77.336,
         "rank_in_21": 8,
-        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Waiv's 6-task thunder_rank",
+        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Reference's 6-task thunder_rank",
         "segmentation_pooling_note": "cls variant used for segmentation (clsmean crashes ViT-g seg decoder)"
       },
       "pathobench": {
         "status": "UNMEASURABLE",
-        "reason": "Waiv's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
+        "reason": "Reference's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
         "base_model_rank": 15
       },
       "scenarios": {
@@ -759,7 +759,7 @@
           "LYMPH_IDC": 0.2561
         },
         "rank_in_21": 10,
-        "pooling_note": "clsmean \u2014 Virchow2: within 0.00013 of Waiv; Midnight: +0.0169 off (known open discrepancy)",
+        "pooling_note": "clsmean \u2014 Virchow2: within 0.00013 of Reference; Midnight: +0.0169 off (known open discrepancy)",
         "provenance": "/admin/home/ryan.kim/waiv/results_backup/hest_work_results/vft250_clsmean_summary.json"
       },
       "thunder_4task": {
@@ -791,12 +791,12 @@
         },
         "mean": 77.888,
         "rank_in_21": 6,
-        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Waiv's 6-task thunder_rank",
+        "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Reference's 6-task thunder_rank",
         "segmentation_pooling_note": "cls variant used for segmentation (clsmean crashes ViT-g seg decoder)"
       },
       "pathobench": {
         "status": "UNMEASURABLE",
-        "reason": "Waiv's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
+        "reason": "Reference's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
         "base_model_rank": 13
       },
       "scenarios": {
@@ -826,7 +826,7 @@
     }
   ],
   "provenance": {
-    "waiv_published_json": "/admin/home/ryan.kim/waiv/docs/waiv_published.json",
+    "reference_published_json": "/admin/home/ryan.kim/waiv/docs/reference_published.json",
     "hest_backup_dir": "/admin/home/ryan.kim/waiv/results_backup/hest_work_results",
     "thunder_root": "/data/ryan.kim/thunder/outputs/res",
     "ri_run_dirs": {

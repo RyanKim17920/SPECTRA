@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-smoke
+#SBATCH --job-name=spectra-smoke
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -9,7 +9,7 @@
 #SBATCH --output=logs/slurm-%x-%j.out
 #SBATCH --error=logs/slurm-%x-%j.err
 #
-# A *genuine* smoke test of the contrastive loop, on 1 H100 (PLAN.md 3 phase 7 dry run).
+# A *genuine* smoke test of the contrastive loop, on 1 H100 (the design spec 3 phase 7 dry run).
 #
 # Distinct from `scripts/smoke_test.py`, which was wiring-only: at the time only two
 # slides were local and they shared the GIVH stain, so there was exactly ONE positive
@@ -39,7 +39,7 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
 PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-RUN_NAME="${SLURM_JOB_NAME:-waiv-smoke}-${SLURM_JOB_ID:-local}"
+RUN_NAME="${SLURM_JOB_NAME:-spectra-smoke}-${SLURM_JOB_ID:-local}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"

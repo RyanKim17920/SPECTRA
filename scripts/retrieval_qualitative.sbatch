@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-retrieval-qual
+#SBATCH --job-name=spectra-retrieval-qual
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

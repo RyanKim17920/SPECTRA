@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-fullft
+#SBATCH --job-name=spectra-fullft
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2
@@ -15,7 +15,7 @@
 #SBATCH --output=logs/slurm-%x-%j.out
 #SBATCH --error=logs/slurm-%x-%j.err
 #
-# The full fine-tuning arm of the LoRA-vs-full-FT A/B (PLAN.md 3 phase 7/8). The control is
+# The full fine-tuning arm of the LoRA-vs-full-FT A/B (the design spec 3 phase 7/8). The control is
 # runs/waiv-real-369043 (rank-32 LoRA, 4000 steps). Everything that could confound the
 # comparison is pinned to that run's value:
 #
@@ -33,7 +33,7 @@
 #   --lr 1e-5            10x below the LoRA run's 1e-4. A LoRA adapter starts at zero and
 #                        cannot destroy the base weights; full FT at 1e-4 destroys a
 #                        pathology representation in tens of steps. train_lora.py warns
-#                        above 5e-5. Waiv's Phaet is ~1e-5 class.
+#                        above 5e-5. Reference's Phaet is ~1e-5 class.
 #   --weight-decay 0.02  Below the 0.05 default. Decay applied to every backbone weight is
 #                        not the same operator as decay applied to a rank-32 adapter: at
 #                        0.05 it is itself a pull toward zero on 303M pretrained params.
@@ -71,7 +71,7 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
 PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-RUN_NAME="${SLURM_JOB_NAME:-waiv-fullft}-${SLURM_JOB_ID:-local}"
+RUN_NAME="${SLURM_JOB_NAME:-spectra-fullft}-${SLURM_JOB_ID:-local}"
 # /data, not $REPO/runs: 11 checkpoints x ~3.4 GiB = ~34 GiB.
 OUT_DIR="${SPECTRA_RUNS_DIR:-$SPECTRA_RUNS}/$RUN_NAME"
 mkdir -p "$OUT_DIR"
@@ -123,7 +123,7 @@ from pathlib import Path
 packed, out = Path(sys.argv[1]), Path(sys.argv[2])
 man = json.loads((packed / "manifest.json").read_text())
 ok = {k: v for k, v in man.items() if v.get("verified")}
-# PLAN.md 3 phase 7 wants the full 13 x 7 grid, and the A/B control (369043) was scored on
+# the design spec 3 phase 7 wants the full 13 x 7 grid, and the A/B control (369043) was scored on
 # exactly this set -- a different condition set here would make the comparison meaningless.
 assert len(ok) == 91, f"expected 91 verified slides, manifest has {len(ok)} (repack incomplete)"
 (out / "conditions_used.json").write_text(json.dumps(sorted(ok), indent=2))

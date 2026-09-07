@@ -1,7 +1,7 @@
 # RUNBOOK — how to run this project (single source of truth)
 
 Written 2026-08-31 on branch `final5-and-ablations`, from the scripts themselves (not from
-memory or older docs). Where an older doc (`docs/FINAL_RECIPE.md`, dated 2026-08-25)
+memory or older docs). Where an older doc (`docs/archive/FINAL_RECIPE.md`, dated 2026-08-25)
 disagrees with what the scripts currently do, that is called out explicitly below — do not
 silently prefer one over the other.
 
@@ -15,7 +15,7 @@ across the 5 supported backbones (`phikon`, `midnight`, `virchow2`, `hoptimus`, 
 ### 1.1 Environment variables it reads (all optional except where marked required)
 
 The names below are the current `SPECTRA_*` spellings. `scripts/gentle.sbatch` itself still
-reads the pre-rename `WAIV_*` names, because it runs against a frozen pin that does — but it
+reads the legacy `WAIV_*` names, because it runs against a frozen pin that does — but it
 sources `scripts/_env.sh` first, and that mirrors every `SPECTRA_X` onto `WAIV_X` and back
 before anything reads either. Setting the names in this table is therefore correct; setting
 the old ones still works too. See README, "Configuration".
@@ -78,7 +78,7 @@ i.e. `SPECTRA_BMEAN` is left at its default (`-inf`) — the bias is **asymmetri
 the `runs/genMASK-c50-*` grid: 10 checkpoints at `SPECTRA_CKPT_EVERY=50` from step 50 to 500,
 2 seeds wanted per arm, 5 arms.
 
-**Note this supersedes `docs/FINAL_RECIPE.md`** (2026-08-25), which documents an earlier
+**Note this supersedes `docs/archive/FINAL_RECIPE.md`** (2026-08-25), which documents an earlier
 2-seed, 3-backbone (`phikon`/`midnight`/`virchow2` only) pilot at `SPECTRA_CKPT_EVERY=125` and
 relied on `SPECTRA_MASK=1`'s *default* pin resolution (`falseneg-pinned`, no gated-backbone
 support — it never needed it, since that pilot didn't cover `hoptimus`/`uni2`). The c50 grid
@@ -202,7 +202,7 @@ in shared-memory teardown at higher worker counts).
 **Why HEST is a separate old script and not folded into `pathfm-full-evals`**: it predates
 that harness and its pooling-protocol logic (`src/spectra/eval/thunder_protocol.py` for
 THUNDER; `HEST_POOLING`/pooling case statement in `hest_final5.sbatch` for HEST) is specific
-per-backbone and already validated against Waiv's published numbers — see the header
+per-backbone and already validated against Reference's published numbers — see the header
 comment in `hest_final5.sbatch`: phikon-v2 base 0.37470 reproduces published 0.3747 exactly
 under `cls`; midnight base 0.39521 vs published 0.3952 under `cls`; Virchow2 base 0.40327
 vs published 0.4034 under `clsmean` (under `cls` it's 0.39791, off by 0.0055). Separately:
@@ -330,7 +330,7 @@ that manifest check exists.
 - `/admin/home/ryan.kim/waiv/scripts/scoreboard2.py` — run-name parsing / scoreboard
 - `/admin/home/ryan.kim/waiv/src/spectra/eval/thunder_protocol.py` — THUNDER pooling table
 - `/admin/home/ryan.kim/waiv/tests/test_invariants.py` — cross-checks HEST/THUNDER pooling agreement, sampler/loss invariants
-- `/admin/home/ryan.kim/waiv/docs/FINAL_RECIPE.md` — earlier 3-backbone/125-step pilot (superseded for the 5-backbone claim, see §1.2)
+- `/admin/home/ryan.kim/waiv/docs/archive/FINAL_RECIPE.md` — earlier 3-backbone/125-step pilot (superseded for the 5-backbone claim, see §1.2)
 - `/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned/` vs `falseneg-gated/` — the two pins in trap §2.1
 - `/admin/home/ryan.kim/pathfm-full-evals/` — new RI/THUNDER/PathoROB/CPTAC harness (`run_manifest.py`, `submit_suite.sh`, `submit_all.sh`, per-suite `*_eval.py`)
 - `/admin/home/ryan.kim/pathfm-cells/<cell>/` — per-checkpoint eval cells (`submit_partial.sh`, `submit_online.sh`)

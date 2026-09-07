@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Build the data layer for placing our fine-tuned models on Waiv's Figure 1.
+"""Build the data layer for placing our fine-tuned models on Reference's Figure 1.
 
 Figure 1 y-axis: (58 - total) / 53, where total = hest_rank + thunder_rank + pathobench_rank
-among Waiv's 20-model field.
+among Reference's 20-model field.
 
 Usage:
-    python scripts/waiv_figure1.py
-    python scripts/waiv_figure1.py --out docs/waiv_figure1_data.json
+    python scripts/figure1.py
+    python scripts/figure1.py --out docs/figure1_data.json
 
-Writes docs/waiv_figure1_data.json (or --out path).
+Writes docs/figure1_data.json (or --out path).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 from _config import THUNDER  # noqa: E402
 
-WAIV_JSON = REPO / "docs" / "waiv_published.json"
+REFERENCE_JSON = REPO / "docs" / "reference_published.json"
 HEST_BACKUP = REPO / "results_backup" / "hest_work_results"
 THUNDER_ROOT = THUNDER / "outputs/res"
 
@@ -67,8 +67,8 @@ PAPER_CLS = [
 ]
 PAPER_SEG = ["ocelot", "pannuke", "segpath_epithelial", "segpath_lymphocytes"]
 
-# Waiv task key → THUNDER task name in our filesystem
-WAIV_TO_OUR_TASK = {
+# Reference task key → THUNDER task name in our filesystem
+REFERENCE_TO_OUR_TASK = {
     "knn": "knn",
     "linear": "linear_probing",
     "few_shot": "simple_shot",
@@ -112,7 +112,7 @@ def collect_thunder_means(run_spec: dict[str, list[str]]) -> dict:
     task_vals: dict[str, list[float]] = {}
 
     for ds in PAPER_CLS:
-        for task, waiv_key in [("knn", "knn"), ("linear_probing", "linear"),
+        for task, reference_key in [("knn", "knn"), ("linear_probing", "linear"),
                                 ("simple_shot", "few_shot")]:
             for run in cls_runs:
                 p = THUNDER_ROOT / ds / run / task / "frozen" / "outputs.json"
@@ -121,7 +121,7 @@ def collect_thunder_means(run_spec: dict[str, list[str]]) -> dict:
                 try:
                     v = _score_file(json.loads(p.read_text()), task)
                     if v is not None:
-                        task_vals.setdefault(waiv_key, []).append(v * 100)
+                        task_vals.setdefault(reference_key, []).append(v * 100)
                 except Exception:
                     pass
                 break  # first hit wins
@@ -140,11 +140,11 @@ def collect_thunder_means(run_spec: dict[str, list[str]]) -> dict:
             break
 
     result = {}
-    for waiv_key, vals in task_vals.items():
-        is_seg = waiv_key == "segmentation"
+    for reference_key, vals in task_vals.items():
+        is_seg = reference_key == "segmentation"
         n_cls = 0 if is_seg else len(vals)
         n_seg = len(vals) if is_seg else 0
-        result[waiv_key] = {
+        result[reference_key] = {
             "mean": round(sum(vals) / len(vals), 3),
             "n_cls": n_cls,
             "n_seg": n_seg,
@@ -201,9 +201,9 @@ def load_hest(summary_path: Path) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Waiv table reconstruction and verification
+# Reference table reconstruction and verification
 # ---------------------------------------------------------------------------
-def build_waiv_table(models: list[dict]) -> tuple[list[dict], list[str]]:
+def build_reference_table(models: list[dict]) -> tuple[list[dict], list[str]]:
     """Reconstruct ranks and totals. Returns (table, mismatches)."""
     table = []
     mismatches = []
@@ -252,7 +252,7 @@ def rank_in_field(our_value: float, field_values: list[float],
 
 
 def compute_thunder_4task_mean(thunder_tasks: dict[str, float]) -> float | None:
-    """Compute 4-task mean from Waiv's published per-task numbers (knn,linear,few_shot,seg)."""
+    """Compute 4-task mean from Reference's published per-task numbers (knn,linear,few_shot,seg)."""
     shared = ["knn", "linear", "few_shot", "segmentation"]
     vals = [thunder_tasks[k] for k in shared if k in thunder_tasks]
     if len(vals) != 4:
@@ -265,29 +265,29 @@ def compute_thunder_4task_mean(thunder_tasks: dict[str, float]) -> float | None:
 # ---------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=str(REPO / "docs" / "waiv_figure1_data.json"))
+    ap.add_argument("--out", default=str(REPO / "docs" / "figure1_data.json"))
     args = ap.parse_args()
 
     # ------------------------------------------------------------------
-    # 1. Load waiv_published.json
+    # 1. Load reference_published.json
     # ------------------------------------------------------------------
-    waiv = json.loads(WAIV_JSON.read_text())
-    models = waiv["models"]
+    reference = json.loads(REFERENCE_JSON.read_text())
+    models = reference["models"]
 
     # ------------------------------------------------------------------
-    # 2. Reconstruct Waiv's 20-model table
+    # 2. Reconstruct Reference's 20-model table
     # ------------------------------------------------------------------
-    waiv_table, mismatches = build_waiv_table(models)
+    reference_table, mismatches = build_reference_table(models)
 
     print("=" * 60)
-    print("STEP 1: Verify Waiv 20-model total reconstruction")
+    print("STEP 1: Verify Reference 20-model total reconstruction")
     print("=" * 60)
     if mismatches:
         print("MISMATCHES:")
         for m in mismatches:
             print("  ", m)
     else:
-        print(f"OK — all {len(waiv_table)} models: computed_total == published_total")
+        print(f"OK — all {len(reference_table)} models: computed_total == published_total")
 
     # ------------------------------------------------------------------
     # 3. Load our RI (best checkpoint per run)
@@ -313,14 +313,14 @@ def main():
         our_thunder[label] = collect_thunder_means(run_spec)
 
     # ------------------------------------------------------------------
-    # 6. Build 4-task THUNDER means for all 20 Waiv models
+    # 6. Build 4-task THUNDER means for all 20 Reference models
     # ------------------------------------------------------------------
-    for row in waiv_table:
+    for row in reference_table:
         row["thunder_4task_mean"] = compute_thunder_4task_mean(row["thunder_tasks"])
 
-    waiv_4task_means = [r["thunder_4task_mean"] for r in waiv_table
+    reference_4task_means = [r["thunder_4task_mean"] for r in reference_table
                         if r["thunder_4task_mean"] is not None]
-    waiv_hest_avgs = [r["hest_avg"] for r in waiv_table]
+    reference_hest_avgs = [r["hest_avg"] for r in reference_table]
 
     # ------------------------------------------------------------------
     # 7. Compute our ranks
@@ -335,7 +335,7 @@ def main():
             "label": "phikon_ft",
             "display_name": "Phikon-v2 fine-tuned (ours)",
             "base_model": "Phikon-v2",
-            "base_pathobench_rank": next(r["pathobench_rank"] for r in waiv_table
+            "base_pathobench_rank": next(r["pathobench_rank"] for r in reference_table
                                          if r["name"] == "Phikon-v2" and r["variant"] == "base"),
             "ri_run": "phikon_ft_recon",
             "hest_key": "phikon_ft",
@@ -346,7 +346,7 @@ def main():
             "label": "midnight_ft",
             "display_name": "Midnight-12k fine-tuned (ours)",
             "base_model": "Midnight-12k",
-            "base_pathobench_rank": next(r["pathobench_rank"] for r in waiv_table
+            "base_pathobench_rank": next(r["pathobench_rank"] for r in reference_table
                                           if r["name"] == "Midnight-12k" and r["variant"] == "base"),
             "ri_run": "midnight_ft_recon",
             "hest_key": "midnight_ft",
@@ -357,7 +357,7 @@ def main():
             "label": "virchow2_ft",
             "display_name": "Virchow2 fine-tuned (ours)",
             "base_model": "Virchow2",
-            "base_pathobench_rank": next(r["pathobench_rank"] for r in waiv_table
+            "base_pathobench_rank": next(r["pathobench_rank"] for r in reference_table
                                           if r["name"] == "Virchow2" and r["variant"] == "base"),
             "ri_run": "virchow2_ft_recon",
             "hest_key": "virchow2_ft",
@@ -368,10 +368,10 @@ def main():
 
     print()
     print("=" * 60)
-    print("STEP 2: Our computed ranks (21-model field = Waiv 20 + us)")
+    print("STEP 2: Our computed ranks (21-model field = Reference 20 + us)")
     print("=" * 60)
     print("NOTE: THUNDER rank uses 4-task mean (knn, linear, few_shot, seg) for")
-    print("  like-for-like comparison. Waiv's published thunder_rank uses all 6 tasks.")
+    print("  like-for-like comparison. Reference's published thunder_rank uses all 6 tasks.")
     print()
 
     results = []
@@ -383,16 +383,16 @@ def main():
 
         # HEST rank (higher avg Pearson = better, rank 1 = best)
         hest_avg = hest_data["avg"] if hest_data else None
-        hest_rank = (rank_in_field(hest_avg, waiv_hest_avgs, higher_is_better=True)
+        hest_rank = (rank_in_field(hest_avg, reference_hest_avgs, higher_is_better=True)
                      if hest_avg is not None else None)
 
         # THUNDER 4-task mean (higher = better)
         our_th_vals = []
-        for waiv_key in ["knn", "linear", "few_shot", "segmentation"]:
-            if waiv_key in th_data and "mean" in th_data[waiv_key]:
-                our_th_vals.append(th_data[waiv_key]["mean"])
+        for reference_key in ["knn", "linear", "few_shot", "segmentation"]:
+            if reference_key in th_data and "mean" in th_data[reference_key]:
+                our_th_vals.append(th_data[reference_key]["mean"])
         our_4task = round(sum(our_th_vals) / len(our_th_vals), 3) if len(our_th_vals) == 4 else None
-        thunder_rank_4task = (rank_in_field(our_4task, waiv_4task_means, higher_is_better=True)
+        thunder_rank_4task = (rank_in_field(our_4task, reference_4task_means, higher_is_better=True)
                                if our_4task is not None else None)
 
         base_pb_rank = m["base_pathobench_rank"]
@@ -454,10 +454,10 @@ def main():
                 "per_cancer": hest_data["per_cancer"] if hest_data else None,
                 "rank_in_21": hest_rank,
                 "pooling_note": (
-                    "cls — matches Waiv exactly for phikon-v2" if "phikon" in m["label"] else
-                    "clsmean — Virchow2: within 0.00013 of Waiv; Midnight: +0.0169 off (known open discrepancy)"
+                    "cls — matches Reference exactly for phikon-v2" if "phikon" in m["label"] else
+                    "clsmean — Virchow2: within 0.00013 of Reference; Midnight: +0.0169 off (known open discrepancy)"
                     if "midnight" not in m["label"] else
-                    "clsmean — +0.0169 off Waiv's published midnight HEST (known open discrepancy)"
+                    "clsmean — +0.0169 off Reference's published midnight HEST (known open discrepancy)"
                 ),
                 "provenance": hest_data["provenance"] if hest_data else None,
             },
@@ -465,7 +465,7 @@ def main():
                 "tasks": {wk: th_data[wk] for wk in ["knn","linear","few_shot","segmentation"] if wk in th_data},
                 "mean": our_4task,
                 "rank_in_21": thunder_rank_4task,
-                "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Waiv's 6-task thunder_rank",
+                "basis": "4 shared tasks (knn, linear, few_shot, segmentation); NOT comparable to Reference's 6-task thunder_rank",
                 "segmentation_pooling_note": (
                     "cls — same as classification" if "phikon" in m["label"] else
                     "cls variant used for segmentation (clsmean crashes ViT-g seg decoder)"
@@ -473,7 +473,7 @@ def main():
             },
             "pathobench": {
                 "status": "UNMEASURABLE",
-                "reason": "Waiv's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
+                "reason": "Reference's Patho-Bench uses UNI2-h patch embeddings; ~7-8 TB WSIs required; no traceable published source",
                 "base_model_rank": base_pb_rank,
             },
             "scenarios": {
@@ -506,10 +506,10 @@ def main():
     # 8. Write output JSON
     # ------------------------------------------------------------------
     out = {
-        "_generated_by": "scripts/waiv_figure1.py",
+        "_generated_by": "scripts/figure1.py",
         "_date": "2026-08-18",
         "_note": (
-            "thunder_rank in waiv_table is Waiv's 6-task rank (published). "
+            "thunder_rank in reference_table is Reference's 6-task rank (published). "
             "thunder_rank_4task is recomputed from their published per-task values for like-for-like comparison. "
             "our thunder ranks are also on 4 tasks. "
             "Patho-Bench is UNMEASURABLE — see scenarios."
@@ -522,8 +522,8 @@ def main():
                 "conservative: our models would rank the same or higher on a full 16-dataset run."
             ),
             "thunder_rank_sum_not_reproducible": (
-                "Waiv's published thunder_rank_sum cannot be reproduced from the 6 per-task values "
-                "in waiv_published.json under any combination of directionality or tie-breaking "
+                "Reference's published thunder_rank_sum cannot be reproduced from the 6 per-task values "
+                "in reference_published.json under any combination of directionality or tie-breaking "
                 "(brute-force: best 4/20 match). The per-task ordering is consistent with "
                 "adversarial and calibration being lower-is-better (Spearman ~0.99), but the "
                 "absolute sums differ. The 4-task like-for-like reranking uses the published "
@@ -535,17 +535,17 @@ def main():
                 "(mft500_cls, vft250_cls), which ARE run and scored — see thunder_key seg field."
             ),
             "hest_protocol": (
-                "phikon-v2 HEST uses cls pooling — exact match to Waiv's protocol. "
-                "Virchow2 HEST uses clsmean — within 0.00013 of Waiv's published base. "
-                "Midnight HEST uses clsmean — +0.0169 above Waiv's published midnight base "
+                "phikon-v2 HEST uses cls pooling — exact match to Reference's protocol. "
+                "Virchow2 HEST uses clsmean — within 0.00013 of Reference's published base. "
+                "Midnight HEST uses clsmean — +0.0169 above Reference's published midnight base "
                 "(known open discrepancy, documented)."
             ),
         },
-        "figure1_y_formula": waiv["figure1_y_formula"],
-        "thunder_shared_with_us": waiv["thunder_shared_with_us"],
+        "figure1_y_formula": reference["figure1_y_formula"],
+        "thunder_shared_with_us": reference["thunder_shared_with_us"],
         "verification": {
             "all_totals_match": len(mismatches) == 0,
-            "n_models": len(waiv_table),
+            "n_models": len(reference_table),
             "mismatches": mismatches,
             "thunder_rank_sum_reproducible": False,
             "thunder_rank_sum_note": (
@@ -554,10 +554,10 @@ def main():
                 "the JSON — the absolute sums disagree. The ranks are correct; the input sums are opaque."
             ),
         },
-        "waiv_table": waiv_table,
+        "reference_table": reference_table,
         "our_models": results,
         "provenance": {
-            "waiv_published_json": str(WAIV_JSON),
+            "reference_published_json": str(REFERENCE_JSON),
             "hest_backup_dir": str(HEST_BACKUP),
             "thunder_root": str(THUNDER_ROOT),
             "ri_run_dirs": {label: str(rd) for label, rd, _, _ in RI_RUNS},

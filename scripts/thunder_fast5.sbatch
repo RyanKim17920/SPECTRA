@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-tfast5
+#SBATCH --job-name=spectra-tfast5
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

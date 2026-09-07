@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-thunder
+#SBATCH --job-name=spectra-thunder
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -9,7 +9,7 @@
 #SBATCH --output=$SPECTRA_THUNDER/logs/slurm-%x-%j.out
 #SBATCH --error=$SPECTRA_THUNDER/logs/slurm-%x-%j.err
 #
-# THUNDER retention eval -- our second retention detector (PLAN.md §3 risk 1, §4 phase 11).
+# THUNDER retention eval -- our second retention detector (the design spec §3 risk 1, §4 phase 11).
 #
 #   sbatch scripts/run_thunder.sbatch mhist        "knn linear_probing"  cls base_cls
 #   sbatch scripts/run_thunder.sbatch ocelot       "segmentation"        cls base_cls

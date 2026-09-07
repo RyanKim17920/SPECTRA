@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run HEST-Benchmark on our encoder -- the first RETENTION detector (PLAN.md §3 risk 1).
+"""Run HEST-Benchmark on our encoder -- the first RETENTION detector (the design spec §3 risk 1).
 
     # base phikon-v2, CLS pooling -> the reproduction gate against 0.3747
     python scripts/run_hest.py --pooling cls  --exp-code base_cls
@@ -218,7 +218,7 @@ def main() -> int:
     if args.pooling == "cls" and encoder.cfg.backbone == "owkin/phikon-v2":
         payload["vs_published_phikonv2"] = H.compare_to_published(results)
         payload["note"] = (
-            "published row is HEST's own phikon_v2 (CLS, fp32); Waiv Table 1 quotes it "
+            "published row is HEST's own phikon_v2 (CLS, fp32); Reference Table 1 quotes it "
             "verbatim. Benchmark dynamic range is only "
             f"{H.HEST_RANGE[0]}-{H.HEST_RANGE[1]} Pearson."
         )

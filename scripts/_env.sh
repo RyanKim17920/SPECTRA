@@ -17,15 +17,15 @@
 # then .env fills the rest, then repo-relative defaults. See src/spectra/paths.py for
 # what each root means; the two files must agree on names and defaults.
 
-# Legacy `WAIV_*` aliases. The project was called `waivphaet` while the pinned code
+# Legacy `WAIV_*` aliases. The pinned code snapshots under $SPECTRA_SNAPSHOTS were frozen
 # snapshots under $SPECTRA_SNAPSHOTS were frozen, and those copies -- plus the launchers
 # that submit against them -- read `WAIV_ARM`, `WAIV_SEED`, `WAIV_PACKED_DIR` and the rest
 # by their old names. A pin is frozen on purpose and must never be rewritten, so instead
 # every `WAIV_X` in the environment is mirrored to `SPECTRA_X` and vice versa, without
 # either side clobbering a value that is already set. Set whichever name you like; both
 # reach the job. Drop this block once no snapshot in use still reads the old names.
-for _spectra_old in $(env | sed -n 's/^\(WAIV_[A-Za-z0-9_]*\)=.*/\1/p'); do
-  _spectra_new="SPECTRA_${_spectra_old#WAIV_}"
+for _spectra_old in $(env | sed -n 's/^\(REFERENCE_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  _spectra_new="SPECTRA_${_spectra_old#REFERENCE_}"
   if [ -z "$(eval "printf '%s' \"\${$_spectra_new:-}\"")" ]; then
     eval "$_spectra_new=\$$_spectra_old"
     eval "export $_spectra_new"
@@ -83,7 +83,7 @@ export SPECTRA_REPO SPECTRA_RUNS SPECTRA_DATA SPECTRA_PLISM SPECTRA_PLISM_PACKED
 # the SPECTRA_* roots, mirror every one of them back to its WAIV_* name so a pinned
 # snapshot's python -- which still reads the old names -- sees the same values.
 for _spectra_new in $(env | sed -n 's/^\(SPECTRA_[A-Za-z0-9_]*\)=.*/\1/p'); do
-  _spectra_old="WAIV_${_spectra_new#SPECTRA_}"
+  _spectra_old="REFERENCE_${_spectra_new#SPECTRA_}"
   if [ -z "$(eval "printf '%s' \"\${$_spectra_old:-}\"")" ]; then
     eval "$_spectra_old=\$$_spectra_new"
     eval "export $_spectra_old"

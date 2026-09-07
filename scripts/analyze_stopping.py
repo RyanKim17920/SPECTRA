@@ -26,7 +26,7 @@ def spearman(x,y):
     return pearson(rk(x),rk(y))
 
 SIGS=['l2','ri','ci','pp','gi','idp','oodp','bacc','loss','top1','heldout_loss','heldout_top1','step']
-print("="*90); print("CORRELATION of each internal signal with HEST pct_of_waiv, per backbone")
+print("="*90); print("CORRELATION of each internal signal with HEST pct_of_reference, per backbone")
 print(f"{'signal':<14}"+"".join(f"{b:>26}" for b in BB))
 for s in SIGS:
     line=f"{s:<14}"

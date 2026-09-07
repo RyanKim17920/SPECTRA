@@ -3,9 +3,9 @@
 .. warning::
    We **train** on PLISM. Any number produced here is a training diagnostic and must be
    labelled as such; it is never leaderboard-comparable and must never be printed next
-   to H0-mini's 0.541 (PLAN.md 1 and 6). Report cross-scanner and cross-stain
+   to H0-mini's 0.541 (the design spec 1 and 6). Report cross-scanner and cross-stain
    separately, and never cosine similarity alone -- PLIP scores 0.878 cosine at 0.054
-   top-10 (PLAN.md 6).
+   top-10 (the design spec 6).
 
 What plismbench actually is (inspected at ``third_party/plism-benchmark``)
 ---------------------------------------------------------------------------
@@ -41,7 +41,7 @@ import numpy as np
 DEFAULT_ROOT = Path("third_party/plism-benchmark")
 DIAGNOSTIC_NOTICE = (
     "PLISM retrieval is a TRAINING DIAGNOSTIC for this project (we fine-tune on PLISM). "
-    "Not leaderboard-comparable. See PLAN.md 1 and 6."
+    "Not leaderboard-comparable. See the design spec 1 and 6."
 )
 
 
@@ -108,7 +108,7 @@ def run_evaluate(
 
 def read_results(metrics_dir: Path | str, extractor: str, n_tiles: int = 8139):
     """Their ``results.csv``: rows ``inter-scanner`` / ``inter-staining`` /
-    ``inter-scanner, inter-staining`` / ``all`` -- already split the way PLAN.md 6 wants."""
+    ``inter-scanner, inter-staining`` / ``all`` -- already split the way the design spec 6 wants."""
     import csv
 
     p = Path(metrics_dir) / f"{n_tiles}_tiles" / extractor / "results.csv"

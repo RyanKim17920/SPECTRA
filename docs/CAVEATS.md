@@ -4,7 +4,7 @@
 
 # Caveats and reporting discipline
 
-Every claim in [`RESULTS.md`](RESULTS.md) is conditioned on this file. These are not
+Every claim in [`RESULTS.md`](archive/RESULTS.md) is conditioned on this file. These are not
 formalities: each entry below records a trap that was actually hit or actually misled during
 this reproduction.
 
@@ -13,7 +13,7 @@ this reproduction.
 ## 1. Caveats
 
 - **n=1 seed** throughout **except the CTRL seed pair** (`gridcmp-ctrl-380777` /
-  `gridcmp2-ctrlseed-380889`, [`RESULTS.md`](RESULTS.md) §12.3), no error bars — but this is **protocol parity with Waiv, not a
+  `gridcmp2-ctrlseed-380889`, [`RESULTS.md`](archive/RESULTS.md) §12.3), no error bars — but this is **protocol parity with Reference, not a
   shortfall against them**. Per their §3.3 (arXiv:2607.22861), THUNDER is "evaluated on frozen
   features following the default protocol" with no seed repetition, HEST follows "the default
   protocol and implementation", and PathoROB states no repetition at all. Patho-Bench is the
@@ -29,23 +29,23 @@ this reproduction.
   is valid; **absolute levels are not comparable** across the two studies.
 - **Checkpoint selection is not neutral.** THUNDER and HEST use step 1000 (phikon-v2) and
   step 500 (Midnight), chosen because they were the best *PathoROB* checkpoints. A full HEST
-  sweep over every checkpoint was run on **both** backbones ([`RESULTS.md`](RESULTS.md) §2): phikon-v2's HEST optimum is
+  sweep over every checkpoint was run on **both** backbones ([`RESULTS.md`](archive/RESULTS.md) §2): phikon-v2's HEST optimum is
   step 3500 (+0.0098, still climbing at the end of the trained range), Midnight's is step 250
   (+0.0035, decaying thereafter and negative by 1250). Robustness and retention peak at
   different steps and in *opposite* orderings on the two backbones, so any single-checkpoint
-  headline understates one axis — but even the best checkpoint stays far short of Waiv, so
+  headline understates one axis — but even the best checkpoint stays far short of Reference, so
   the gap is not a selection artefact.
 - **Coverage.** All three benchmarks now cover all **three** backbones (phikon-v2, Midnight-12k,
-  Virchow2 — Virchow2 added in [`RESULTS.md`](RESULTS.md) §3/§6). THUNDER: 14 of Waiv's 16
-  datasets (12/12 classification, 2/4 segmentation). The [`RESULTS.md`](RESULTS.md) §2
+  Virchow2 — Virchow2 added in [`RESULTS.md`](archive/RESULTS.md) §3/§6). THUNDER: 14 of Reference's 16
+  datasets (12/12 classification, 2/4 segmentation). The [`RESULTS.md`](archive/RESULTS.md) §2
   segmentation average is over only **2 of their 4** segmentation datasets and is therefore
   **NOT** directly comparable to theirs — flagged `support_2v4`.
-  [corrected 2026-08-26: was "16 of Waiv's 16 datasets (12/12 classification, 4/4 segmentation),
+  [corrected 2026-08-26: was "16 of Reference's 16 datasets (12/12 classification, 4/4 segmentation),
   so the §2 segmentation average is like-for-like against theirs". Authority:
   `scripts/collect_final5.py` `PAPER_SEG = ["ocelot", "pannuke"]` (2 submitted) vs
   `scripts/collect_thunder.py` `PAPER_SEG_PUBLISHED` (4 published) — `segpath_epithelial` and
   `segpath_lymphocytes` were deliberately never submitted. The like-for-like claim is directly
-  contradicted by `docs/baseline_comparability_audit.md:138` and `docs/FINAL5_RESULTS.md:130-132`.]
+  contradicted by `docs/archive/baseline_comparability_audit.md:138` and `docs/archive/FINAL5_RESULTS.md:130-132`.]
   HEST: phikon-v2 (`cls`), Midnight (`cls`) and Virchow2
   [corrected 2026-08-26: Midnight's HEST protocol is `cls`, not `clsmean`. Only Virchow2 is
   `clsmean` on HEST. Authority: `scripts/collect_final5.hest_pooling()` and the
@@ -65,7 +65,7 @@ this reproduction.
   rank-based top-1 and separation, never matched cosine alone.
 - **Regressions.** `tcga_uniform` regresses on **all three** backbones and on every probe
   (phikon-v2 −8.2 kNN / −5.7 lin / −7.3 few-shot; Midnight −2.6 / −2.9; Virchow2 −2.5 / −1.0 —
-  it is the only dataset that regresses on all three, [`RESULTS.md`](RESULTS.md) §3). Consistency
+  it is the only dataset that regresses on all three, [`RESULTS.md`](archive/RESULTS.md) §3). Consistency
   across independent probes rules out a local-neighbourhood artefact — information is
   genuinely lost. `bach` regresses on Midnight only (−2.1 / −5.6 / −8.6) while it *improves*
   on phikon-v2. Both are unexplained and should be understood before any publication claim.
@@ -77,7 +77,7 @@ this reproduction.
   surprising of the three PathoROB datasets.
 - **camelyon is saturated on any probe other than RI, and it dominates avg RI.** Untuned
   phikon-v2 already scores **1.0000** slide-level LOCO on camelyon and 0.9833 tile-linear LOCO
-  ([`RESULTS.md`](RESULTS.md) §12.6) — no quality headroom. Meanwhile a covariance decomposition
+  ([`RESULTS.md`](archive/RESULTS.md) §12.6) — no quality headroom. Meanwhile a covariance decomposition
   over the six §12.2 arms attributes **86%** of the between-arm variance in *avg* RI to camelyon
   (8% tcga, 5% tolkach_esca). Avg RI is therefore largely a readout on the one dataset with
   nothing left to measure. **Prefer the per-dataset RI table to the average for selection.** This
@@ -100,7 +100,7 @@ this reproduction.
   shrank a denominator and made effects look realer than they were: (1) `max` over a hyperparameter
   grid, (2) a difference of averages where per-task errors cancel, (3) a two-run floor, (4) a
   **within-run** checkpoint spread used as the denominator for a **between-run** gap
-  ([`RESULTS.md`](RESULTS.md) §8.2: CTRL's ±0.0004 plateau drift made the GRID24 gap read "~20× the
+  ([`RESULTS.md`](archive/RESULTS.md) §8.2: CTRL's ±0.0004 plateau drift made the GRID24 gap read "~20× the
   noise"; against the real between-seed floor of 0.0070 it is **1.2×** — a ~17× inflation).
   **When a result depends on a ×floor ratio, interrogate the floor first — and check it is the same
   kind of variance as the thing it is scaling.**
@@ -116,7 +116,7 @@ this reproduction.
   not a floor at all; on slide-LOCO it read 0.0016 against a true fixed-C floor of **0.0104**
   (6.7× too tight), and on tile-linear LOCO 0.0004 against 0.0111 (**26.7×**). Ratios built on
   those denominators were inflated by the same factors and have been retracted
-  ([`RESULTS.md`](RESULTS.md) §12.0). Rules: read probes **at fixed C**; compute the seed floor
+  ([`RESULTS.md`](archive/RESULTS.md) §12.0). Rules: read probes **at fixed C**; compute the seed floor
   **at the same fixed C** as the comparison it scales; prefer **sign agreement across the whole C
   grid** ("worse at 5 of 5 C") to any single ×floor number; and scale against the **widest**
   fixed-C floor, since per-C floors go degenerate (one is 0.0000, yielding a nonsense +227×).
@@ -127,7 +127,7 @@ this reproduction.
   honest floor comes from the per-task spread: SD 0.0084 → **SE 0.0037, 2 SE = 0.0075**, 25× the
   naive figure. This generalises beyond HEST: **an average-of-averages difference can look tiny
   purely through cancellation.** Always derive the floor from per-task dispersion.
-- **On HEST, only the two ends of the table separate.** Against 2 SE ([`RESULTS.md`](RESULTS.md)
+- **On HEST, only the two ends of the table separate.** Against 2 SE ([`RESULTS.md`](archive/RESULTS.md)
   §12.2): SPLIT +2.4 SE and MEANONLY −2.1 SE are **real**; every arm beats untuned base at
   −3.5 SE. GeM at +1.9 SE is **marginal**. **CTRL / CTRLSEED / GRID2 / GRID49 span 0.0019, a
   quarter of one SE — do not rank within that group.**
@@ -173,7 +173,7 @@ this reproduction.
 
 ---
 
-## 2. Reporting discipline (`PLAN.md` §6)
+## 2. Reporting discipline (the design spec §6)
 
 - Cross-stain and cross-scanner **separately** — the composite hides the hard axis.
 - Never cosine similarity alone (PLIP: 0.878 cosine at 0.054 top-10).

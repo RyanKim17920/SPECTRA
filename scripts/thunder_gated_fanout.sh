@@ -10,9 +10,9 @@
 # and _default_pooling() reads that local copy, not the corrected roster in
 # thunder_protocol.py:44 -- so `auto` hard-RuntimeErrors on both gated keys.
 #
-# Roster is PAPER_CLS_WAIV16 (collect_final5.py): the 12 THUNDER classification
-# datasets Waiv published plus the 4 SPIDER sets that postdate the paper. The
-# 4-dataset subset is indefensible (its error exceeds Waiv's whole gain).
+# Roster is PAPER_CLS_REFERENCE16 (collect_final5.py): the 12 THUNDER classification
+# datasets Reference published plus the 4 SPIDER sets that postdate the paper. The
+# 4-dataset subset is indefensible (its error exceeds Reference's whole gain).
 #
 # Usage:  scripts/thunder_gated_fanout.sh hoptimus|uni2 [--seg-only|--cls-only]
 

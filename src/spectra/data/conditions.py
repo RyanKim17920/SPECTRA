@@ -6,16 +6,16 @@ condition::
 
     {stain}_{scanner}_to_{reference}.tif.h5     e.g. GIVH_AT2_to_GMH_S60.tif.h5
 
-A "condition" in PLAN.md 2 is the (scanner, stain) pair. It is the unit that:
+A "condition" in the design spec 2 is the (scanner, stain) pair. It is the unit that:
 
 * defines a **positive** -- same tile index, *different* condition;
 * constrains a **negative** -- different tile index, *same* condition as the anchor
-  (PLAN.md 2, the "one load-bearing detail": cross-condition negatives make
+  (the design spec 2, the "one load-bearing detail": cross-condition negatives make
   "different scanner" a partially-correct shortcut for "different tile", which
   rewards *retaining* acquisition signal);
-* defines the held-out split -- PLAN.md 3 phase 7 holds out 2 of 7 scanners and
+* defines the held-out split -- the design spec 3 phase 7 holds out 2 of 7 scanners and
   3-4 of 13 stains, because "held-out-*condition* splits are the only check"
-  against tile-identity memorisation (PLAN.md 3, risk 3).
+  against tile-identity memorisation (the design spec 3, risk 3).
 
 The 91 names are hard-coded here rather than globbed so that condition indices are
 stable no matter how many ``.h5`` files happen to be present on a given machine.
@@ -127,7 +127,7 @@ class ConditionSplit:
 
 DEFAULT_HELDOUT_SCANNERS: tuple[str, ...] = ("GT450", "S210")
 DEFAULT_HELDOUT_STAINS: tuple[str, ...] = ("HRH", "KR", "MY")
-"""Default split: 2 of 7 scanners + 3 of 13 stains (PLAN.md 3, phase 7).
+"""Default split: 2 of 7 scanners + 3 of 13 stains (the design spec 3, phase 7).
 
 Leaves 5 training scanners, which is where ScanGen's ablation says cross-scanner gains
 converge. ``GMH``/``S60`` are deliberately kept in training -- they are the registration
@@ -171,7 +171,7 @@ def available_conditions(
 ) -> list[Condition]:
     """Intersect a condition list with what is actually on disk.
 
-    Only 2 of 91 ``.h5`` files are local (PLAN.md 5 puts the full 224 GB on ``/data``),
+    Only 2 of 91 ``.h5`` files are local (the design spec 5 puts the full 224 GB on ``/data``),
     so smoke tests need to run on whatever subset exists.
     """
     present = {n.rsplit("/", 1)[-1] for n in present_filenames}

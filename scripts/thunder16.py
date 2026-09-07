@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Full THUNDER, our base vs our fine-tuned, from a single corpus.
 
-This replaces the percent-of-Waiv framing.  The claim is an absolute delta measured in
+This replaces the percent-of-Reference framing.  The claim is an absolute delta measured in
 one harness, not a ratio to a number we did not compute, so there is no external target
 column here and no pass/fail grade derived from one.
 

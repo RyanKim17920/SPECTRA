@@ -17,9 +17,9 @@ HEST = str(_c5.HEST_WORK_DIR / "results")
 # numerator below is now read from, and the RI base carried collect_final5's false
 # probe_before.json provenance.  There is one loader for each of these now.
 HEST_BASE = _c5.HEST_BASE
-HEST_WAIV = _ec.HEST_WAIV
+HEST_REFERENCE = _ec.HEST_REFERENCE
 RI_BASE   = _c5.RI_BASE
-RI_WAIV   = _c5.RI_WAIV
+RI_REFERENCE   = _c5.RI_REFERENCE
 POOL      = {a: _c5.hest_pooling(a) for a in ("phikon", "midnight", "virchow2")}
 
 def backbone_of(run, cfg):
@@ -92,7 +92,7 @@ for run in sorted(os.listdir(RUNS)):
             step=step, pooling=pool,
             l2=l2s, l2_by_ds=l2vals,
             ri=ri,
-            ri_pct=None if ri is None else 100*(ri-RI_BASE[bb])/(RI_WAIV[bb]-RI_BASE[bb]),
+            ri_pct=None if ri is None else 100*(ri-RI_BASE[bb])/(RI_REFERENCE[bb]-RI_BASE[bb]),
             ci=dmean("confounder_insensitivity"), pp=dmean("prediction_performance"),
             gi=dmean("generalization_index"), idp=dmean("ID_performance"),
             oodp=dmean("OOD_performance"), bacc=pt.get("avg_balanced_accuracy"),
@@ -100,7 +100,7 @@ for run in sorted(os.listdir(RUNS)):
             heldout_loss=tm.get("heldout_loss"), heldout_top1=tm.get("heldout_top1"),
             loss_cls=tm.get("loss_cls"), loss_mean=tm.get("loss_mean"),
             hest=havg,
-            hest_pct=100*(havg-HEST_BASE[bb])/(HEST_WAIV[bb]-HEST_BASE[bb]),
+            hest_pct=100*(havg-HEST_BASE[bb])/(HEST_REFERENCE[bb]-HEST_BASE[bb]),
         ))
     if not found_any: skipped["no_hest"] += 1
 

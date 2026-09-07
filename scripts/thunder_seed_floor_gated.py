@@ -87,9 +87,9 @@ BASE_CONTROL = {
     "uni2h/c3s-step125": "uni2h-base-control_optimized",
 }
 
-#: Waiv's published THUNDER gains for the gated backbones, F1 fractions.
-#: docs/waiv_published.json, Table 2 (their base row vs their fine-tuned row).
-WAIV_GAIN = {
+#: Reference's published THUNDER gains for the gated backbones, F1 fractions.
+#: docs/reference_published.json, Table 2 (their base row vs their fine-tuned row).
+REFERENCE_GAIN = {
     ("hoptimus0/c3s-step125", "knn"): 0.004,
     ("hoptimus0/c3s-step125", "linear_probing"): 0.003,
     ("hoptimus0/c3s-step125", "simple_shot"): 0.012,
@@ -176,7 +176,7 @@ def main() -> None:
                    "thunder_seed_floor_12ds.md uses n_seeds = 5 / 10 pairs.  "
                    "offset_2se still has df = n_datasets - 1 = 11 and is usable; "
                    "pairdiff_2sd has df = 1 across seeds and is indicative only."),
-        "waiv_gain_f1": {f"{k[0]}|{k[1]}": v for k, v in WAIV_GAIN.items()},
+        "reference_gain_f1": {f"{k[0]}|{k[1]}": v for k, v in REFERENCE_GAIN.items()},
         "cells": cells,
         "gated_ft_deltas_vs_base_control": deltas,
     }
@@ -184,7 +184,7 @@ def main() -> None:
     Path(args.out_json).write_text(json.dumps(doc, indent=2) + "\n")
 
     hdr = (f"{'cell':<44}{'pool':<9}{'12ds off2SE':>13}{'5ds off2SE':>12}"
-           f"{'pd2SD':>9}{'|Waiv|':>9}{'ratio':>8}")
+           f"{'pd2SD':>9}{'|Reference|':>9}{'ratio':>8}")
     print(hdr)
     print("-" * len(hdr))
     for key, c in cells.items():
@@ -193,7 +193,7 @@ def main() -> None:
             print(f"{key:<44}{c['pooling']:<9} {b['error']}")
             continue
         label, task, _ = key.split("|")
-        w = WAIV_GAIN.get((label, task))
+        w = REFERENCE_GAIN.get((label, task))
         wtxt = f"{abs(w):.3f}" if w is not None else "-"
         rtxt = f"{b['offset_2se'] / abs(w):.2f}" if w else "-"
         print(f"{key:<44}{c['pooling']:<9}{b['offset_2se']:>13.4f}"

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-gemgrid
+#SBATCH --job-name=spectra-gemgrid
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:2

@@ -28,8 +28,8 @@ S0 = "f5_ret0.01-virchow2-s0-t900-391059_s0000250"
 S1 = "f5_ret0.01-virchow2-s1-t900-392045_s0000250"
 PAPER_CLS = _ct.PAPER_CLS
 TASKS = ["knn", "linear_probing", "simple_shot"]
-# Waiv Table 2, Virchow2: base -> fine-tuned, F1 points.
-WAIV = {"knn": (82.9, 82.6), "linear_probing": (84.8, 85.1), "simple_shot": (73.9, 76.6)}
+# Reference Table 2, Virchow2: base -> fine-tuned, F1 points.
+REFERENCE = {"knn": (82.9, 82.6), "linear_probing": (84.8, 85.1), "simple_shot": (73.9, 76.6)}
 SD_BUDGET_FRAC = 0.10  # scoreboard UNRESOLVABLE_SD_PCT_LIMIT = 10.0
 
 def score(run, ds, task):
@@ -45,10 +45,10 @@ for task in TASKS:
         a, b = score(S0, ds, task), score(S1, ds, task)
         if a is not None and b is not None:
             rs.append((ds, a, b, b - a))
-    base, ft = WAIV[task]
+    base, ft = REFERENCE[task]
     gain = ft - base
     budget = SD_BUDGET_FRAC * gain
-    print(f"\n=== {task}   Waiv gain {gain:+.1f} pts"
+    print(f"\n=== {task}   Reference gain {gain:+.1f} pts"
           + (f"; task-mean SD budget {budget:.3f} pts" if gain > 0
              else "  [NEGATIVE GAIN -- no bar exists, cell unusable at any noise level]"))
     if not rs:

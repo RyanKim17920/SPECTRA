@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=waiv-embed-shift
+#SBATCH --job-name=spectra-embed-shift
 #SBATCH --partition=main
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

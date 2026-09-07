@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Wait for base-Midnight PathoROB features, then score them against Waiv's published row.
+"""Wait for base-Midnight PathoROB features, then score them against Reference's published row.
 
 Chained rather than run inline because the extraction is a SLURM job (369107) and the RI
 metric is a CPU kNN -- this lets the metric fire the moment the features land instead of
 being polled for. Waits on FILES, not on squeue.
 
-Waiv arXiv:2607.22861 Table 1, Midnight-12k base row:
+Reference arXiv:2607.22861 Table 1, Midnight-12k base row:
     TCGA 0.858 | Camelyon 0.478 | Tolkach 0.941 | Avg 0.759
 Reproducing that on a ViT-g backbone -- different width, SwiGLU FFN, different
 normalization -- is the second independent check that our harness is faithful, and the
@@ -26,9 +26,9 @@ sys.path.insert(0, str(REPO / "src"))
 FEATURES = REPO / "third_party/PathoROB/data/features/midnight_clsmean_ours"
 LOG = DATA / "midnight_gate.log"
 DATASETS = ("camelyon", "tolkach_esca", "tcga")
-#: Waiv's published base row; tcga has 26 centers so it is the completeness sentinel.
-WAIV_BASE = {"camelyon": 0.478, "tolkach_esca": 0.941, "tcga": 0.858}
-WAIV_AVG = 0.759
+#: Reference's published base row; tcga has 26 centers so it is the completeness sentinel.
+REFERENCE_BASE = {"camelyon": 0.478, "tolkach_esca": 0.941, "tcga": 0.858}
+REFERENCE_AVG = 0.759
 MASCARET_AVG = 0.924
 
 
@@ -64,9 +64,9 @@ def main() -> int:
     for d in DATASETS:
         v = float(read_results(model, d)["robustness_index"])
         ris.append(v)
-        log(f"RESULT {d:14s} ours={v:.4f}  waiv_base={WAIV_BASE[d]:.3f}  delta={v - WAIV_BASE[d]:+.4f}")
+        log(f"RESULT {d:14s} ours={v:.4f}  reference_base={REFERENCE_BASE[d]:.3f}  delta={v - REFERENCE_BASE[d]:+.4f}")
     avg = sum(ris) / len(ris)
-    log(f"RESULT {'AVG':14s} ours={avg:.4f}  waiv_base={WAIV_AVG:.3f}  delta={avg - WAIV_AVG:+.4f}")
+    log(f"RESULT {'AVG':14s} ours={avg:.4f}  reference_base={REFERENCE_AVG:.3f}  delta={avg - REFERENCE_AVG:+.4f}")
     log(f"[gate] MASCARET target for a fine-tuned Midnight is {MASCARET_AVG} "
         f"(headroom from our base: {MASCARET_AVG - avg:+.4f})")
     log("MIDNIGHT_GATE_DONE")
