@@ -28,6 +28,7 @@ runs/
 
 # scratch: throwaway sizing probes, never part of a run
 .scratch/
+scratch_seed_raw/
 
 # temporary scratch files from development
 _tmp_*
