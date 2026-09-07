@@ -12,9 +12,9 @@ command joined up:
 
   1. scripts/final_recipe_report.py -- RI / HEST / THUNDER{knn,linear,few-shot} for the
      three ungated backbones, checkpoint chosen by the CI>=0.75 RULE, graded as
-     pct_of_waiv.  Reads the OLD harness: /data/ryan.kim/hest_work/results/ (HEST),
-     /data/ryan.kim/thunder/outputs/res/ (THUNDER), third_party/PathoROB (base RI).
-  2. /data/ryan.kim/pathfm-full-evals/ -- a SECOND, newer corpus that no script in this
+     pct_of_waiv.  Reads the OLD harness: $SPECTRA_HEST_WORK/results/ (HEST),
+     $SPECTRA_THUNDER/outputs/res/ (THUNDER), third_party/PathoROB (base RI).
+  2. $SPECTRA_EVALS/ -- a SECOND, newer corpus that no script in this
      repo read: THUNDER with segmentation + calibration + adversarial, PathoROB for all
      five backbones, and CPTAC.  Its own base-controls reproduce Waiv's published base
      far more closely than the old harness does (see section 2's base-gap column), so
@@ -43,6 +43,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO / "scripts"))
+from _config import EVALS, HEST_WORK, THUNDER  # noqa: E402
 
 import eval_common as _ec        # noqa: E402 -- intentional, after sys.path insert
 import final_recipe_report as _frr  # noqa: E402
@@ -50,7 +51,7 @@ import final_recipe_report as _frr  # noqa: E402
 # ---------------------------------------------------------------------------
 # The second corpus.  Env-overridable, same convention as collect_final5's paths.
 # ---------------------------------------------------------------------------
-PFE = Path("/data/ryan.kim/pathfm-full-evals")
+PFE = EVALS
 PFE_THUNDER_CSV = PFE / "thunder" / "outputs" / "res" / "results.csv"
 PFE_PATHOROB = PFE / "pathorob" / "results" / "robustness_index"
 PFE_CPTAC = PFE / "cptac"

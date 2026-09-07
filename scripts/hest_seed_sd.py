@@ -87,7 +87,7 @@ BOOKKEEPING_KEYS = {
     "seed",            # the thing whose effect we are measuring
     "out_dir",         # run directory
     "log_every", "eval_every", "num_workers",   # logging / dataloading only
-    "packed_dir",      # /data/plism/repacked vs /data/ryan.kim/plism/repacked -- the
+    "packed_dir",      # $SPECTRA_PLISM_PACKED vs an older copy of it -- the
                        # SAME corpus, relocated 2026-08-09 (91/91 tiles verified intact)
 }
 

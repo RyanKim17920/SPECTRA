@@ -53,6 +53,10 @@ import os
 import subprocess
 import time
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import PLISM_PACKED, export_legacy_env  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -295,7 +299,7 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", type=Path, required=True)
     ap.add_argument("--packed-dir", type=Path,
-                    default=Path("/data/plism/repacked"))
+                    default=PLISM_PACKED)
     ap.add_argument("--conditions-file", type=Path, default=None,
                     help="pin the probe's condition set, exactly as the BEFORE probe and "
                          "eval_checkpoints.py do -- otherwise a shrinking condition set "
@@ -314,7 +318,7 @@ def main() -> int:
     ap.add_argument("--max-wait-s", type=int, default=8 * 3600)
     args = ap.parse_args()
 
-    os.environ.setdefault("HF_HOME", "/data/huggingface")
+    export_legacy_env()
 
     # Resume: anything already in collapse_watch.json keeps its verdict, and its digest
     # stays available as the `prev` term so a restart cannot manufacture a fake delta.

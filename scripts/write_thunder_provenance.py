@@ -31,7 +31,7 @@ Usage::
     python scripts/write_thunder_provenance.py \
         --run-name ph2mask_midnight_s250_v2 \
         --backbone kaiko-ai/midnight \
-        --adapter /admin/home/ryan.kim/waiv/runs/ph2-midnight-s0-t900-391061/step_0000250 \
+        --adapter $SPECTRA_RUNS/ph2-midnight-s0-t900-391061/step_0000250 \
         --pooling auto --jobs 391839-391852
 
 Called with no arguments it regenerates the sidecars for the 2026-08-24 mask roster from
@@ -48,9 +48,13 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 
-THUNDER_ROOT = Path(os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder"))
-BACKUP_ROOT = Path("/admin/home/ryan.kim/waiv_result_backups/thunder_provenance")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import BACKUPS, RUNS, THUNDER  # noqa: E402
+
+THUNDER_ROOT = THUNDER
+BACKUP_ROOT = BACKUPS / "thunder_provenance"
 SIDECAR_NAME = "waiv_provenance.json"
 
 #: The 2026-08-24 negative-masking THUNDER roster, transcribed from
@@ -59,13 +63,13 @@ SIDECAR_NAME = "waiv_provenance.json"
 ROSTER = {
     "ph2mask_midnight_s250_v2": {
         "backbone": "kaiko-ai/midnight",
-        "adapter": "/admin/home/ryan.kim/waiv/runs/ph2-midnight-s0-t900-391061/step_0000250",
+        "adapter": str(RUNS / "ph2-midnight-s0-t900-391061/step_0000250"),
         "pooling_arg": "auto",
         "jobs": list(range(391839, 391853)),
     },
     "ph2mask_virchow2_s250_v2": {
         "backbone": "paige-ai/Virchow2",
-        "adapter": "/admin/home/ryan.kim/waiv/runs/ph2-virchow2-s0-t900-391062/step_0000250",
+        "adapter": str(RUNS / "ph2-virchow2-s0-t900-391062/step_0000250"),
         "pooling_arg": "auto",
         "jobs": list(range(391853, 391867)),
     },

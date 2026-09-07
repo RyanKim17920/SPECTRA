@@ -14,10 +14,12 @@ from pathlib import Path
 import numpy as np
 import torch
 
-sys.path.insert(0, "/admin/home/ryan.kim/waiv/src")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from _config import PLISM_PACKED  # noqa: E402
 from waivphaet.models.encoder import EncoderConfig, WaivEncoder  # noqa: E402
 
-REPACK = Path("/data/plism/repacked")
+REPACK = PLISM_PACKED
 
 
 def load_tiles(fname: str, idx: np.ndarray) -> torch.Tensor:

@@ -35,12 +35,17 @@ import json
 import os
 import time
 
-os.environ.setdefault("HF_HOME", "/data/huggingface")
+export_legacy_env()
 
 import torch
 
 from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
 from waivphaet.train.contrastive import masked_info_nce
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import export_legacy_env  # noqa: E402
 
 GIB = 1024 ** 3
 

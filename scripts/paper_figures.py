@@ -5,58 +5,102 @@
       -> waiv-asci/figures/{grid_batch,base_to_tuned}.pdf (+ .png previews, same stems)
 """
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import PAPER_FIGURES, PLISM_PACKED, REPO  # noqa: E402
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, FancyArrowPatch
 
-OUT = Path("/admin/home/ryan.kim/waiv-asci/figures")
+OUT = PAPER_FIGURES
 INK, MUTED, ACCENT = "#1f2937", "#9ca3af", "#2563eb"
 plt.rcParams.update({"font.size": 9, "font.family": "serif", "mathtext.fontset": "stix",
                      "axes.edgecolor": INK, "pdf.fonttype": 42, "hatch.linewidth": 0.6})
 
 
+PLISM = PLISM_PACKED
+# Three acquisition conditions of one PLISM tissue-microarray design. Rows differ in
+# scanner and/or stain; columns are registered tissue locations, so column i is the SAME
+# physical location in every row. Locations chosen for tissue content (>0.9 non-white).
+CONDITIONS = [("GMH_S210_to_GMH_S60",  "$c_a$  query row\n(scanner S210)"),
+              ("GMH_S360_to_GMH_S60",  "$c_b$  candidate row\n(scanner S360)"),
+              ("KRH_GT450_to_GMH_S60", "other condition\n(different stain)")]
+LOCATIONS = [3123, 6940, 8675, 9022, 5205, 6246]
+QUERY_COL = 2                                   # which column is the query / positive
+
+
 def grid_batch():
-    # rows: c_a (query), c_b (candidates), one greyed extra condition; columns: i_1..i_4, ..., i_T
-    cols = ["$i_1$", "$i_2$", "$i_3$", "$i_4$", r"$\cdots$", "$i_T$"]
-    T = len(cols); gap = 4                      # column index of the ellipsis
-    fig, ax = plt.subplots(figsize=(5.5, 2.35))
-    ax.set_xlim(-2.9, T + 3.4); ax.set_ylim(-0.75, 3.35); ax.axis("off"); ax.set_aspect("equal")
-    ya, yb, yc = 0, 1, 2                      # y of query row, candidate row, other row
-    qi = 2
-    for t in range(T):
-        if t == gap:
-            for y in (ya, yb, yc):
-                ax.text(t + 0.46, y + 0.42, r"$\cdots$", ha="center", va="center", fontsize=10, color=MUTED)
-            continue
-        ax.add_patch(Rectangle((t, yc), 0.92, 0.92, fc="white", ec=MUTED, lw=0.8, alpha=0.4, zorder=1))
-        ax.add_patch(Rectangle((t, ya), 0.92, 0.92, fc="white", ec=MUTED, lw=0.8, zorder=1))
-        if t == qi:
-            ax.add_patch(Rectangle((t, yb), 0.92, 0.92, fc="#e0e7ff", ec=ACCENT, lw=2.2, zorder=2))
-        else:
-            ax.add_patch(Rectangle((t, yb), 0.92, 0.92, fc="white", ec=MUTED, lw=0.8, hatch="///", zorder=1))
-        ax.text(t + 0.46, yc + 1.0, cols[t], ha="center", va="bottom", fontsize=8.5)
-    ax.add_patch(Rectangle((-0.08, yb - 0.08), T + 0.08, 1.08, fc="none", ec=INK, lw=1.1, ls="--", zorder=3))
-    ax.add_patch(Rectangle((qi, ya), 0.92, 0.92, fc="#e0e7ff", ec=ACCENT, lw=2.2, zorder=3))
-    ax.text(qi + 0.46, ya + 0.44, "query", ha="center", va="center", color=ACCENT, fontsize=6.8, weight="bold")
-    ax.text(qi + 0.46, yb + 0.44, "pos.", ha="center", va="center", color=ACCENT, fontsize=7.2, weight="bold")
-    ax.text(-0.25, yc + 0.46, "other sampled\nconditions", ha="right", va="center", fontsize=7.5, color=MUTED)
-    ax.text(-0.25, yb + 0.46, "$c_b$  candidate row", ha="right", va="center", fontsize=8.5)
-    ax.text(-0.25, ya + 0.46, "$c_a$  query row", ha="right", va="center", fontsize=8.5)
-    ax.text(T + 0.25, yb + 0.46, "one softmax:\n1 positive, $T-1$ negatives (hatched),\nall under condition $c_b$",
-            ha="left", va="center", fontsize=7.5, color=INK)
-    ax.text(T + 0.25, ya + 0.46, "query and positive:\nsame registered location (shaded)", ha="left", va="center", fontsize=7.5, color=INK)
-    ax.text(T / 2, yc + 1.55, "columns: registered tissue locations", ha="center", va="bottom", fontsize=8, color=INK)
-    ax.text(-0.25, ya - 0.2, "rows: acquisition conditions (scanner, stain)", ha="right", va="top", fontsize=7.5, color=INK)
+    """Figure 1 drawn from REAL PLISM tiles rather than coloured boxes.
+
+    The point the schematic could not make: the positive and its negatives are visually
+    alike because they share one acquisition condition, while the query differs from its
+    own positive in stain and scanner. That is the whole reason acquisition cannot be used
+    to find the match. A previous box-and-hatch version is kept at
+    figures/grid_batch.schematic.bak-*.{pdf,png}.
+    """
+    import numpy as np
+    arrs = [np.load(PLISM / f"{c}.npy", mmap_mode="r") for c, _ in CONDITIONS]
+    nrow, ncol = len(CONDITIONS), len(LOCATIONS)
+
+    fig, axes = plt.subplots(nrow, ncol, figsize=(6.6, 3.15),
+                             gridspec_kw={"wspace": 0.06, "hspace": 0.06})
+    for r, (arr, (_code, label)) in enumerate(zip(arrs, CONDITIONS)):
+        for c, loc in enumerate(LOCATIONS):
+            ax = axes[r, c]
+            ax.imshow(np.asarray(arr[loc]))
+            ax.set_xticks([]); ax.set_yticks([])
+            for sp in ax.spines.values():
+                sp.set_linewidth(0.6); sp.set_edgecolor(MUTED)
+            if r == 2:                                  # third condition: lighter spine only.
+                # NO alpha/dimming -- this row really is lighter (mean brightness 205 vs
+                # 163 and 150), and faking it would misrepresent the stain difference.
+                for sp in ax.spines.values():
+                    sp.set_edgecolor("#d1d5db")
+            if r == 0 and c == QUERY_COL:               # query
+                for sp in ax.spines.values():
+                    sp.set_linewidth(2.4); sp.set_edgecolor(ACCENT)
+            if r == 1:                                  # candidate row
+                if c == QUERY_COL:                      # the positive
+                    for sp in ax.spines.values():
+                        sp.set_linewidth(2.4); sp.set_edgecolor(ACCENT)
+                else:                                   # negatives
+                    for sp in ax.spines.values():
+                        sp.set_linewidth(1.2); sp.set_edgecolor(INK)
+            if r == 0:
+                ax.set_title(f"$i_{{{c + 1}}}$" if c != ncol - 1 else "$i_T$",
+                             fontsize=7.5, pad=2)
+        axes[r, 0].set_ylabel(label, fontsize=7.5, rotation=0, ha="right", va="center",
+                              labelpad=6, color=INK if r < 2 else MUTED)
+
+    # annotations
+    axes[0, QUERY_COL].text(0.5, 0.5, "query", transform=axes[0, QUERY_COL].transAxes,
+                            ha="center", va="center", fontsize=7, weight="bold",
+                            color="white",
+                            bbox=dict(fc=ACCENT, ec="none", pad=1.4, alpha=0.9))
+    axes[1, QUERY_COL].text(0.5, 0.5, "positive", transform=axes[1, QUERY_COL].transAxes,
+                            ha="center", va="center", fontsize=7, weight="bold",
+                            color="white",
+                            bbox=dict(fc=ACCENT, ec="none", pad=1.4, alpha=0.9))
+    for c in range(ncol):
+        if c != QUERY_COL:
+            axes[1, c].text(0.5, 0.06, "neg.", transform=axes[1, c].transAxes,
+                            ha="center", va="bottom", fontsize=6.2, color="white",
+                            bbox=dict(fc=INK, ec="none", pad=0.9, alpha=0.75))
+
+    fig.text(0.5, 1.03, "columns: corresponding registered locations",
+             ha="center", va="bottom", fontsize=7.5, color=INK)
     fig.savefig(OUT / "grid_batch.pdf", bbox_inches="tight")
-    fig.savefig(OUT / "grid_batch.png", dpi=150, bbox_inches="tight")
+    fig.savefig(OUT / "grid_batch.png", dpi=200, bbox_inches="tight")
 
 
 def base_to_tuned():
-    ss = Path("/admin/home/ryan.kim/waiv/docs/seed_stats.md").read_text()
+    ss = (REPO / "docs/seed_stats.md").read_text()
     name = {"phikon2": "Phikon-v2", "midnight": "Midnight-12k", "virchow2": "Virchow2",
-            "hoptimus0": "H-optimus-0", "uni2h": "UNI2-h"}
+            "hoptimus0": "H-optimus-0", "uni2h": "UNI2-h",
+            "virchow1": "Virchow", "openmidnightsq": "OpenMidnight"}
     vals, bb = {}, None
     for l in ss.splitlines():
         m = re.match(r"## (\w+)", l)
@@ -64,9 +108,9 @@ def base_to_tuned():
         m = re.match(r"\| (PathoROB RI|HEST) \| ([\d.]+) \| ([\d.]+) \+/- ([\d.]+) \(n=(\d+)\)", l)
         if m and bb in name:
             vals[(bb, m.group(1))] = (float(m.group(2)), float(m.group(3)), float(m.group(4)), int(m.group(5)))
-    assert len(vals) == 10, sorted(vals)
+    assert len(vals) == 2 * len(name), sorted(vals)
     order = sorted(name, key=lambda b: vals[(b, "PathoROB RI")][0])        # ascending base RI
-    fig, axes = plt.subplots(1, 2, figsize=(5.5, 2.3), sharey=True, gridspec_kw={"width_ratios": [1.5, 1]})
+    fig, axes = plt.subplots(1, 2, figsize=(6.6, 3.0), sharey=True, gridspec_kw={"width_ratios": [1.35, 1]})
     spans = {"PathoROB RI": (0.40, 1.0), "HEST": (0.36, 0.45)}
     for ax, metric, xlabel in zip(axes, ["PathoROB RI", "HEST"],
                                   ["PathoROB robustness index", "HEST mean Pearson $r$"]):
@@ -77,10 +121,15 @@ def base_to_tuned():
             ax.plot([b, t], [y, y], color=MUTED, lw=1.1, zorder=1)
             ax.scatter([b], [y], s=16, fc="white", ec=INK, lw=0.9, zorder=3)
             ax.errorbar([t], [y], xerr=[sd], fmt="o", ms=3.6, color=ACCENT, ecolor=ACCENT,
-                        elinewidth=0.9, capsize=1.5, zorder=4)
-            ax.text(max(b, t) + 0.018 * (hi - lo), y, f"{t - b:+.3f} ($n$={n})", ha="left", va="center",
-                    fontsize=7.2, color=INK)
-        ax.set_xlim(lo, hi + (0.14 if metric == "PathoROB RI" else 0.02))
+                        elinewidth=1.1, capsize=2.2, zorder=4)
+            # The SD bars are smaller than the marker at this scale (RI SD 0.002-0.007,
+            # HEST SD 0.0003-0.0029), so the SD is also printed: a bar the reader cannot
+            # see is not an error bar.
+            dp = 4 if metric == "HEST" else 3
+            ax.text(max(b, t) + 0.03 * (hi - lo), y,
+                    f"{t - b:+.{dp}f}$\\,\\pm\\,${sd:.{dp}f} ($n$={n})",
+                    ha="left", va="center", fontsize=6.6, color=INK)
+        ax.set_xlim(lo, hi + (0.30 if metric == "PathoROB RI" else 0.036))
         ax.set_xticks([0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] if metric == "PathoROB RI" else [0.36, 0.38, 0.40, 0.42, 0.44])
         ax.set_xlabel(xlabel, fontsize=8.5)
         ax.grid(axis="x", color="#e5e7eb", lw=0.6); ax.set_axisbelow(True)
@@ -98,4 +147,10 @@ def base_to_tuned():
 
 
 if __name__ == "__main__":
-    grid_batch(); base_to_tuned(); print("wrote", sorted(p.name for p in OUT.iterdir()))
+    # base_to_tuned() is NO LONGER RUN from here. figures/base_to_tuned.pdf is owned by
+    # waiv-asci/scripts/make_base_to_tuned.py, which draws all FOUR benchmarks (PathoROB,
+    # HEST, CPTAC, and the six THUNDER tasks) by parsing the generated tables. The two-panel
+    # version below is superseded; running it overwrites the four-panel figure with a
+    # strictly worse one, which is exactly what happened once. Kept for reference only.
+    grid_batch(); print("wrote grid_batch (left panel);"
+                        " now run waiv-asci/scripts/annotate_grid_batch.py to composite")

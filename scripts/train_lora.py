@@ -38,6 +38,9 @@ from waivphaet.train.contrastive import (
     train,
 )
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import PLISM_PACKED, RUNS, export_legacy_env  # noqa: E402
+
 
 def parse_ckpt_schedule(value: str) -> list[int]:
     """Parse a comma-separated checkpoint schedule, e.g. '50,100,150,300,500'."""
@@ -56,7 +59,7 @@ def parse_ckpt_schedule(value: str) -> list[int]:
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/plism/repacked"))
+    ap.add_argument("--packed-dir", type=Path, default=PLISM_PACKED)
     ap.add_argument("--out-dir", type=Path, required=True)
     # split (PLAN.md 3 phase 7): 2 of 7 scanners, 3 of 13 stains
     ap.add_argument("--heldout-scanners", nargs="*", default=["GT450", "S210"])
@@ -236,7 +239,7 @@ def parse_args():
 
 def main() -> int:
     args = parse_args()
-    os.environ.setdefault("HF_HOME", "/data/huggingface")
+    export_legacy_env()
     torch.manual_seed(args.seed)
 
     use_lora = not args.full_ft
@@ -434,7 +437,7 @@ def main() -> int:
         _tile_indices = None
         if args.min_tissue_frac > 0.0:
             import numpy as _np
-            _frac_path = Path("/admin/home/ryan.kim/waiv/runs/.plism_tissue_fraction.npy")
+            _frac_path = RUNS / ".plism_tissue_fraction.npy"
             if not _frac_path.exists():
                 raise SystemExit(
                     f"--min-tissue-frac requires {_frac_path}; run the tissue fraction "

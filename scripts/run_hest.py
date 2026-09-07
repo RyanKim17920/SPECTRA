@@ -107,7 +107,7 @@ def main() -> int:
     # report a perfectly flat interpolation curve -- a manufactured null, not a result.
     # The required token is derived from the value, so a stale or hand-typed token
     # (ls050 while passing 0.75) fails too. Nothing is required at s=1, which leaves
-    # every exp_code already on disk under /data/ryan.kim/hest_work/embeddings/ valid.
+    # every exp_code already on disk under $SPECTRA_HEST_WORK/embeddings/ valid.
     # Hard-fail rather than auto-suffix: exp_code is also the results filename that the
     # collectors key on, and silently renaming it would orphan those.
     if args.lora_scale != 1.0:
@@ -162,7 +162,7 @@ def main() -> int:
     # "does nothing". That is a manufactured null, not a measurement.
     #
     # The key format is deliberately NOT changed here: several caches already on disk
-    # under /data/ryan.kim/hest_work/embeddings/ (sub5_gem_clsmean, sub5_gem500_clsmean,
+    # under $SPECTRA_HEST_WORK/embeddings/ (sub5_gem_clsmean, sub5_gem500_clsmean,
     # sub5_g3*_clsmean, ...) were produced by real --pool-head runs, and re-keying would
     # orphan those valid caches and force a full re-extraction. Warn loudly instead.
     cache_dir = paths.embed_dir / exp_code

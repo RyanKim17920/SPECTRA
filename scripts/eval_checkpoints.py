@@ -51,6 +51,9 @@ from waivphaet.eval.pathorob_adapter import (  # noqa: E402
 )
 from waivphaet.train.contrastive import prior_attempt_dirs  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import PLISM_PACKED, export_legacy_env  # noqa: E402
+
 DATASETS = ("camelyon", "tolkach_esca", "tcga")
 #: Keys of their ``results_summary.json`` worth carrying into the curve. ``robustness_index``
 #: is the headline; ``balanced_accuracy`` / ``prediction_performance`` are the forgetting
@@ -305,7 +308,7 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", type=Path, required=True)
     ap.add_argument("--packed-dir",
-                    default=os.environ.get("WAIV_PACKED_DIR", "/data/plism/repacked"))
+                    default=os.environ.get("WAIV_PACKED_DIR", str(PLISM_PACKED)))
     ap.add_argument("--datasets", nargs="+", default=list(DATASETS))
     ap.add_argument("--model-prefix", default=None,
                     help="features/results dir prefix; defaults to waiv_<run-dir name>")
@@ -375,7 +378,7 @@ def main() -> int:
     if args.stop_file is not None:
         args.stop_file = args.stop_file.resolve()
 
-    os.environ.setdefault("HF_HOME", "/data/huggingface")
+    export_legacy_env()
     if args.model_prefix is None:
         args.model_prefix = "waiv_" + args.run_dir.name.replace("-", "_")
     paths = PathoRobPaths(root=REPO / "third_party" / "PathoROB")

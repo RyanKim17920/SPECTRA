@@ -24,21 +24,24 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import CELLS, EVALS, HEST_WORK  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
-CELLS = Path("/admin/home/ryan.kim/pathfm-cells")
-OUT = Path("/data/ryan.kim/pathfm-full-evals")
-HEST_RES = "/data/ryan.kim/hest_work/results"
+OUT = EVALS
+HEST_RES = str(HEST_WORK / "results")
 RI_DATASETS = ("tcga", "camelyon", "tolkach_esca")
 
-BACKBONES = ["phikon2", "midnight", "virchow2", "hoptimus0", "uni2h", "openmidnightsq", "virchow1", "virchow2f"]
+BACKBONES = ["phikon2", "midnight", "virchow2", "hoptimus0", "uni2h", "openmidnightsq", "virchow1",
+             # fp32-attack reruns: identical except the PGD path (see thunder_eval.py)
+             "phikon2f", "midnightf", "virchow2f", "hoptimus0f", "uni2hf"]
 # cell prefix -> the key the scoreboard's verdict JSON uses for the same backbone
 VERDICT_KEY = {"phikon2": "phikon", "midnight": "midnight", "virchow2": "virchow2",
                "hoptimus0": "hoptimus", "uni2h": "uni2",
                "openmidnightsq": "openmidnight", "virchow1": "virchow1",
-               "virchow2f": "virchow2"}
+               "phikon2f": "phikon", "midnightf": "midnight", "virchow2f": "virchow2",
+               "hoptimus0f": "hoptimus", "uni2hf": "uni2"}
 # cells whose base-control lives under a different name (fp32-attack Virchow2 base)
-BASE_CELL = {"virchow2f": "virchow2-basectrl-fp32adv"}
+BASE_CELL = {"virchow2f": "virchow2-basectrl-fp32adv"}  # others follow the -base-control rule
 
 
 def base_from_verdict(bb, metric):

@@ -15,12 +15,15 @@ units and use the same selection rule as the scoreboard number they are meant to
 import importlib.util, json, os, sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import THUNDER  # noqa: E402
+
 _spec = importlib.util.spec_from_file_location(
     "collect_thunder", Path(__file__).resolve().parent / "collect_thunder.py")
 _ct = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_ct)
 
-ROOT = Path(os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder")) / "outputs" / "res"
+ROOT = THUNDER / "outputs" / "res"
 S0 = "f5_ret0.01-virchow2-s0-t900-391059_s0000250"
 S1 = "f5_ret0.01-virchow2-s1-t900-392045_s0000250"
 PAPER_CLS = _ct.PAPER_CLS

@@ -38,6 +38,8 @@ from tqdm import tqdm
 
 from waivphaet.data.conditions import NUM_TILES, parse_filename
 
+from waivphaet.paths import PLISM, PLISM_PACKED
+
 TILE_SHAPE = (224, 224, 3)
 TILE_NBYTES = int(np.prod(TILE_SHAPE))  # 150,528 bytes
 KEYS_FILENAME = "keys.json"
@@ -86,7 +88,7 @@ def write_keys(out_dir: Path, keys: list[str]) -> Path:
 
 
 def npy_path(out_dir: Path, h5_path: Path) -> Path:
-    """``/data/.../GIVH_AT2_to_GMH_S60.npy`` for a given source ``.h5``."""
+    """``<out-dir>/GIVH_AT2_to_GMH_S60.npy`` for a given source ``.h5``."""
     return Path(out_dir) / (parse_filename(h5_path.name).slide_id.replace(".tif", "") + ".npy")
 
 
@@ -225,8 +227,8 @@ def benchmark(
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--h5-dir", type=Path, default=Path("/data/plism"))
-    p.add_argument("--out-dir", type=Path, default=Path("/data/plism/repacked"))
+    p.add_argument("--h5-dir", type=Path, default=PLISM)
+    p.add_argument("--out-dir", type=Path, default=PLISM_PACKED)
     p.add_argument("--overwrite", action="store_true")
     p.add_argument("--verify", action="store_true", help="byte-check a random tile sample")
     p.add_argument("--verify-samples", type=int, default=64)

@@ -10,8 +10,8 @@ which is the degenerate case PLAN.md 2 warns about.
 
 Assumes the local ``.h5`` have been repacked::
 
-    python -m waivphaet.data.repack --h5-dir /data/plism \
-        --out-dir /data/plism/repacked --verify
+    python -m waivphaet.data.repack --h5-dir $SPECTRA_PLISM \
+        --out-dir $SPECTRA_PLISM_PACKED --verify
 """
 
 from __future__ import annotations
@@ -26,12 +26,16 @@ from waivphaet.data.conditions import available_conditions, all_conditions, defa
 from waivphaet.data.pairs import build_pair_loader
 from waivphaet.models.encoder import build_encoder
 from waivphaet.train.contrastive import TrainConfig, train
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import PLISM, PLISM_PACKED, export_legacy_env  # noqa: E402
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--h5-dir", type=Path, default=Path("/data/plism"))
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/plism/repacked"))
+    ap.add_argument("--h5-dir", type=Path, default=PLISM)
+    ap.add_argument("--packed-dir", type=Path, default=PLISM_PACKED)
     ap.add_argument("--out-dir", type=Path, default=Path("runs/smoke"))
     ap.add_argument("--steps", type=int, default=4)
     ap.add_argument("--n-groups", type=int, default=2)
@@ -41,7 +45,7 @@ def main() -> int:
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
 
-    os.environ.setdefault("HF_HOME", "/data/huggingface")  # never fill /admin
+    export_legacy_env()  # never let the HF default fill the home volume
 
     present = [p.name for p in Path(args.h5_dir).glob("*.tif.h5")]
     conds = available_conditions(all_conditions(), present)

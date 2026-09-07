@@ -54,6 +54,9 @@ from collect_final5 import (  # noqa: E402 -- intentional, after the sys.path in
     PAPER_SEG_SUBMITTED,
 )
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import THUNDER  # noqa: E402
+
 # NOTE on the two "16"s, which are NOT the same 16 and must never be conflated:
 #   PAPER_CLS_WAIV16 = the 12 THUNDER-paper classification sets + the 4 SPIDER sets.
 #     This is what Waiv average over in arXiv:2607.22861 Table 2, and it is the only
@@ -76,7 +79,7 @@ VIRCHOW2 = "paige-ai/Virchow2"
 # reproduction's clothes. Only a backbone that has an entry here gets pub/delta columns.
 #
 # phikon-v2 only, today. No one on this cluster has ever run phikon-v2 through THUNDER --
-# /data/vbelagali, /data/eva-data and /data/anis hold only in-house DINOv2/I-JEPA runs and
+# Other users' scratch roots on this cluster hold only in-house DINOv2/I-JEPA runs and
 # OpenMidnight -- so the external reference is the paper appendix, not a neighbouring
 # results tree.
 #   knn            arXiv:2507.07860v3 Table S37   (12-dataset mean 70.1 = Table 4 KNN col)
@@ -261,7 +264,7 @@ def read_provenance(run_name: str, root: str | Path | None = None) -> dict | Non
     checkpoint that produced it (adapter path + sha256 + source training job). Absent for
     every run predating it, hence the None return and the prefix table below as fallback.
     """
-    base = Path(root or os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder"))
+    base = Path(root) if root else THUNDER
     p = base / "outputs" / "provenance" / f"{run_name}.json"
     if not p.is_file():
         return None
@@ -322,7 +325,7 @@ def _score(blob: dict, task: str) -> tuple[float | None, float | None]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder"))
+    ap.add_argument("--root", default=str(THUNDER))
     ap.add_argument("--model", required=True, nargs="+",
                     help="one or more PretrainedModel.name (WAIV_RUN_NAME), searched in order; "
                          "the first with results on disk supplies each dataset row")
@@ -409,7 +412,7 @@ def main() -> None:
         src = f" {source.get(ds, '--')} |" if show_src else ""
         if ds not in table:
             # segpath_epithelial was absent from this cluster until 2026-08-03, when it was
-            # downloaded from Zenodo record 7412731 into /data/ryan.kim/thunder/datasets.
+            # downloaded from Zenodo record 7412731 into $SPECTRA_THUNDER/datasets.
             # Both segpath sets are now submittable via scripts/submit_segpath_thunder.sh.
             status = "not run"
             print(f"| {ds} |{src} " + " | ".join("--" for _ in hdr) + f" | -- |  <!-- {status} -->")

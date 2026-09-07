@@ -38,12 +38,15 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.setdefault("HF_HOME", "/data/huggingface")
+export_legacy_env()
 
 import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import export_legacy_env  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 PATHOROB_ROOT = REPO / "third_party" / "PathoROB"

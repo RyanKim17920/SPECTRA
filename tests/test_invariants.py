@@ -28,6 +28,7 @@ from waivphaet.data.pairs import (
     PairBatch, PairBatchSampler, assert_same_condition_negatives, collate_pair_batch,
 )
 from waivphaet.train.contrastive import masked_info_nce
+from waivphaet.paths import REPO as _REPO
 
 
 def test_condition_grid_is_13x7():
@@ -726,7 +727,7 @@ def test_thunder_auto_pooling_never_resolves_to_clsmean_for_segmentation():
         for ds in ("bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
                    "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds"):
             assert not mod._is_segmentation_run(
-                ["benchmark", "custom:/admin/home/ryan.kim/waiv/src/waivphaet/eval/"
+                ["benchmark", f"custom:{_REPO}/src/waivphaet/eval/"
                  "thunder_model.py", ds, task,
                  "--loading-mode", "embedding_pre_loading"]
             )

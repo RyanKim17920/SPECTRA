@@ -14,18 +14,22 @@ Two things this fixes over the older collectors:
   * ALL SIX tasks, calibration and the PGD attack included.  The old harness computed
     neither, which is why the earlier report carried four.
 
-Source: /data/ryan.kim/pathfm-full-evals/thunder/outputs/res/results.csv -- the second
+Source: $SPECTRA_EVALS/thunder/outputs/res/results.csv -- the second
 corpus, which uses the leaderboard's Resize(256, bicubic) transform.  The older
-/data/ryan.kim/thunder corpus is NOT read: it scored SPIDER for only 10 of our runs and
+The $SPECTRA_THUNDER corpus is NOT read: it scored SPIDER for only 10 of our runs and
 preprocesses with Resize(224, bilinear), so it cannot support a 16-set average.
 
     ./.venv/bin/python scripts/thunder16.py   ->  docs/thunder16.md
 """
 import csv
+import sys
 from collections import defaultdict
 from pathlib import Path
 
-RESULTS = Path("/data/ryan.kim/pathfm-full-evals/thunder/outputs/res/results.csv")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import EVALS  # noqa: E402
+
+RESULTS = EVALS / "thunder/outputs/res/results.csv"
 REPO = Path(__file__).resolve().parent.parent
 
 CLS16 = ["bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist", "patch_camelyon",
@@ -43,7 +47,8 @@ TASKS = [
     ("benchmark_calibration", "linear_probing", "ECE", False),
     ("benchmark_adversarial_attack", "adversarial_attack", "f1", False),
 ]
-BACKBONES = ["phikon2", "midnight", "virchow2", "hoptimus0", "uni2h", "openmidnightsq", "virchow1", "virchow2f"]
+BACKBONES = ["phikon2", "midnight", "virchow2", "hoptimus0", "uni2h", "openmidnightsq", "virchow1",
+             "phikon2f", "midnightf", "virchow2f", "hoptimus0f", "uni2hf"]
 
 # The final recipe's own arm at its 1-SE-selected operating step.  The delta reported is
 # THIS arm's, not the best arm's: a max taken over seven arms -- which include the
@@ -53,7 +58,9 @@ FINAL_ARM = {"phikon2": "c50-s0-step200", "midnight": "c50-s0-step150",
              "virchow2": "c50-s0-step100", "hoptimus0": "c50-s0-step100",
              "uni2h": "c50-s0-step100",
              "openmidnightsq": "c50-s0-step150", "virchow1": "c50-s0-step150",
-             "virchow2f": "c50-s0-step100"}
+             "phikon2f": "c50-s0-step200", "midnightf": "c50-s0-step150",
+             "virchow2f": "c50-s0-step100", "hoptimus0f": "c50-s0-step100",
+             "uni2hf": "c50-s0-step100"}
 BASE_CELL = {"virchow2f": "virchow2-basectrl-fp32adv"}
 
 # Virchow2's PGD column is excluded, and the reason is internal rather than external: all

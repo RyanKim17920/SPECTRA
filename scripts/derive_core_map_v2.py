@@ -18,6 +18,9 @@ from scipy.spatial.distance import pdist
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from waivphaet.models.encoder import build_encoder
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import PLISM_PACKED, RUNS  # noqa: E402
+
 
 def coord_cores(keys):
     rc = np.array([[int(m.group(1)), int(m.group(2))]
@@ -63,12 +66,12 @@ def embed_all(packed_dir, device, bs, backbone):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--packed-dir", default="/data/plism/repacked")
+    ap.add_argument("--packed-dir", default=str(PLISM_PACKED))
     ap.add_argument("--backbone", default="paige-ai/Virchow2")
     ap.add_argument("--n-tissues", type=int, default=46)
     ap.add_argument("--batch-size", type=int, default=128)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    ap.add_argument("--out-labels", default="/admin/home/ryan.kim/waiv/runs/.plism_core_labels.npy")
+    ap.add_argument("--out-labels", default=str(RUNS / ".plism_core_labels.npy"))
     a = ap.parse_args()
 
     keys = json.load(open(Path(a.packed_dir) / "keys.json"))
@@ -79,7 +82,7 @@ def main():
 
     print(f"[embed] {a.backbone}", flush=True)
     emb = embed_all(a.packed_dir, a.device, a.batch_size, a.backbone)
-    np.save("/admin/home/ryan.kim/waiv/runs/.plism_ref_emb.npy", emb)
+    np.save(str(RUNS / ".plism_ref_emb.npy"), emb)
 
     # Mean embedding per core, L2-normalised, then agglomerative merge to n_tissues.
     cm = np.stack([emb[cores == i].mean(0) for i in range(n_cores)])

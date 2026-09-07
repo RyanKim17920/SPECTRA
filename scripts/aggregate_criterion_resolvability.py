@@ -3,7 +3,7 @@
 
 Reproduces docs/aggregate_criterion_resolvability.md.  Reads only data already on
 disk: docs/thunder_seed_floor_12ds.json (THUNDER per-seed/per-dataset F1),
-/data/ryan.kim/thunder/outputs/res (THUNDER bases), /data/ryan.kim/hest_work/results
+$SPECTRA_THUNDER/outputs/res (THUNDER bases), $SPECTRA_HEST_WORK/results
 (HEST final5 summaries), runs/final5-*/ri_curve.json (RI @ step 500).
 
 Usage:  python scripts/aggregate_criterion_resolvability.py

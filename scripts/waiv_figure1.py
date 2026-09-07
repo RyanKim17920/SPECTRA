@@ -23,9 +23,12 @@ from pathlib import Path
 # Paths (all read from disk; no numbers hardcoded)
 # ---------------------------------------------------------------------------
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "scripts"))
+from _config import THUNDER  # noqa: E402
+
 WAIV_JSON = REPO / "docs" / "waiv_published.json"
 HEST_BACKUP = REPO / "results_backup" / "hest_work_results"
-THUNDER_ROOT = Path("/data/ryan.kim/thunder/outputs/res")
+THUNDER_ROOT = THUNDER / "outputs/res"
 
 # RI curve files: (label, run_dir, base_backbone, is_gem)
 RI_RUNS = [

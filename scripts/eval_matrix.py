@@ -16,11 +16,14 @@ imported because that controller lives outside this repo; if one moves, move bot
 import glob
 import os
 import re
+import sys
 from pathlib import Path
 
-CELLS = Path("/admin/home/ryan.kim/pathfm-cells")
-OUT = Path("/data/ryan.kim/pathfm-full-evals")
-HEST_RES = "/data/ryan.kim/hest_work/results"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import CELLS, EVALS, HEST_WORK  # noqa: E402
+
+OUT = EVALS
+HEST_RES = str(HEST_WORK / "results")
 REPO = Path(__file__).resolve().parent.parent
 
 # The 1-SE-selected operating point per backbone (docs/final_scoreboard.md section 1a).
@@ -108,7 +111,7 @@ def main():
         "./.venv/bin/python scripts/eval_matrix.py",
         "```",
         "",
-        "Every cell under `/admin/home/ryan.kim/pathfm-cells`, by the role it plays in the",
+        f"Every cell under `{CELLS}`, by the role it plays in the",
         "paper.  `done` means the suite's terminal artifact is on disk; it is read from disk",
         "at generation time and is never inferred from a queue state.",
         "",

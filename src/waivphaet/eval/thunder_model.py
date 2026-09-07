@@ -2,7 +2,7 @@
 
 Used as::
 
-    export THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder
+    export THUNDER_BASE_DATA_FOLDER=$SPECTRA_THUNDER
     export WAIV_BACKBONE=kaiko-ai/midnight        # omit for owkin/phikon-v2
     export WAIV_POOLING=cls                       # omit: defaults PER BACKBONE, see below
     export WAIV_ADAPTER=/path/to/checkpoint_dir   # omit for the base model

@@ -21,22 +21,28 @@ Seeds enter at their OWN 1-SE-selected checkpoint (same rule as seed_stats.py), 
 tuned column is "at the selected checkpoint", never a fixed shared step.
 
     ./.venv/bin/python scripts/pathorob_submetrics.py
-      -> docs/pathorob_submetrics.md, docs/pathorob_submetrics.tex
+      -> docs/pathorob_submetrics.md, docs/pathorob_submetrics.tex,
+         waiv-asci/tables/pathorob_submetrics.tex
+
+The RI rank-sum / PLISM retrieval float is a separate table (scripts/pathorob_ranks.py ->
+waiv-asci/tables/pathorob_ranks.tex); this table carries only the per-dataset submetrics.
 """
 import json, statistics, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import EVALS, PAPER_TABLES  # noqa: E402
 import seed_stats as ss  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = Path("/data/ryan.kim/pathfm-full-evals/pathorob/results/robustness_index")
+OUT = EVALS / "pathorob/results/robustness_index"
+TEX_OUT = PAPER_TABLES / "pathorob_submetrics.tex"
 DATASETS = ["tcga", "camelyon", "tolkach_esca"]
 DS_LABEL = {"tcga": "TCGA $2\\times2$", "camelyon": "Camelyon", "tolkach_esca": "Tolkach-ESCA"}
-BACKBONES = ["phikon2", "midnight", "virchow2", "hoptimus0", "uni2h", "openmidnightsq", "virchow1", "virchow2f"]
+BACKBONES = ["phikon2", "midnight", "virchow2", "hoptimus0", "uni2h", "virchow1", "openmidnightsq"]
 BB_LABEL = {"phikon2": "Phikon-v2", "midnight": "Midnight-12k", "virchow2": "Virchow2",
             "hoptimus0": "H-optimus-0", "uni2h": "UNI2-h", "openmidnightsq": "OpenMidnight",
-            "virchow1": "Virchow", "virchow2f": "Virchow2 (fp32 attack)"}
+            "virchow1": "Virchow"}
 FIELDS = [("balanced_accuracy", "Bal. acc."), ("ID_performance", "ID purity"),
           ("OOD_performance", "OOD purity"), ("prediction_performance", "Pooled purity"),
           ("robustness_index", "RI")]
@@ -108,7 +114,7 @@ def main():
                 elif sd is None:
                     ts = f"{m:.3f}"
                 else:
-                    ts = f"{m:.3f} +/- {sd:.3f}"
+                    ts = f"{m:.3f} +/- {2 * sd:.3f}"  # two sample SDs
                 delta = "" if (b is None or m is None) else f" ({m - b:+.3f})"
                 cells_md.append(f"{bs} -> {ts}{delta}")
                 ttex = ts.replace("+/-", "$\\pm$")
@@ -125,7 +131,8 @@ def main():
     tex.append("\\end{tabular}")
     (REPO / "docs/pathorob_submetrics.md").write_text("\n".join(md))
     (REPO / "docs/pathorob_submetrics.tex").write_text("\n".join(tex) + "\n")
-    print("wrote docs/pathorob_submetrics.md and .tex")
+    TEX_OUT.write_text("\n".join(tex) + "\n")
+    print(f"wrote docs/pathorob_submetrics.md, .tex and {TEX_OUT}")
 
 
 if __name__ == "__main__":

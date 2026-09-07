@@ -56,6 +56,10 @@ import json
 import math
 import os
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import THUNDER  # noqa: E402
 
 DATASETS = ["bach", "mhist", "break_his", "bracs", "ccrcc"]
 TASKS = ["knn", "linear_probing"]
@@ -66,7 +70,7 @@ PAIRS = {
     "clsmean": ("fast5_ctrl_clsmean", "fast5_ctrlseed_clsmean"),
 }
 
-DEFAULT_ROOT = os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder")
+DEFAULT_ROOT = str(THUNDER)
 
 
 def _flat(d: dict) -> float | None:

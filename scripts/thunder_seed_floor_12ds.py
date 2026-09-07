@@ -60,6 +60,10 @@ import math
 import os
 import statistics
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import THUNDER  # noqa: E402
 
 # --- dataset lists ---------------------------------------------------------
 # The full list we actually report on (scripts/collect_final5.py::PAPER_CLS).
@@ -82,8 +86,8 @@ SEEDS = [0, 1, 2, 3, 4]
 POOLING = {"phikon": "cls", "midnight": "clsmean", "virchow2": "clsmean"}
 
 # NOTE 2026-08-31 (CORRECTED): an earlier edit repointed this default at
-# /data/ryan.kim/pathfm-full-evals/thunder on the belief that /data/ryan.kim/thunder
-# had been swept.  It has NOT been: /data/ryan.kim/thunder/outputs/res still holds all
+# $SPECTRA_EVALS/thunder on the belief that $SPECTRA_THUNDER
+# had been swept.  It has NOT been: $SPECTRA_THUNDER/outputs/res still holds all
 # 15 f5_final5-* run dirs, and the repoint silently broke this script (every cell
 # printed "insufficient", because the pathfm-full-evals corpus contains no f5_final5-*
 # runs at all).  The five-seed final5 replicates this script measures exist ONLY in the
@@ -95,7 +99,7 @@ POOLING = {"phikon": "cls", "midnight": "clsmean", "virchow2": "clsmean"}
 # The floor is insensitive to that change -- see the "Gated backbones" section of
 # docs/thunder_seed_floor_12ds.md, which measures the same seed pairs in both corpora.
 # Seed floors for H-Optimus-0 / UNI2-h come from scripts/thunder_seed_floor_gated.py.
-DEFAULT_ROOT = os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder")
+DEFAULT_ROOT = str(THUNDER)
 
 # Waiv's published THUNDER gains, F1 fractions (scripts/scoreboard.py WAIV_THUNDER).
 WAIV_GAIN = {

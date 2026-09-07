@@ -15,8 +15,12 @@ Within a track jobs are sorted longest-first (LPT) before round-robin assignment
 lowers makespan versus arbitrary order.
 """
 import json, os, subprocess, sys
+from pathlib import Path
 
-REPO = "/admin/home/ryan.kim/waiv"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import REPO  # noqa: E402
+
+REPO = str(REPO)
 TOTAL_LANES = int(os.environ.get("WAIV_LANES", "16"))
 FAST_LANES  = int(os.environ.get("WAIV_FAST_LANES", "4"))
 SLOW_LANES  = TOTAL_LANES - FAST_LANES

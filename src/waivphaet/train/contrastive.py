@@ -57,6 +57,8 @@ from tqdm import tqdm
 from waivphaet.data.grid import assert_grid_batch
 from waivphaet.data.pairs import assert_same_condition_negatives
 
+from waivphaet.paths import PLISM_PACKED
+
 NEG_INF = float("-inf")
 
 
@@ -700,7 +702,7 @@ class TrainConfig:
     #: carries no machine-specific path; the fallback is this cluster's repacked PLISM so
     #: every existing launcher keeps working unchanged.
     packed_dir: str = field(
-        default_factory=lambda: os.environ.get("WAIV_PACKED_DIR", "/data/plism/repacked")
+        default_factory=lambda: os.environ.get("WAIV_PACKED_DIR", str(PLISM_PACKED))
     )
     out_dir: str = "runs/dev"
     # optimisation

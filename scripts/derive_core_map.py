@@ -10,10 +10,13 @@ import numpy as np
 import torch
 from sklearn.cluster import MiniBatchKMeans
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import PLISM_PACKED, RUNS, export_legacy_env  # noqa: E402
+
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/plism/repacked"))
-    ap.add_argument("--out-labels", type=Path, default=Path("/admin/home/ryan.kim/waiv/runs/.plism_core_labels.npy"))
+    ap.add_argument("--packed-dir", type=Path, default=PLISM_PACKED)
+    ap.add_argument("--out-labels", type=Path, default=RUNS / ".plism_core_labels.npy")
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--backbone", default="owkin/phikon-v2")
     ap.add_argument("--out-meta", type=Path, default=None)
@@ -22,7 +25,7 @@ def parse_args():
 
 def embed_all(packed_dir, device, batch_size, backbone="owkin/phikon-v2"):
     import os
-    os.environ.setdefault("HF_HOME", "/data/huggingface")
+    export_legacy_env()
     # Add waiv source to path
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
     from waivphaet.models.encoder import build_encoder

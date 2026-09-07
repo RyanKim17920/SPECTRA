@@ -13,12 +13,12 @@ Retention (PLAN.md 3 risk 1 -- "forgetting is the default outcome, not a tail ri
   9 tasks, 42 GB ungated, no WSIs. Base reproduced exactly against their published
   phikon_v2 row, so a checkpoint delta on it is real.
 * :mod:`waivphaet.eval.thunder_model` -- **usable now, nothing downloaded.** The corpus
-  already exists on this cluster at ``/data/thunder-data`` (owner: paul), *including*
+  already existed on this cluster in another user's scratch, *including*
   BRACS and MHIST, whose official downloaders are behind registration walls and block on
   ``input()``. 15 of the paper's 16 are present; ``segpath_epithelial`` is not, so the
   ``benchmark_segmentation`` aggregate row cannot be formed -- per-dataset F1 still can.
   That tree belongs to someone else and is read-only to us, so
-  ``THUNDER_BASE_DATA_FOLDER=/data/ryan.kim/thunder`` and its ``datasets/`` is a symlink
+  ``THUNDER_BASE_DATA_FOLDER=$SPECTRA_THUNDER`` and its ``datasets/`` is a symlink
   farm into it; splits, embeddings and outputs land on our side.
   Drivers: ``scripts/run_thunder.sbatch`` (one dataset per job, full sweep),
   ``scripts/run_thunder_retention.sbatch`` (four-dataset kNN tripwire, cheap enough for

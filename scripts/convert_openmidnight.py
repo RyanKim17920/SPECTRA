@@ -1,6 +1,6 @@
 """Convert the OpenMidnight DINOv2 *training* checkpoint into a timm-loadable backbone.
 
-``/data/OpenMidnight_ckpts/openmidnight_checkpoint.pth`` is what DINOv2 writes during
+``$SPECTRA_INPUTS/OpenMidnight_ckpts/openmidnight_checkpoint.pth`` is what DINOv2 writes during
 training, not a released encoder: a single ``{"teacher": ...}`` dict holding the backbone
 **plus** the DINO and iBOT projection heads, with ``block_chunks=4`` module nesting
 (``backbone.blocks.<chunk>.<global_idx>.*``) and DINOv2's own SwiGLU names
@@ -32,9 +32,14 @@ import re
 import timm
 import torch
 from timm.models.vision_transformer import checkpoint_filter_fn
+import sys
+from pathlib import Path
 
-SRC = "/data/OpenMidnight_ckpts/openmidnight_checkpoint.pth"
-DST = "/data/OpenMidnight"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import INPUTS  # noqa: E402
+
+SRC = str(INPUTS / "OpenMidnight_ckpts/openmidnight_checkpoint.pth")
+DST = str(INPUTS / "OpenMidnight")
 ARCH = "vit_giant_patch14_reg4_dinov2"
 KW = dict(img_size=224, init_values=1e-5, dynamic_img_size=False, num_classes=0, global_pool="")
 

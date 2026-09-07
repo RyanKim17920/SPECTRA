@@ -11,8 +11,11 @@ from pathlib import Path
 import torch
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from _config import SNAPSHOTS  # noqa: E402
+
 # Use falseneg-pinned src so the patched grid_info_nce is tested.
-_PIN = Path("/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned/src")
+_PIN = SNAPSHOTS / "falseneg-pinned/src"
 
 
 def _import_pinned():

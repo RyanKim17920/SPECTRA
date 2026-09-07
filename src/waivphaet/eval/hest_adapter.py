@@ -61,12 +61,14 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
+from waivphaet.paths import HEST_BENCH, HEST_WORK, HF_HOME
+
 REPO = Path(__file__).resolve().parents[3]
 HEST_ROOT = REPO / "third_party" / "HEST"
 
 #: 42.25 GB, ungated (``MahmoodLab/hest-bench``). Lives on /data, never /admin.
-DEFAULT_BENCH_DATA = Path("/data/ryan.kim/hest_bench")
-DEFAULT_WORK_DIR = Path("/data/ryan.kim/hest_work")
+DEFAULT_BENCH_DATA = HEST_BENCH
+DEFAULT_WORK_DIR = HEST_WORK
 
 #: HEST's own leaderboard task set. ``HCC`` exists on HF but is excluded from their
 #: published average -- including it would silently make our number incomparable.
@@ -250,7 +252,7 @@ def compare_to_published(results: dict[str, float]) -> dict[str, dict]:
 
 def env_defaults() -> dict[str, str]:
     """PYTHONNOUSERSITE: a broken pandas in ``~/.local`` shadows venv pins on this box."""
-    return {"HF_HOME": "/data/huggingface", "PYTHONNOUSERSITE": "1",
+    return {"HF_HOME": str(HF_HOME), "PYTHONNOUSERSITE": "1",
             "TOKENIZERS_PARALLELISM": "false"}
 
 

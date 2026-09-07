@@ -5,7 +5,7 @@ WHY THIS FILE EXISTS
 --------------------
 `scripts/thunder_seed_floor_12ds.py` measures the floor from the **final5**
 study: 3 backbones (phikon-v2, midnight, Virchow2) x 5 training seeds at
-step 500, evaluated in the OLD THUNDER corpus (`/data/ryan.kim/thunder`,
+step 500, evaluated in the OLD THUNDER corpus (`$SPECTRA_THUNDER`,
 Resize(224, bilinear)).  H-Optimus-0 and UNI2-h have no final5 runs, so they
 had no floor, and `docs/final_scoreboard.md` marked every graded cell for
 those two backbones NOT REPORTABLE.
@@ -48,8 +48,11 @@ from thunder_seed_floor_12ds import (  # noqa: E402
     sd,
 )
 
-NEW_ROOT = "/data/ryan.kim/pathfm-full-evals/thunder/outputs/res"
-OLD_ROOT = "/data/ryan.kim/thunder/outputs/res"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import EVALS, THUNDER  # noqa: E402
+
+NEW_ROOT = str(EVALS / "thunder/outputs/res")
+OLD_ROOT = str(THUNDER / "outputs/res")
 
 #: label -> (corpus, run_seed0, run_seed1, classification pooling)
 #: Pooling per scripts/collect_final5.py::THUNDER_BASE_DIRS.  hoptimus and

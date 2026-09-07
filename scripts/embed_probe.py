@@ -50,11 +50,15 @@ import torch.nn.functional as F
 from waivphaet.data.conditions import available_conditions, make_split
 from waivphaet.data.repack import open_slide, present_filenames
 from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import PLISM_PACKED, export_legacy_env  # noqa: E402
 
 
 def parse_args():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--packed-dir", type=Path, default=Path("/data/plism/repacked"))
+    ap.add_argument("--packed-dir", type=Path, default=PLISM_PACKED)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--adapter", type=Path, default=None,
                     help="LoRA checkpoint dir written by save_checkpoint (contains adapter/ + projector.pt)")
@@ -176,13 +180,18 @@ def pair_stats(x: torch.Tensor, y: torch.Tensor) -> dict[str, float]:
     off = ~torch.eye(n, dtype=torch.bool)
     matched = float(sim.diagonal().mean())
     random = float(sim[off].mean())
-    top1 = float((sim.argmax(dim=1) == torch.arange(n)).float().mean())
-    return {"matched": matched, "random": random, "separation": matched - random, "top1": top1}
+    tgt = torch.arange(n)
+    top1 = float((sim.argmax(dim=1) == tgt).float().mean())
+    # top-5: the matched tile anywhere in the 5 nearest candidates.
+    k = min(5, n)
+    top5 = float((sim.topk(k, dim=1).indices == tgt[:, None]).any(dim=1).float().mean())
+    return {"matched": matched, "random": random, "separation": matched - random,
+            "top1": top1, "top5": top5}
 
 
 def main() -> int:
     args = parse_args()
-    os.environ.setdefault("HF_HOME", "/data/huggingface")
+    export_legacy_env()
 
     if args.checkpoint and args.adapter:
         raise SystemExit("--checkpoint and --adapter are mutually exclusive")

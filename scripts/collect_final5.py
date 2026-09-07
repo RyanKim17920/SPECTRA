@@ -3,11 +3,11 @@
 
 Run from the repo root:
     python scripts/collect_final5.py
-    python scripts/collect_final5.py --runs-dir /data/ryan.kim/waiv_runs
+    python scripts/collect_final5.py --runs-dir $SPECTRA_RUNS
     python scripts/collect_final5.py --ri-step 500 --json-out docs/final5_results.json
 
-HEST work dir: /data/ryan.kim/hest_work  (H.DEFAULT_WORK_DIR)
-THUNDER base:  /data/ryan.kim/thunder    ($THUNDER_BASE_DATA_FOLDER)
+HEST work dir: $SPECTRA_HEST_WORK  (H.DEFAULT_WORK_DIR)
+THUNDER base:  $SPECTRA_THUNDER    ($THUNDER_BASE_DATA_FOLDER)
 
 Preemption: if a run dir has sibling dirs <name>.r1, <name>.r2, ... the RI curves
 are unioned (deduplication by step, latest restart wins per step).  The run is flagged
@@ -34,6 +34,9 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import eval_common as _ec  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import HEST_WORK, RUNS, THUNDER  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # BASE HEST SCORES (unfinetuned backbone, per-backbone pooling protocol)
@@ -156,7 +159,7 @@ THUNDER_BASE_DIRS: dict[str, dict[str, str]] = {
 }
 
 # HEST work dir (run_hest.py default = H.DEFAULT_WORK_DIR)
-HEST_WORK_DIR = Path(os.environ.get("HEST_WORK_DIR", "/data/ryan.kim/hest_work"))
+HEST_WORK_DIR = HEST_WORK
 
 # ---------------------------------------------------------------------------
 # HEST single source of truth (F6/F9 fix, 2026-08-26)
@@ -270,7 +273,7 @@ def hest_base_literal_agreement() -> dict:
 
 HEST_BASE, HEST_BASE_SOURCE = _load_hest_base()
 # THUNDER root
-THUNDER_ROOT = Path(os.environ.get("THUNDER_BASE_DATA_FOLDER", "/data/ryan.kim/thunder"))
+THUNDER_ROOT = THUNDER
 
 # THUNDER dataset lists (from collect_thunder.py)
 # ---------------------------------------------------------------------------
@@ -664,7 +667,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs-dir", default=None,
                     help="Path to runs/ (default: repo/runs, which is a symlink to "
-                         "/data/ryan.kim/waiv_runs)")
+                         f"{RUNS})")
     ap.add_argument("--ri-step", type=int, default=500,
                     help="Fixed RI step to report as primary (default 500)")
     ap.add_argument("--json-out", default="docs/final5_results.json",

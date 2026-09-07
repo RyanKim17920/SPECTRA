@@ -17,11 +17,14 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import DATA  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
 FEATURES = REPO / "third_party/PathoROB/data/features/midnight_clsmean_ours"
-LOG = Path("/data/ryan.kim/midnight_gate.log")
+LOG = DATA / "midnight_gate.log"
 DATASETS = ("camelyon", "tolkach_esca", "tcga")
 #: Waiv's published base row; tcga has 26 centers so it is the completeness sentinel.
 WAIV_BASE = {"camelyon": 0.478, "tolkach_esca": 0.941, "tcga": 0.858}

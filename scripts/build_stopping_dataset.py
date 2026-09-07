@@ -104,7 +104,7 @@ for run in sorted(os.listdir(RUNS)):
         ))
     if not found_any: skipped["no_hest"] += 1
 
-out = "/admin/home/ryan.kim/waiv/docs/stopping_criterion_rows.json"
+out = "$SPECTRA_REPO/docs/stopping_criterion_rows.json"
 json.dump(rows, open(out, "w"), indent=1)
 from collections import Counter
 print("rows", len(rows), "runs", len({r['run'] for r in rows}))

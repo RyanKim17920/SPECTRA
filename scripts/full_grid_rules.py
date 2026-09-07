@@ -5,7 +5,7 @@ from collections import defaultdict
 rows=json.load(open('docs/stopping_criterion_rows.json'))
 hest={(r['run'],r['step']):r['hest_pct'] for r in rows}
 meta={r['run']:r for r in rows}
-RUNS='/admin/home/ryan.kim/waiv/runs'
+RUNS='${SPECTRA_RUNS:?}'
 BB=['phikon','midnight','virchow2']
 RI_BASE={"phikon":0.4686,"midnight":0.7589,"virchow2":0.8582}
 RI_WAIV={"phikon":0.806,"midnight":0.924,"virchow2":0.918}

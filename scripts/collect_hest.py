@@ -38,13 +38,16 @@ from waivphaet.eval.hest_adapter import (  # noqa: E402
     WAIV_PHIKONV2_HEST,
 )
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _config import HEST_WORK  # noqa: E402
+
 # Env-overridable, same shape as collect_thunder.py's THUNDER_BASE_DATA_FOLDER default.
 # WAIV_HEST_RESULTS points straight at the results dir; WAIV_HEST_WORK_DIR mirrors
 # hest_adapter.DEFAULT_WORK_DIR and gets "/results" appended, so whichever of the two the
 # caller already exports works. Value with neither set is the previous hardcoded path.
 DEFAULT_RESULTS = Path(
     os.environ.get("WAIV_HEST_RESULTS")
-    or (Path(os.environ.get("WAIV_HEST_WORK_DIR", "/data/ryan.kim/hest_work")) / "results")
+    or (Path(os.environ.get("WAIV_HEST_WORK_DIR", str(HEST_WORK))) / "results")
 )
 
 PHIKONV2 = "owkin/phikon-v2"
