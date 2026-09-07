@@ -77,7 +77,7 @@ def test_suite_still_sees_the_working_tree_after_this_module():
     ``sys.modules`` leaks again, every later test module silently grades the snapshot.
     """
     assert str(_PIN) not in sys.path
-    import waivphaet.train.contrastive as live
+    import spectra.train.contrastive as live
 
     repo_src = Path(__file__).resolve().parents[1] / "src"
     assert Path(live.__file__).is_relative_to(repo_src), live.__file__

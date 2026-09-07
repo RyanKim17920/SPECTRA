@@ -1,6 +1,6 @@
 """Shared-tile GRID sampler: every image is both an anchor and a query.
 
-Why this exists (contrast with :mod:`waivphaet.data.pairs`)
+Why this exists (contrast with :mod:`spectra.data.pairs`)
 -----------------------------------------------------------
 The pair sampler draws ``n_groups`` condition-homogeneous ANCHOR groups, each over its
 OWN independently-drawn tile set, and gives every anchor one positive from its own
@@ -27,7 +27,7 @@ whole of condition group ``b != a`` as its candidate set::
     query rows R       = C * (C-1) * T
 
 The candidate set for any row is one single condition group, so the same-condition-negative
-invariant that :mod:`waivphaet.data.pairs` exists to protect is **preserved exactly**:
+invariant that :mod:`spectra.data.pairs` exists to protect is **preserved exactly**:
 acquisition is constant down the candidate row and carries zero discriminative information.
 
 The new load-bearing invariant
@@ -55,8 +55,8 @@ import numpy as np
 import torch
 from torch.utils.data import Sampler
 
-from waivphaet.data.conditions import NUM_TILES, Condition, ConditionSplit, default_split
-from waivphaet.data.pairs import RegisteredPairDataset
+from spectra.data.conditions import NUM_TILES, Condition, ConditionSplit, default_split
+from spectra.data.pairs import RegisteredPairDataset
 
 __all__ = [
     "GridBatch",
@@ -73,7 +73,7 @@ def assert_grid_batch(
 ) -> dict[str, float]:
     """Assert the grid invariants on the *collated, flattened* ``(C*T, ...)`` batch.
 
-    Same spirit as :func:`waivphaet.data.pairs.assert_same_condition_negatives`: this
+    Same spirit as :func:`spectra.data.pairs.assert_same_condition_negatives`: this
     checks the thing the loss actually consumes, after the flatten, and returns observed
     statistics so the train loop can log evidence instead of trusting the sampler.
 
@@ -332,7 +332,7 @@ class GridBatchSampler(Sampler[GridBatch]):
 class GridTileDataset(RegisteredPairDataset):
     """Materialises a :class:`GridBatch` plan into a ``(C, T, 224,224,3)`` uint8 block.
 
-    Subclasses :class:`~waivphaet.data.pairs.RegisteredPairDataset` purely to reuse its
+    Subclasses :class:`~spectra.data.pairs.RegisteredPairDataset` purely to reuse its
     lazily-opened per-worker memmap cache and its slide-ordered ``_gather``; the pair
     ``__getitem__`` is replaced, not extended, and the parent class is left untouched.
 
@@ -366,7 +366,7 @@ class GridTileDataset(RegisteredPairDataset):
 def collate_grid_batch(item: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """Flatten ``(C, T, ...)`` to ``(C*T, ...)`` row-major; scalars and 1-D ids pass through.
 
-    Row-major is load-bearing: :func:`waivphaet.train.contrastive.grid_info_nce` reshapes
+    Row-major is load-bearing: :func:`spectra.train.contrastive.grid_info_nce` reshapes
     ``(C*T, D)`` straight back to ``(C, T, D)``, so index ``a*T + t`` must be condition
     ``a``, tile position ``t``. ``assert_grid_batch`` re-checks that via ``tile_pos``.
     """
@@ -391,7 +391,7 @@ def build_grid_loader(
     conditions: Sequence[Condition] | None = None,
     tile_indices: np.ndarray | None = None,
 ) -> torch.utils.data.DataLoader:
-    """Convenience wiring, mirroring :func:`waivphaet.data.pairs.build_pair_loader`."""
+    """Convenience wiring, mirroring :func:`spectra.data.pairs.build_pair_loader`."""
     if conditions is None:
         split = split or default_split()
         conditions = split.train if subset == "train" else split.heldout

@@ -36,9 +36,9 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
-from waivphaet.data.conditions import NUM_TILES, parse_filename
+from spectra.data.conditions import NUM_TILES, parse_filename
 
-from waivphaet.paths import PLISM, PLISM_PACKED
+from spectra.paths import PLISM, PLISM_PACKED
 
 TILE_SHAPE = (224, 224, 3)
 TILE_NBYTES = int(np.prod(TILE_SHAPE))  # 150,528 bytes

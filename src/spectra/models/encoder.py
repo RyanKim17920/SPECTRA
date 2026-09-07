@@ -63,8 +63,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel
 
-from waivphaet.models import backbones as _bb
-from waivphaet.models.pooling import POOL_HEAD_NAMES, build_pool_head
+from spectra.models import backbones as _bb
+from spectra.models.pooling import POOL_HEAD_NAMES, build_pool_head
 
 DEFAULT_BACKBONE = "owkin/phikon-v2"
 
@@ -74,7 +74,7 @@ DEFAULT_BACKBONE = "owkin/phikon-v2"
 POOL_PARTS: tuple[str, ...] = ("cls", "mean")
 
 #: Normalisation constants and the per-backbone tables below are VIEWS over the
-#: registry in ``waivphaet.models.backbones`` -- one entry per model, edited in one
+#: registry in ``spectra.models.backbones`` -- one entry per model, edited in one
 #: place.  They keep their old names because run scripts, cells and tests import them
 #: by name; what changed is that nothing is transcribed twice.
 IMAGENET_MEAN = _bb.IMAGENET_MEAN
@@ -106,7 +106,7 @@ BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float,
 # file on this machine (converted by scripts/convert_openmidnight.py), not a hub artefact.
 #
 # Each directory is ``$SPECTRA_INPUTS/<local_subdir>`` from the registry, so relocating
-# the weight store is one environment variable.  ``WAIV_BACKBONE_LOCAL_DIRS="repo=/dir"``
+# the weight store is one environment variable.  ``SPECTRA_BACKBONE_LOCAL_DIRS="repo=/dir"``
 # still overrides individual entries per job.
 BACKBONE_LOCAL_DIRS: dict[str, str] = _bb.local_dir_table()
 
@@ -115,16 +115,16 @@ _LOCAL_WEIGHT_NAMES: tuple[str, ...] = ("model.safetensors", "pytorch_model.bin"
 
 
 def _local_dir_table() -> dict[str, str]:
-    """``BACKBONE_LOCAL_DIRS`` with ``WAIV_BACKBONE_LOCAL_DIRS`` entries layered on top."""
+    """``BACKBONE_LOCAL_DIRS`` with ``SPECTRA_BACKBONE_LOCAL_DIRS`` entries layered on top."""
     table = dict(BACKBONE_LOCAL_DIRS)
-    raw = os.environ.get("WAIV_BACKBONE_LOCAL_DIRS", "")
+    raw = os.environ.get("SPECTRA_BACKBONE_LOCAL_DIRS", "")
     for item in raw.split(","):
         item = item.strip()
         if not item:
             continue
         if "=" not in item:
             raise RuntimeError(
-                f"WAIV_BACKBONE_LOCAL_DIRS entry {item!r} is not 'repo_id=/path'; the "
+                f"SPECTRA_BACKBONE_LOCAL_DIRS entry {item!r} is not 'repo_id=/path'; the "
                 f"whole variable was {raw!r}"
             )
         repo, path = item.split("=", 1)
@@ -150,7 +150,7 @@ def local_backbone_dir(backbone: str | None) -> Path | None:
             f"backbone {backbone!r} is bound to local directory {str(d)!r} but there is "
             "no config.json in it. The hub repo is GATED (403), so there is no fallback: "
             "restore the checkpoint or repoint it with "
-            f'WAIV_BACKBONE_LOCAL_DIRS="{backbone}=/new/path".'
+            f'SPECTRA_BACKBONE_LOCAL_DIRS="{backbone}=/new/path".'
         )
     return d
 
@@ -464,7 +464,7 @@ def normalization_for(backbone: str | None) -> tuple[tuple[float, ...], tuple[fl
         "entry, no timm pretrained_cfg mean/std, and its HF image processor did not "
         "yield image_mean/image_std. Read the "
         "model card and add an explicit entry to BACKBONE_NORMALIZATION in "
-        "src/waivphaet/models/encoder.py -- defaulting to ImageNet stats here would "
+        "src/spectra/models/encoder.py -- defaulting to ImageNet stats here would "
         "silently cost accuracy (e.g. kaiko-ai/midnight needs (0.5,0.5,0.5))."
     )
 
@@ -536,13 +536,13 @@ class EncoderConfig:
     #: translation of the token cloud is exactly what THUNDER's biased
     #: ``proj_dec = nn.Linear(d_encoder, d_model)`` absorbs into its bias. Only a pooling
     #: whose gradient is token-DEPENDENT can express a preference about the tokens'
-    #: relative arrangement. See :mod:`waivphaet.models.pooling` for the variants and for
+    #: relative arrangement. See :mod:`spectra.models.pooling` for the variants and for
     #: why the GeM default is over ``softplus`` rather than the textbook ``clamp``.
     #:
     #: Requires ``split_heads`` to include ``"mean"``: with the single concat projector
     #: the pooled vector IS ``_pool``'s output, which is the eval protocol constant.
     pool_head: str = "mean"
-    #: Apply the learned ``pool_head`` inside :meth:`WaivEncoder._pool`, i.e. in the
+    #: Apply the learned ``pool_head`` inside :meth:`SpectraEncoder._pool`, i.e. in the
     #: EXPORTED embedding, not only in the training loss. OFF by default: with it off
     #: the eval representation stays the protocol constant (PathoROB's reference row is
     #: ``phikonv2_clsmean``) and every existing number remains comparable.
@@ -659,7 +659,7 @@ def _lora_target_names(model: nn.Module, cfg: EncoderConfig) -> tuple[list[str],
     return names, per_block, tuple(sorted(leaves))
 
 
-class WaivEncoder(nn.Module):
+class SpectraEncoder(nn.Module):
     """Backbone (optionally LoRA-adapted) + projection head.
 
     ``forward`` returns ``(embedding, projection)``:
@@ -1190,8 +1190,8 @@ def lora_scale_tag(scale: float) -> str:
 
 #: The class was phikon-v2-specific when it was written; it no longer is. Alias kept so
 #: saved checkpoints, the THUNDER entry point and any external caller keep importing.
-PhikonEncoder = WaivEncoder
+PhikonEncoder = SpectraEncoder
 
 
-def build_encoder(**kwargs) -> WaivEncoder:
-    return WaivEncoder(EncoderConfig(**kwargs))
+def build_encoder(**kwargs) -> SpectraEncoder:
+    return SpectraEncoder(EncoderConfig(**kwargs))

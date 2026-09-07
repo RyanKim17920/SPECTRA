@@ -68,6 +68,7 @@ __all__ = [
     "SNAPSHOTS",
     "BACKUPS",
     "load_dotenv",
+    "alias_legacy_env",
     "env_path",
     "export_legacy_env",
     "describe",
@@ -75,7 +76,7 @@ __all__ = [
 
 
 def _repo_root() -> Path:
-    """The checkout this file lives in: ``src/waivphaet/paths.py`` -> up three."""
+    """The checkout this file lives in: ``src/spectra/paths.py`` -> up three."""
     return Path(__file__).resolve().parent.parent.parent
 
 
@@ -112,7 +113,31 @@ def load_dotenv(path: Path | None = None) -> dict[str, str]:
     return applied
 
 
+def alias_legacy_env() -> dict[str, str]:
+    """Mirror ``WAIV_*`` <-> ``SPECTRA_*`` in ``os.environ``, neither side clobbering.
+
+    The project was called ``waivphaet`` while the pinned code snapshots under
+    :data:`SNAPSHOTS` were frozen, and those copies still read ``WAIV_PACKED_DIR``,
+    ``WAIV_BACKBONE`` and friends.  A pin is frozen on purpose, so rather than rewrite
+    one, both spellings are published.  Returns what it added.  ``scripts/_env.sh`` does
+    the same thing for the shell.  Delete this once no pin in use reads the old names.
+    """
+    applied: dict[str, str] = {}
+    for key in list(os.environ):
+        if key.startswith("WAIV_"):
+            other = "SPECTRA_" + key[len("WAIV_"):]
+        elif key.startswith("SPECTRA_"):
+            other = "WAIV_" + key[len("SPECTRA_"):]
+        else:
+            continue
+        if other not in os.environ:
+            os.environ[other] = os.environ[key]
+            applied[other] = os.environ[key]
+    return applied
+
+
 load_dotenv()
+alias_legacy_env()
 
 
 def env_path(name: str, default: Path | str) -> Path:
@@ -151,7 +176,7 @@ EVALS: Path = env_path("SPECTRA_EVALS", DATA / "full-evals")
 HF_HOME: Path = env_path("SPECTRA_HF_HOME", DATA / "huggingface")
 
 #: Root holding locally-served base-model weight directories (gated repos, converted
-#: checkpoints). See ``waivphaet.models.backbones``.
+#: checkpoints). See ``spectra.models.backbones``.
 INPUTS: Path = env_path("SPECTRA_INPUTS", DATA / "inputs")
 
 #: One directory per evaluated checkpoint, each with its own ``model.py``.
@@ -162,7 +187,7 @@ PAPER: Path = env_path("SPECTRA_PAPER", REPO / "paper")
 PAPER_TABLES: Path = env_path("SPECTRA_PAPER_TABLES", PAPER / "tables")
 PAPER_FIGURES: Path = env_path("SPECTRA_PAPER_FIGURES", PAPER / "figures")
 
-#: Frozen code snapshots a run was pinned to (``WAIV_PIN``).
+#: Frozen code snapshots a run was pinned to (``SPECTRA_PIN``).
 SNAPSHOTS: Path = env_path("SPECTRA_SNAPSHOTS", REPO / "snapshots")
 
 #: Durable copies of result JSON that otherwise live only on volatile scratch.

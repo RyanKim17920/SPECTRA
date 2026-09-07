@@ -4,7 +4,7 @@
 account (403). ``SophontAI/OpenMidnight`` is ungated but is served locally anyway: the
 weights we run are a DINOv2 *training* checkpoint on this machine, remapped once by
 ``scripts/convert_openmidnight.py``. All three are bound to local directories by
-``waivphaet.models.encoder.BACKBONE_LOCAL_DIRS``, and that changes the failure surface in
+``spectra.models.encoder.BACKBONE_LOCAL_DIRS``, and that changes the failure surface in
 ways nothing else in the repo has: the config that decides timm-vs-AutoModel, the
 normalisation lookup, the FFN-shape probe and the weight load all come from disk rather
 than the hub.
@@ -24,12 +24,12 @@ import types
 import pytest
 import torch
 
-from waivphaet.models.encoder import (
+from spectra.models.encoder import (
     BACKBONE_NORMALIZATION,
     IMAGENET_MEAN,
     IMAGENET_STD,
     EncoderConfig,
-    WaivEncoder,
+    SpectraEncoder,
     is_timm_backbone,
     local_backbone_dir,
     normalization_for,
@@ -114,7 +114,7 @@ def test_virchow1_is_registered_separately_from_virchow2():
     """The two are different models sharing a name prefix. Virchow2 is hub-served and must
     stay out of both local tables; any entry keyed on a prefix rather than the exact repo
     id would capture it."""
-    from waivphaet.models.encoder import BACKBONE_LOCAL_DIRS, BACKBONE_TIMM_KWARGS
+    from spectra.models.encoder import BACKBONE_LOCAL_DIRS, BACKBONE_TIMM_KWARGS
 
     assert "paige-ai/Virchow2" not in BACKBONE_LOCAL_DIRS
     assert "paige-ai/Virchow2" not in BACKBONE_TIMM_KWARGS
@@ -164,7 +164,7 @@ def test_gated_backbones_dispatch_to_timm_via_the_local_config(backbone):
 def test_local_dir_binding_is_loud_when_the_directory_is_gone(backbone, monkeypatch):
     """/data has been swept before. A missing checkpoint must raise, not fall back to a
     hub call that 403s and misroutes the loader."""
-    monkeypatch.setenv("WAIV_BACKBONE_LOCAL_DIRS", f"{backbone}=/nonexistent/checkpoint")
+    monkeypatch.setenv("SPECTRA_BACKBONE_LOCAL_DIRS", f"{backbone}=/nonexistent/checkpoint")
     with pytest.raises(RuntimeError, match="no config.json"):
         local_backbone_dir(backbone)
 
@@ -174,14 +174,14 @@ def test_local_dir_binding_is_loud_when_the_directory_is_gone(backbone, monkeypa
 # --------------------------------------------------------------------------------------
 
 class _PoolOnly:
-    """Just enough of WaivEncoder to call the real, unbound ``_pool``."""
+    """Just enough of SpectraEncoder to call the real, unbound ``_pool``."""
 
     def __init__(self, pooling, num_prefix_tokens):
         self.cfg = types.SimpleNamespace(pooling=pooling)
         self.num_prefix_tokens = num_prefix_tokens
 
     def pool(self, tokens):
-        return WaivEncoder._pool(self, tokens)
+        return SpectraEncoder._pool(self, tokens)
 
 
 @pytest.mark.parametrize(
@@ -225,7 +225,7 @@ def encoders():
     built = {}
     for backbone in LOCAL_BACKBONES:
         _require_checkpoint(backbone)
-        built[backbone] = WaivEncoder(
+        built[backbone] = SpectraEncoder(
             EncoderConfig(backbone=backbone, pooling="clsmean", use_lora=True)
         )
     return built
@@ -237,7 +237,7 @@ def test_geometry_is_read_off_the_loaded_checkpoint(encoders, backbone):
     """Every geometric field comes from the BUILT model, so a kwargs/weights mismatch
     shows up as a number here rather than as a quietly different architecture.
 
-    A strict state_dict load is what makes this meaningful: ``WaivEncoder`` refuses a
+    A strict state_dict load is what makes this meaningful: ``SpectraEncoder`` refuses a
     local checkpoint with any missing or unexpected key, so reaching this assertion at
     all proves 0 missing / 0 unexpected.
     """

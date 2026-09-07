@@ -26,7 +26,7 @@ the loss. We therefore emit **condition-homogeneous anchor groups**:
 
 Within a group every anchor shares a condition, so for anchor ``k`` the other ``G-1``
 anchors are valid same-condition negatives. A batch is ``n_groups`` such groups; the
-loss masks across groups (see :mod:`waivphaet.train.contrastive`). Tile indices are
+loss masks across groups (see :mod:`spectra.train.contrastive`). Tile indices are
 unique within a group, so no "negative" is secretly the anchor's own tile.
 
 Per-anchor positive conditions are drawn *independently* so a group does not degenerate
@@ -45,8 +45,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
 
-from waivphaet.data.conditions import NUM_TILES, Condition, ConditionSplit, default_split
-from waivphaet.data.repack import open_slide
+from spectra.data.conditions import NUM_TILES, Condition, ConditionSplit, default_split
+from spectra.data.repack import open_slide
 
 __all__ = [
     "PairBatch",
@@ -221,7 +221,7 @@ class PairBatchSampler(Sampler[PairBatch]):
     def set_start_index(self, start_index: int) -> None:
         """Skip the first *start_index* batch plans of the NEXT epoch only (resume).
 
-        Mirror of :meth:`waivphaet.data.grid.GridBatchSampler.set_start_index`; see there
+        Mirror of :meth:`spectra.data.grid.GridBatchSampler.set_start_index`; see there
         for why the plan sequence is exactly reproducible and why skipping on the PLAN
         side (numpy, microseconds) rather than the loader side (real image reads) is the
         whole point.
@@ -271,7 +271,7 @@ class PairBatchSampler(Sampler[PairBatch]):
 class RegisteredPairDataset(Dataset):
     """Materialises a :class:`PairBatch` plan into uint8 tile tensors.
 
-    Reads from the contiguous memmaps written by :mod:`waivphaet.data.repack`. Slides are
+    Reads from the contiguous memmaps written by :mod:`spectra.data.repack`. Slides are
     opened lazily and cached per worker process -- a memmap is not fork-safe to share, and
     with 91 slides we want one open handle per worker, not per item.
 
@@ -294,7 +294,7 @@ class RegisteredPairDataset(Dataset):
         if missing:
             raise FileNotFoundError(
                 f"{len(missing)} condition(s) not repacked under {self.packed_dir}: "
-                f"{missing[:3]}{'...' if len(missing) > 3 else ''}. Run `waiv-repack` first."
+                f"{missing[:3]}{'...' if len(missing) > 3 else ''}. Run `spectra-repack` first."
             )
 
     def _path(self, c: Condition) -> Path:

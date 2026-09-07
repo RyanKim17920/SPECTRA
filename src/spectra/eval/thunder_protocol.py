@@ -1,6 +1,6 @@
 """THUNDER's per-backbone pooling protocol -- the ONE definition, dependency-free.
 
-This lived inside :mod:`waivphaet.eval.thunder_model`, which cannot be imported outside
+This lived inside :mod:`spectra.eval.thunder_model`, which cannot be imported outside
 the THUNDER venv (it does ``from thunder.models import PretrainedModel`` at module
 scope). The reporting scripts run in the main venv, so they grew their own copy of the
 rule -- and the copy was WRONG: ``scoreboard._thunder_pooling`` returned ``clsmean`` for
@@ -19,10 +19,10 @@ def _readouts() -> dict[str, str]:
     """``repo_id -> published THUNDER pooling`` from the backbone registry.
 
     Imported lazily-ish inside a function so this module keeps its promise of no
-    third-party imports: ``backbones`` pulls in ``waivphaet.paths`` only (stdlib),
+    third-party imports: ``backbones`` pulls in ``spectra.paths`` only (stdlib),
     never torch or timm.
     """
-    from waivphaet.models.backbones import readout_table
+    from spectra.models.backbones import readout_table
 
     return readout_table()
 
@@ -74,7 +74,7 @@ def default_pooling(backbone: str | None) -> str:
     if backbone is None:
         # Deliberately lazy: this module is imported by reporting scripts that have no
         # torch, and ``encoder`` pulls in torch/transformers at import time.
-        from waivphaet.models.encoder import DEFAULT_BACKBONE
+        from spectra.models.encoder import DEFAULT_BACKBONE
 
         backbone = DEFAULT_BACKBONE
     if backbone in THUNDER_CLSMEAN_BACKBONES:
@@ -83,8 +83,8 @@ def default_pooling(backbone: str | None) -> str:
         return "cls"
     raise RuntimeError(
         f"no published THUNDER pooling protocol for backbone {backbone!r}. "
-        "Set WAIV_POOLING=cls|mean|clsmean explicitly for this run, and if the choice is "
+        "Set SPECTRA_POOLING=cls|mean|clsmean explicitly for this run, and if the choice is "
         "a protocol decision (i.e. it comes from arXiv:2607.22861 3), record it by adding "
         "the backbone to THUNDER_CLSMEAN_BACKBONES or THUNDER_CLS_BACKBONES in "
-        "src/waivphaet/eval/thunder_protocol.py."
+        "src/spectra/eval/thunder_protocol.py."
     )

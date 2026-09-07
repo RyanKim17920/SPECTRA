@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "waivphaet"
+name = "spectra"
 version = "0.1.0"
-description = "Robustifying Phikon-v2 via registered-pair contrastive fine-tuning (a PHAET-class reproduction attempt)"
+description = "Contrastive robustness fine-tuning for pathology foundation models, over co-registered PLISM tiles"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -42,7 +42,7 @@ pathorob = ["pandas>=2.2", "scikit-learn>=1.5", "matplotlib>=3.9", "seaborn>=0.1
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
-waiv-repack = "waivphaet.data.repack:main"
+spectra-repack = "spectra.data.repack:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

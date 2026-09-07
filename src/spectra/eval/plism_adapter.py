@@ -92,7 +92,7 @@ def run_evaluate(
     ``--device gpu`` needs ``cupy`` (not in their pyproject: ``pip install cupy-cuda12x``);
     ``cpu`` falls back to numpy.
     """
-    print(f"[waivphaet] {DIAGNOSTIC_NOTICE}")
+    print(f"[spectra] {DIAGNOSTIC_NOTICE}")
     cmd = [
         sys.executable, "-m", "plismbench.engine.cli", "evaluate",
         "--extractor", extractor,

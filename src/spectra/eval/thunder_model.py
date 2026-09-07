@@ -3,15 +3,15 @@
 Used as::
 
     export THUNDER_BASE_DATA_FOLDER=$SPECTRA_THUNDER
-    export WAIV_BACKBONE=kaiko-ai/midnight        # omit for owkin/phikon-v2
-    export WAIV_POOLING=cls                       # omit: defaults PER BACKBONE, see below
-    export WAIV_ADAPTER=/path/to/checkpoint_dir   # omit for the base model
-    thunder benchmark custom:src/waivphaet/eval/thunder_model.py break_his knn
+    export SPECTRA_BACKBONE=kaiko-ai/midnight        # omit for owkin/phikon-v2
+    export SPECTRA_POOLING=cls                       # omit: defaults PER BACKBONE, see below
+    export SPECTRA_ADAPTER=/path/to/checkpoint_dir   # omit for the base model
+    thunder benchmark custom:src/spectra/eval/thunder_model.py break_his knn
 
-**Do not hardcode ``WAIV_POOLING`` in a sweep script.** The correct THUNDER pooling
+**Do not hardcode ``SPECTRA_POOLING`` in a sweep script.** The correct THUNDER pooling
 depends on the backbone (see ``THUNDER_CLSMEAN_BACKBONES`` below): cls for phikon-v2,
 clsmean for midnight and Virchow2. Leaving it unset picks the right one. For any backbone not in
-those tables there is no right one to pick, so an unset ``WAIV_POOLING`` is a hard error
+those tables there is no right one to pick, so an unset ``SPECTRA_POOLING`` is a hard error
 rather than a silent ``cls``.
 
 Why a module of its own rather than a function in ``thunder_adapter``
@@ -30,7 +30,7 @@ Pooling: THUNDER, like HEST, publishes a CLS-only number
 embedding is ``out.last_hidden_state[:, 0, :]`` (CLS, 1024-d; ``emb_dim: 1024`` in
 ``config/pretrained_model/phikon2.yaml``) and their segmentation embedding is
 ``out.last_hidden_state[:, 1:]`` (patch tokens). Same split as TRIDENT's HEST baseline.
-So ``WAIV_POOLING=cls`` is the setting that is comparable to their published phikon2 row,
+So ``SPECTRA_POOLING=cls`` is the setting that is comparable to their published phikon2 row,
 and ``clsmean`` is ours alone -- see ``hest_adapter`` for the same argument at length.
 
 Segmentation consumes patch tokens either way, so the two pooling modes differ only on the
@@ -83,9 +83,9 @@ from thunder.models import PretrainedModel  # noqa: E402
 # for overlap. This module used to carry its own copies, and they DRIFTED: the local
 # THUNDER_CLS_BACKBONES stayed {"owkin/phikon-v2"} after thunder_protocol.py gained
 # H-Optimus-0 and UNI2-h, so _default_pooling() below hard-errored on both gated
-# backbones -- i.e. WAIV_POOLING=auto was unusable for them and every caller had to
+# backbones -- i.e. SPECTRA_POOLING=auto was unusable for them and every caller had to
 # pass `cls` explicitly. Import, never re-declare.
-from waivphaet.eval.thunder_protocol import (  # noqa: E402
+from spectra.eval.thunder_protocol import (  # noqa: E402
     THUNDER_CLS_BACKBONES,
     THUNDER_CLSMEAN_BACKBONES,
 )
@@ -99,7 +99,7 @@ from waivphaet.eval.thunder_protocol import (  # noqa: E402
 
 
 def _default_pooling(backbone: str | None) -> str:
-    from waivphaet.models.encoder import DEFAULT_BACKBONE
+    from spectra.models.encoder import DEFAULT_BACKBONE
 
     backbone = backbone or DEFAULT_BACKBONE
     if backbone in THUNDER_CLSMEAN_BACKBONES:
@@ -108,10 +108,10 @@ def _default_pooling(backbone: str | None) -> str:
         return "cls"
     raise RuntimeError(
         f"no published THUNDER pooling protocol for backbone {backbone!r}. "
-        "Set WAIV_POOLING=cls|mean|clsmean explicitly for this run, and if the choice is "
+        "Set SPECTRA_POOLING=cls|mean|clsmean explicitly for this run, and if the choice is "
         "a protocol decision (i.e. it comes from arXiv:2607.22861 3), record it by adding "
         "the backbone to THUNDER_CLSMEAN_BACKBONES or THUNDER_CLS_BACKBONES in "
-        "src/waivphaet/eval/thunder_model.py."
+        "src/spectra/eval/thunder_model.py."
     )
 
 
@@ -135,7 +135,7 @@ def _is_segmentation_run(argv: list[str] | None = None) -> bool:
 
 
 def resolve_pooling(backbone: str | None, explicit: str | None, segmentation: bool) -> str:
-    """The single place ``WAIV_POOLING`` / ``auto`` is turned into a pooling mode.
+    """The single place ``SPECTRA_POOLING`` / ``auto`` is turned into a pooling mode.
 
     An explicit value always wins -- unchanged, including for segmentation, so an operator
     who deliberately passes a pooling mode still gets exactly it.
@@ -165,40 +165,40 @@ def resolve_pooling(backbone: str | None, explicit: str | None, segmentation: bo
     return pooling
 
 
-class WaivPhikonEncoder(PretrainedModel):
+class SpectraPhikonEncoder(PretrainedModel):
     """Our ``PhikonEncoder`` behind THUNDER's three-method interface.
 
     THUNDER validates ``self.name`` and ``self.emb_dim`` after construction and uses
-    ``self.name`` as the results directory, so ``WAIV_RUN_NAME`` is what keeps one
+    ``self.name`` as the results directory, so ``SPECTRA_RUN_NAME`` is what keeps one
     checkpoint's numbers from overwriting another's.
     """
 
     def __init__(self):
         super().__init__()
 
-        from waivphaet.eval.hest_adapter import build_transform, load_encoder
+        from spectra.eval.hest_adapter import build_transform, load_encoder
 
-        backbone = os.environ.get("WAIV_BACKBONE") or None
+        backbone = os.environ.get("SPECTRA_BACKBONE") or None
         pooling = resolve_pooling(
-            backbone, os.environ.get("WAIV_POOLING") or None, _is_segmentation_run()
+            backbone, os.environ.get("SPECTRA_POOLING") or None, _is_segmentation_run()
         )
-        adapter = os.environ.get("WAIV_ADAPTER") or None
-        checkpoint = os.environ.get("WAIV_CHECKPOINT") or None
+        adapter = os.environ.get("SPECTRA_ADAPTER") or None
+        checkpoint = os.environ.get("SPECTRA_CHECKPOINT") or None
 
         self.encoder = load_encoder(
             checkpoint,
             Path(adapter) if adapter else None,
             pooling,
-            lora_rank=int(os.environ.get("WAIV_LORA_RANK", 16)),
-            lora_alpha=int(os.environ.get("WAIV_LORA_ALPHA", 32)),
-            proj_out_dim=int(os.environ.get("WAIV_PROJ_OUT_DIM", 512)),
+            lora_rank=int(os.environ.get("SPECTRA_LORA_RANK", 16)),
+            lora_alpha=int(os.environ.get("SPECTRA_LORA_ALPHA", 32)),
+            proj_out_dim=int(os.environ.get("SPECTRA_PROJ_OUT_DIM", 512)),
             backbone=backbone,
         )
         self.t = build_transform(self.encoder.cfg.backbone)
 
         slug = self.encoder.cfg.backbone.split("/")[-1].replace("-", "").replace(".", "")
         default_name = f"waiv_{slug}_{pooling}" + ("" if not (adapter or checkpoint) else "_ft")
-        self.name = os.environ.get("WAIV_RUN_NAME", default_name)
+        self.name = os.environ.get("SPECTRA_RUN_NAME", default_name)
         # Derived from the backbone: phikon-v2 1024/2048, midnight 1536/3072,
         # Virchow2 1280/2560 (cls/clsmean).
         self.emb_dim = int(self.encoder.embed_dim)
@@ -218,7 +218,7 @@ class WaivPhikonEncoder(PretrainedModel):
         return self.encoder.embed(x)
 
     def _backbone_tokens(self, x):
-        """Raw ``(B, T, hidden)`` token sequence, dispatched the way ``WaivEncoder.embed``
+        """Raw ``(B, T, hidden)`` token sequence, dispatched the way ``SpectraEncoder.embed``
         dispatches it.
 
         ``embed`` is not reusable here because it returns the *pooled* vector and there is
@@ -251,8 +251,8 @@ class WaivPhikonEncoder(PretrainedModel):
 
 
 def _selftest() -> None:
-    """``python -m waivphaet.eval.thunder_model`` -- shape check without any dataset."""
-    m = WaivPhikonEncoder().eval()
+    """``python -m spectra.eval.thunder_model`` -- shape check without any dataset."""
+    m = SpectraPhikonEncoder().eval()
     x = torch.randn(2, 3, 224, 224)
     with torch.no_grad():
         lp, seg = m.get_linear_probing_embeddings(x), m.get_segmentation_embeddings(x)

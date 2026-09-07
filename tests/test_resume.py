@@ -22,9 +22,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from waivphaet.data.grid import GridBatchSampler
-from waivphaet.data.pairs import PairBatchSampler
-from waivphaet.train.contrastive import (
+from spectra.data.grid import GridBatchSampler
+from spectra.data.pairs import PairBatchSampler
+from spectra.train.contrastive import (
     RESUME_CONFIG_EXEMPT,
     TrainConfig,
     assert_resume_config_matches,
@@ -230,7 +230,7 @@ def test_resumed_optimizer_trajectory_equals_a_continuous_one(tmp_path):
     """
     import torch
 
-    from waivphaet.train.contrastive import cosine_lr
+    from spectra.train.contrastive import cosine_lr
 
     cfg = base_cfg(max_steps=40, warmup_steps=5, lr=1e-2)
     torch.manual_seed(0)
@@ -270,7 +270,7 @@ def test_resumed_optimizer_trajectory_equals_a_continuous_one(tmp_path):
 
 def test_cosine_lr_needs_no_scheduler_state():
     """Why there is no scheduler to checkpoint: the LR is a pure function of the step."""
-    from waivphaet.train.contrastive import cosine_lr
+    from spectra.train.contrastive import cosine_lr
 
     cfg = base_cfg(max_steps=1500, warmup_steps=200, lr=1e-4)
     assert [cosine_lr(s, cfg) for s in range(0, 1500, 97)] == [
@@ -287,7 +287,7 @@ def test_attempt_zero_finds_nothing(tmp_path):
 
 
 def test_prior_attempts_are_ordered_and_never_include_a_later_one(tmp_path):
-    from waivphaet.train.contrastive import prior_attempt_dirs
+    from spectra.train.contrastive import prior_attempt_dirs
 
     for n in ["", ".r1", ".r2", ".r3"]:
         (tmp_path / f"gridcmp2-a-380721{n}").mkdir(parents=True)

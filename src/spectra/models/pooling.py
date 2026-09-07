@@ -48,7 +48,7 @@ WHERE THE PREFIX-TOKEN SLICE LIVES
 ----------------------------------
 Nowhere in this file. Every pooling module takes an already-sliced ``(B, N, D)`` **patch**
 tensor; the slice is ``tokens[:, encoder.num_prefix_tokens:, :]`` and is done by
-:class:`~waivphaet.models.encoder.WaivEncoder`, which reads that count off the loaded
+:class:`~spectra.models.encoder.SpectraEncoder`, which reads that count off the loaded
 backbone -- 1 on phikon-v2, **5 on Virchow2** ([CLS] + 4 register tokens). Hardcoding
 ``tokens[:, 1:]`` would feed four register tokens into the pooling on Virchow2: right
 shape, right dtype, no warning, just a worse number.
@@ -88,7 +88,7 @@ class MeanPool(nn.Module):
     """``patches.mean(dim=1)``. The incumbent, and the CONTROL for gate G3.
 
     Parameterless and deliberately **not** upcast to float32: it must reproduce the inline
-    ``patches.mean(dim=1)`` in :meth:`WaivEncoder._pool_parts` bit-for-bit, because that is
+    ``patches.mean(dim=1)`` in :meth:`SpectraEncoder._pool_parts` bit-for-bit, because that is
     the arm already running.
 
     Its whole point is the defect: ``d(mean)/d(t_i) = (1/N) I`` for every ``i``, so the

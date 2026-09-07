@@ -3,16 +3,16 @@
 We do NOT reimplement anyone's metrics. Both harnesses are cloned into ``third_party/``
 (gitignored) and driven through their own entrypoints:
 
-* :mod:`waivphaet.eval.pathorob_adapter` -- **primary** robustness index (PLAN.md 1).
-* :mod:`waivphaet.eval.plism_adapter` -- PLISM retrieval, **diagnostic only**: we train
+* :mod:`spectra.eval.pathorob_adapter` -- **primary** robustness index (PLAN.md 1).
+* :mod:`spectra.eval.plism_adapter` -- PLISM retrieval, **diagnostic only**: we train
   on PLISM, so these numbers are never leaderboard-comparable (PLAN.md 1 + 6).
 
 Retention (PLAN.md 3 risk 1 -- "forgetting is the default outcome, not a tail risk"):
 
-* :mod:`waivphaet.eval.hest_adapter` -- **usable now.** Gene-expression regression,
+* :mod:`spectra.eval.hest_adapter` -- **usable now.** Gene-expression regression,
   9 tasks, 42 GB ungated, no WSIs. Base reproduced exactly against their published
   phikon_v2 row, so a checkpoint delta on it is real.
-* :mod:`waivphaet.eval.thunder_model` -- **usable now, nothing downloaded.** The corpus
+* :mod:`spectra.eval.thunder_model` -- **usable now, nothing downloaded.** The corpus
   already existed on this cluster in another user's scratch, *including*
   BRACS and MHIST, whose official downloaders are behind registration walls and block on
   ``input()``. 15 of the paper's 16 are present; ``segpath_epithelial`` is not, so the

@@ -22,16 +22,16 @@ never so it can be *assumed*.
 
 Local weight directories
 ------------------------
-``local_subdir`` is relative to ``SPECTRA_INPUTS`` (see :mod:`waivphaet.paths`), because
+``local_subdir`` is relative to ``SPECTRA_INPUTS`` (see :mod:`spectra.paths`), because
 the absolute location of a gated checkpoint is a property of the machine, not of the
-model.  ``WAIV_BACKBONE_LOCAL_DIRS="repo=/dir"`` still overrides any of them per job.
+model.  ``SPECTRA_BACKBONE_LOCAL_DIRS="repo=/dir"`` still overrides any of them per job.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from waivphaet.paths import INPUTS
+from spectra.paths import INPUTS
 
 #: ImageNet statistics -- what phikon-v2's own ``BitImageProcessor`` and PathoROB use.
 IMAGENET_MEAN = (0.485, 0.456, 0.406)

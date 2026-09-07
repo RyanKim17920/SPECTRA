@@ -7,7 +7,7 @@ negatives have to share the anchor's (scanner, stain), or "different scanner" be
 partially-correct shortcut for "different tile" and the objective starts *rewarding*
 retained acquisition signal.
 
-:mod:`waivphaet.data.pairs` already lays the batch out in condition-homogeneous groups,
+:mod:`spectra.data.pairs` already lays the batch out in condition-homogeneous groups,
 so enforcing the constraint here is one mask::
 
     valid_negative[i, j]  <=>  group_id[i] == group_id[j]
@@ -54,10 +54,10 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from waivphaet.data.grid import assert_grid_batch
-from waivphaet.data.pairs import assert_same_condition_negatives
+from spectra.data.grid import assert_grid_batch
+from spectra.data.pairs import assert_same_condition_negatives
 
-from waivphaet.paths import PLISM_PACKED
+from spectra.paths import PLISM_PACKED
 
 NEG_INF = float("-inf")
 
@@ -228,7 +228,7 @@ def grid_info_nce(
     n_tiles: int,
     temperature: float = 0.07,
 ) -> tuple[torch.Tensor, dict[str, float]]:
-    """InfoNCE over a shared-tile GRID batch (:mod:`waivphaet.data.grid`).
+    """InfoNCE over a shared-tile GRID batch (:mod:`spectra.data.grid`).
 
     Every image is BOTH an anchor in its own condition group AND a query against every
     other condition group, so ``C*T`` forward passes yield ``C*(C-1)*T`` query rows --
@@ -528,7 +528,7 @@ def split_head_info_nce(
 #
 # Which embeddings
 # ----------------
-# BACKBONE POOLED output (``WaivEncoder.embed`` / the first element of ``forward``), NOT
+# BACKBONE POOLED output (``SpectraEncoder.embed`` / the first element of ``forward``), NOT
 # the projector output. The projector is randomly initialised and discarded at eval time
 # -- PathoROB, HEST and THUNDER all read the pooled embedding -- so "preserve the
 # projector's geometry" would be preserving the geometry of a random map. It is also the
@@ -698,11 +698,11 @@ class TrainConfig:
     """Every value here is a guess. PLAN.md 3 risk 4: "no recipe means hyperparameter
     search, not a single run" -- LR / steps / LoRA rank / temperature are all unknown."""
 
-    #: ``$WAIV_PACKED_DIR``, read per-instantiation rather than at import so the library
+    #: ``$SPECTRA_PACKED_DIR``, read per-instantiation rather than at import so the library
     #: carries no machine-specific path; the fallback is this cluster's repacked PLISM so
     #: every existing launcher keeps working unchanged.
     packed_dir: str = field(
-        default_factory=lambda: os.environ.get("WAIV_PACKED_DIR", str(PLISM_PACKED))
+        default_factory=lambda: os.environ.get("SPECTRA_PACKED_DIR", str(PLISM_PACKED))
     )
     out_dir: str = "runs/dev"
     # optimisation
@@ -719,7 +719,7 @@ class TrainConfig:
     # batching -- prefer FEWER, LARGER groups: negatives per anchor is group_size - 1
     n_groups: int = 4
     group_size: int = 32
-    #: GRID sampler (:mod:`waivphaet.data.grid`). False = the pair sampler above, which is
+    #: GRID sampler (:mod:`spectra.data.grid`). False = the pair sampler above, which is
     #: the path every published number was produced on and is left bit-identical.
     #: True swaps in C x T shared-tile batches: C*T images/step (no separate positive
     #: tensor), T-1 negatives per row, C*(C-1)*T query rows. Mutually exclusive with
@@ -817,7 +817,7 @@ class TrainConfig:
     cls_weight: float = 0.5
     mean_weight: float = 0.5
     #: Pooling for the NON-CLS split head. ``"mean"`` = the incumbent, bit-identical to
-    #: the arm already running. See :mod:`waivphaet.models.pooling`: ``mean`` is linear, so
+    #: the arm already running. See :mod:`spectra.models.pooling`: ``mean`` is linear, so
     #: its per-token gradient is the same vector for every token and the loss can only
     #: TRANSLATE the token cloud -- which THUNDER's biased segmentation decoder absorbs
     #: into its bias. ``gem`` / ``attn`` / ``lse`` have token-dependent gradients.
@@ -1161,7 +1161,7 @@ def capture_rng_state() -> dict:
 
     Today the grid/pair training step consumes NO torch RNG: there is no stochastic
     augmentation (the positives are real registered pairs, not synthetic views -- see
-    :mod:`waivphaet.data.pairs`), and ``lora_dropout`` defaults to 0.0, at which peft
+    :mod:`spectra.data.pairs`), and ``lora_dropout`` defaults to 0.0, at which peft
     substitutes ``nn.Identity`` rather than a dropout layer. The batch PLAN sequence is
     numpy, seeded per epoch inside the sampler, and is restored by rewinding the sampler
     rather than from here.

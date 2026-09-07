@@ -19,7 +19,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from waivphaet.train.contrastive import grid_info_nce, grid_info_nce_blocked
+from spectra.train.contrastive import grid_info_nce, grid_info_nce_blocked
 
 #: Both paths compute in float32 -- ``grid_info_nce`` casts with ``z.float()`` regardless of
 #: the caller's dtype, so a float64 comparison is not available to sharpen these. The two

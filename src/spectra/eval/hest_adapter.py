@@ -61,7 +61,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-from waivphaet.paths import HEST_BENCH, HEST_WORK, HF_HOME
+from spectra.paths import HEST_BENCH, HEST_WORK, HF_HOME
 
 REPO = Path(__file__).resolve().parents[3]
 HEST_ROOT = REPO / "third_party" / "HEST"
@@ -138,7 +138,7 @@ def build_transform(backbone: str | None = None):
     phikon-v2, so every existing call is unchanged."""
     import torchvision.transforms as T
 
-    from waivphaet.models.encoder import normalization_for
+    from spectra.models.encoder import normalization_for
 
     mean, std = normalization_for(backbone)
     return T.Compose(

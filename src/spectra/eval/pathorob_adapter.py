@@ -142,7 +142,7 @@ def save_features(
 
     ``model_name`` is a free-form directory name -- because the metric scripts never call
     ``load_model``, we never have to register a ``ModelWrapper``. Use e.g.
-    ``waivphaet_step0005000``.
+    ``spectra_step0005000``.
     """
     if len(features) != len(metadata):
         raise ValueError(f"features {len(features)} != metadata rows {len(metadata)}")
