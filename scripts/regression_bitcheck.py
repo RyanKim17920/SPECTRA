@@ -20,12 +20,12 @@ FeatureDataManager npz layout and the metric itself. It isolates exactly the par
 refactor can break, and it does so before burning a GPU slot.
 """
 import importlib.util, os, sys
+import sys as _sys, pathlib as _pathlib  # noqa: E401 -- self-contained: this runs
+_sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent))  # before the
+from _config import export_legacy_env  # noqa: E402 -- module's own imports
 export_legacy_env()
 import numpy as np, torch
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _config import export_legacy_env  # noqa: E402
 
 def load(repo, n=64, pooling="clsmean"):
     for m in list(sys.modules):
