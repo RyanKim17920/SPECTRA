@@ -21,14 +21,14 @@ import numpy as np
 import pytest
 import torch
 
-from waivphaet.data.conditions import (
+from spectra.data.conditions import (
     SCANNERS, STAINS, all_conditions, make_split, parse_filename,
 )
-from waivphaet.data.pairs import (
+from spectra.data.pairs import (
     PairBatch, PairBatchSampler, assert_same_condition_negatives, collate_pair_batch,
 )
-from waivphaet.train.contrastive import masked_info_nce
-from waivphaet.paths import REPO as _REPO
+from spectra.train.contrastive import masked_info_nce
+from spectra.paths import REPO as _REPO
 
 
 def test_condition_grid_is_13x7():
@@ -193,7 +193,7 @@ def test_infonce_queries_positives_against_the_condition_homogeneous_anchors():
 
 def test_symmetric_is_off_by_default():
     """PLAN.md 2: the anchor->positive direction has cross-condition candidates."""
-    from waivphaet.train.contrastive import TrainConfig
+    from spectra.train.contrastive import TrainConfig
     assert TrainConfig().symmetric is False
 
 
@@ -210,7 +210,7 @@ def test_symmetric_is_off_by_default():
 
 
 def test_block_index_parses_the_naming_schemes_we_target():
-    from waivphaet.models.encoder import _block_index
+    from spectra.models.encoder import _block_index
 
     assert _block_index("encoder.layer.17.attention.attention.query") == 17
     assert _block_index("encoder.layers.3.mlp.fc1") == 3
@@ -251,7 +251,7 @@ def _fake_vit(n_blocks: int, ffn_names: tuple[str, str]):
     ids=["dinov2-mlp", "swiglu-ffn"],
 )
 def test_lora_discovery_covers_every_block_under_both_ffn_namings(ffn):
-    from waivphaet.models.encoder import EncoderConfig, _lora_target_names
+    from spectra.models.encoder import EncoderConfig, _lora_target_names
 
     model = _fake_vit(24, ffn)
     names, per_block, leaves = _lora_target_names(model, EncoderConfig())
@@ -266,7 +266,7 @@ def test_lora_discovery_covers_every_block_under_both_ffn_namings(ffn):
 def test_lora_discovery_is_unchanged_on_the_phikon_v2_naming():
     """The regression half: discovery must reproduce the old FIXED list exactly, or the
     PathoROB 0.468611 gate is being re-run against a different model."""
-    from waivphaet.models.encoder import (
+    from spectra.models.encoder import (
         LORA_TARGET_MODULES,
         EncoderConfig,
         _lora_target_names,
@@ -315,7 +315,7 @@ def test_loader_is_chosen_from_the_config_shape_not_a_model_name_list():
     """A name list would mean every future timm checkpoint takes the HF path and dies with
     an unrelated 'Unrecognized model' error. It would also mean a re-tagged repo keeps
     taking the wrong path forever. The config file is the source of truth."""
-    from waivphaet.models.encoder import _is_timm_config
+    from spectra.models.encoder import _is_timm_config
 
     assert _is_timm_config(_timm_style_config()) is True
     # The two PUBLISHED backbones: transformers configs, must stay on AutoModel.
@@ -337,7 +337,7 @@ def test_packed_gated_ffn_is_detected_from_checkpoint_shapes():
     """Virchow2 needs mlp_layer=SwiGLUPacked; that is not expressible in config.json, and
     keying it off the repo id is the per-model dispatch this module refuses. The
     checkpoint says it: fc1 packs gate+value, so fc1.out == 2 * fc2.in."""
-    from waivphaet.models.encoder import _needs_packed_gated_mlp
+    from spectra.models.encoder import _needs_packed_gated_mlp
 
     assert _needs_packed_gated_mlp(6832, 3416) is True    # Virchow2, measured
     assert _needs_packed_gated_mlp(4096, 4096) is False   # plain MLP
@@ -348,7 +348,7 @@ def test_normalization_override_still_wins_for_both_published_backbones(monkeypa
     """The precedence gained a timm branch. The override must still short-circuit FIRST --
     before any hub lookup at all -- or midnight's (0.5,0.5,0.5) could be replaced by
     whatever a re-uploaded config says, and every published number moves."""
-    from waivphaet.models import encoder as enc
+    from spectra.models import encoder as enc
 
     def _boom(*a, **k):  # any hub access at all is a failure of precedence
         raise AssertionError("normalization_for consulted the hub for a pinned backbone")
@@ -364,7 +364,7 @@ def test_normalization_override_still_wins_for_both_published_backbones(monkeypa
 def test_timm_normalization_is_read_from_pretrained_cfg(monkeypatch):
     """timm repos have no preprocessor_config.json, so AutoImageProcessor cannot answer
     for them -- timm publishes mean/std under pretrained_cfg instead."""
-    from waivphaet.models import encoder as enc
+    from spectra.models import encoder as enc
 
     monkeypatch.setattr(enc, "_hub_config", lambda b: _timm_style_config())
     monkeypatch.setattr(
@@ -401,7 +401,7 @@ def test_lora_discovery_on_a_timm_vit_needs_no_new_candidate_names():
     """Virchow2's in-block Linears are qkv / proj / fc1 / fc2 -- all four are already in
     LORA_CANDIDATE_MODULES, so nothing had to be added and nothing on the existing two
     backbones could change. 4/block x 32 blocks = 128 targets."""
-    from waivphaet.models.encoder import EncoderConfig, _lora_target_names
+    from spectra.models.encoder import EncoderConfig, _lora_target_names
 
     model = _fake_timm_vit(32)
     names, per_block, leaves = _lora_target_names(model, EncoderConfig())
@@ -414,10 +414,10 @@ def test_lora_discovery_on_a_timm_vit_needs_no_new_candidate_names():
 
 
 def test_candidate_module_list_is_frozen_for_the_published_backbones():
-    """The third guard in WaivEncoder raises when an in-block Linear matched nothing, so
+    """The third guard in SpectraEncoder raises when an in-block Linear matched nothing, so
     adding a name is safe; *removing* or over-generalising one is not. This pins the exact
     counts the published runs used: phikon-v2 6/block, midnight 6/block."""
-    from waivphaet.models.encoder import LORA_CANDIDATE_MODULES, EncoderConfig, _lora_target_names
+    from spectra.models.encoder import LORA_CANDIDATE_MODULES, EncoderConfig, _lora_target_names
 
     assert set(LORA_CANDIDATE_MODULES) == {
         "query", "key", "value", "dense", "fc1", "fc2",
@@ -440,7 +440,7 @@ def test_candidate_module_list_is_frozen_for_the_published_backbones():
 
 
 class _FakeSplitModel(torch.nn.Module):
-    """Minimal stand-in for WaivEncoder built with split_heads=('cls','mean').
+    """Minimal stand-in for SpectraEncoder built with split_heads=('cls','mean').
 
     No backbone — embed_parts returns random(-ish) tokens per chunk; the projectors
     are real ProjectionHead instances so BatchNorm coupling is real.
@@ -449,7 +449,7 @@ class _FakeSplitModel(torch.nn.Module):
     def __init__(self, hidden: int = 32, proj_hidden: int = 512, proj_out: int = 512,
                  seed: int = 0, same_weights: bool = False):
         super().__init__()
-        from waivphaet.models.encoder import ProjectionHead
+        from spectra.models.encoder import ProjectionHead
         torch.manual_seed(seed)
         self.hidden_size = hidden
         self.split_heads: tuple[str, ...] = ("cls", "mean")
@@ -499,7 +499,7 @@ def test_split_grid_degenerate_equivalence():
     (since cls==mean when images have identical cls/mean halves), so both terms equal L_single.
     Hence L_split == L_single.
     """
-    from waivphaet.train.contrastive import (
+    from spectra.train.contrastive import (
         _chunked_forward_split, grid_info_nce, grid_info_nce_split,
     )
 
@@ -531,7 +531,7 @@ def test_split_grid_degenerate_equivalence():
 
 def test_bn_no_chunk_invariant():
     """_chunked_forward_split with chunk=1 vs chunk=C*T gives identical projected outputs in eval."""
-    from waivphaet.train.contrastive import _chunked_forward_split
+    from spectra.train.contrastive import _chunked_forward_split
 
     C, T, H = 3, 5, 32
     model = _FakeSplitModel(hidden=H)
@@ -550,7 +550,7 @@ def test_bn_no_chunk_invariant():
 
 def test_bn_trailing_chunk_guard():
     """C*T=2401, chunk=600 must not raise (no trailing BatchNorm chunk of size 1)."""
-    from waivphaet.train.contrastive import _chunked_forward_split
+    from spectra.train.contrastive import _chunked_forward_split
 
     C, T, H = 49, 49, 32  # 49*49=2401; 2401 % 600 = 1  -- the exact bad case
     model = _FakeSplitModel(hidden=H)
@@ -566,7 +566,7 @@ def test_bn_trailing_chunk_guard():
 
 def test_per_head_metric_keys_present():
     """After a grid_info_nce_split call, loss_cls/top1_cls/loss_mean/top1_mean must be present."""
-    from waivphaet.train.contrastive import _chunked_forward_split, grid_info_nce_split
+    from spectra.train.contrastive import _chunked_forward_split, grid_info_nce_split
 
     C, T, H = 3, 4, 32
     model = _FakeSplitModel(hidden=H)
@@ -583,7 +583,7 @@ def test_per_head_metric_keys_present():
 
 def test_gradient_flows_to_both_projectors():
     """Both projectors["cls"].weight.grad and ["mean"].weight.grad must be non-None and non-zero."""
-    from waivphaet.train.contrastive import _chunked_forward_split, grid_info_nce_split
+    from spectra.train.contrastive import _chunked_forward_split, grid_info_nce_split
 
     C, T, H = 3, 4, 32
     model = _FakeSplitModel(hidden=H)
@@ -602,7 +602,7 @@ def test_gradient_flows_to_both_projectors():
 
 def test_anchor_emb_shape_with_split_grid_retention():
     """anchor_emb = pool_from_parts(parts) must have shape (C*T, 2*hidden) when split+grid."""
-    from waivphaet.train.contrastive import _chunked_forward_split
+    from spectra.train.contrastive import _chunked_forward_split
 
     C, T, H = 3, 4, 32
     model = _FakeSplitModel(hidden=H)
@@ -620,16 +620,16 @@ def test_anchor_emb_shape_with_split_grid_retention():
 
 
 class _PoolOnly:
-    """Just enough of WaivEncoder to call the real, unbound ``_pool``."""
+    """Just enough of SpectraEncoder to call the real, unbound ``_pool``."""
 
     def __init__(self, pooling, num_prefix_tokens):
         self.cfg = types.SimpleNamespace(pooling=pooling)
         self.num_prefix_tokens = num_prefix_tokens
 
     def pool(self, tokens):
-        from waivphaet.models.encoder import WaivEncoder
+        from spectra.models.encoder import SpectraEncoder
 
-        return WaivEncoder._pool(self, tokens)
+        return SpectraEncoder._pool(self, tokens)
 
 
 @pytest.mark.parametrize("pooling", ["cls", "mean", "clsmean"])
@@ -672,7 +672,7 @@ def test_thunder_pooling_is_resolved_per_backbone_not_hardcoded():
     """arXiv:2607.22861 §3 line 106: in THUNDER, CLS+mean-pool concatenation is used only
     for Virchow2 / AquaViT / H0-mini / Midnight-12k. phikon-v2 is CLS there. Hardcoding
     either one makes the base-vs-fine-tuned rank sums non-comparable to their table."""
-    src = Path(__file__).resolve().parents[1] / "src" / "waivphaet" / "eval" / "thunder_model.py"
+    src = Path(__file__).resolve().parents[1] / "src" / "spectra" / "eval" / "thunder_model.py"
     spec = importlib.util.spec_from_file_location("_waiv_thunder_model_test", src)
     mod = importlib.util.module_from_spec(spec)
     try:
@@ -695,7 +695,7 @@ def test_thunder_auto_pooling_never_resolves_to_clsmean_for_segmentation():
     import sys
     from pathlib import Path
 
-    src = Path(__file__).resolve().parents[1] / "src" / "waivphaet" / "eval" / "thunder_model.py"
+    src = Path(__file__).resolve().parents[1] / "src" / "spectra" / "eval" / "thunder_model.py"
     spec = importlib.util.spec_from_file_location("_waiv_thunder_seg_test", src)
     mod = importlib.util.module_from_spec(spec)
     try:
@@ -727,7 +727,7 @@ def test_thunder_auto_pooling_never_resolves_to_clsmean_for_segmentation():
         for ds in ("bach", "bracs", "break_his", "ccrcc", "crc", "esca", "mhist",
                    "patch_camelyon", "tcga_crc_msi", "tcga_tils", "tcga_uniform", "wilds"):
             assert not mod._is_segmentation_run(
-                ["benchmark", f"custom:{_REPO}/src/waivphaet/eval/"
+                ["benchmark", f"custom:{_REPO}/src/spectra/eval/"
                  "thunder_model.py", ds, task,
                  "--loading-mode", "embedding_pre_loading"]
             )
@@ -738,7 +738,7 @@ def test_thunder_auto_pooling_never_resolves_to_clsmean_for_segmentation():
 
 
 def _load_thunder_model(name):
-    """Import src/waivphaet/eval/thunder_model.py, stubbing ``thunder`` if it is absent.
+    """Import src/spectra/eval/thunder_model.py, stubbing ``thunder`` if it is absent.
 
     The two tests above skip when thunder is not importable, which is fine for them --
     they assert on protocol tables. These tests assert on the SEGMENTATION SLICE, which is
@@ -746,7 +746,7 @@ def _load_thunder_model(name):
     thunder is only used for the ``PretrainedModel`` base class and none of these tests
     instantiate the subclass, so a stub base is faithful.
     """
-    src = Path(__file__).resolve().parents[1] / "src" / "waivphaet" / "eval" / "thunder_model.py"
+    src = Path(__file__).resolve().parents[1] / "src" / "spectra" / "eval" / "thunder_model.py"
     stubbed = []
     if importlib.util.find_spec("thunder") is None:
         pkg = types.ModuleType("thunder")
@@ -789,7 +789,7 @@ class _TimmBackbone:
 
 
 def _seg_shim(mod, backbone, is_timm, num_prefix_tokens):
-    """Minimal stand-in for a constructed WaivPhikonEncoder.
+    """Minimal stand-in for a constructed SpectraPhikonEncoder.
 
     The real class cannot be instantiated without downloading a backbone, so the two real
     methods are bound onto a namespace instead -- the code under test is the shipped one,
@@ -799,7 +799,7 @@ def _seg_shim(mod, backbone, is_timm, num_prefix_tokens):
         backbone=backbone, is_timm=is_timm, num_prefix_tokens=num_prefix_tokens
     )
     shim = types.SimpleNamespace(encoder=enc)
-    shim._backbone_tokens = types.MethodType(mod.WaivPhikonEncoder._backbone_tokens, shim)
+    shim._backbone_tokens = types.MethodType(mod.SpectraPhikonEncoder._backbone_tokens, shim)
     return shim
 
 
@@ -818,7 +818,7 @@ def test_thunder_segmentation_slice_is_bit_identical_on_the_published_backbones(
 
     bb = _HFBackbone(tokens)
     expected = bb(pixel_values=x).last_hidden_state[:, 1:]      # the pre-change expression
-    got = mod.WaivPhikonEncoder.get_segmentation_embeddings(_seg_shim(mod, bb, False, 1), x)
+    got = mod.SpectraPhikonEncoder.get_segmentation_embeddings(_seg_shim(mod, bb, False, 1), x)
 
     assert got.shape == expected.shape
     assert torch.equal(got, expected), "segmentation slice moved on a published backbone"
@@ -842,7 +842,7 @@ def test_thunder_segmentation_drops_virchow2_register_tokens_and_calls_timm_posi
     with pytest.raises(TypeError):
         bb(pixel_values=x)                                       # bug 1, demonstrated
 
-    got = mod.WaivPhikonEncoder.get_segmentation_embeddings(_seg_shim(mod, bb, True, 5), x)
+    got = mod.SpectraPhikonEncoder.get_segmentation_embeddings(_seg_shim(mod, bb, True, 5), x)
     assert got.shape == (2, 256, 1280), got.shape
     assert torch.equal(got, tokens[:, 5:])
     # And the wrong-but-plausible version is genuinely different, i.e. the test has teeth.
@@ -891,7 +891,7 @@ def test_pathorob_virchow2_target_records_only_the_average():
     breakdown behind it. Inventing three numbers that average to 0.858 is undetectable
     once written down, so the per-dataset keys must be ABSENT, and the published rows must
     not have moved."""
-    from waivphaet.eval.pathorob_adapter import DATASETS, TARGETS, waiv_target
+    from spectra.eval.pathorob_adapter import DATASETS, TARGETS, waiv_target
 
     assert TARGETS["virchow2_base"] == {"avg": 0.858}
     assert TARGETS["virchow2_target"] == {"avg": 0.918}
@@ -948,7 +948,7 @@ def test_thunder_run_name_and_job_prefix_conventions_are_consistent_across_the_t
     # Run names: attributed by the collector. The base rows are literals in the
     # submitter; the FT rows are not, because the fine-tuned step is only known once the
     # blind "best PathoROB checkpoint" rule has run, so it is interpolated from
-    # WAIV_VIRCHOW2_FT_STEP. Assert on what the submitter actually EMITS rather than on
+    # SPECTRA_VIRCHOW2_FT_STEP. Assert on what the submitter actually EMITS rather than on
     # its source text -- that is the property the sweep depends on, and it keeps the test
     # honest across both a default and an overridden step.
     for run in ("vbase_clsmean", "vbase_cls"):
@@ -966,8 +966,8 @@ def test_thunder_run_name_and_job_prefix_conventions_are_consistent_across_the_t
             env = dict(os.environ,
                        PATH=f"{bindir}:{os.environ['PATH']}",
                        THUNDER_BASE_DATA_FOLDER=str(Path(td) / "empty_root"),
-                       WAIV_VIRCHOW2_FT_STEP=step,
-                       WAIV_VIRCHOW2_ADAPTER="runs/PLACEHOLDER-virchow2-adapter")
+                       SPECTRA_VIRCHOW2_FT_STEP=step,
+                       SPECTRA_VIRCHOW2_ADAPTER="runs/PLACEHOLDER-virchow2-adapter")
             emitted = subprocess.run(
                 ["bash", str(repo / "scripts" / "submit_thunder.sh"), "--backbone", "virchow2"],
                 capture_output=True, text=True, env=env, cwd=repo, check=True).stdout
@@ -1082,7 +1082,7 @@ def test_ckpt_schedule_parser():
 
 def test_should_checkpoint_uses_schedule_when_set():
     """_should_checkpoint respects ckpt_schedule over ckpt_every."""
-    from waivphaet.train.contrastive import TrainConfig, _should_checkpoint
+    from spectra.train.contrastive import TrainConfig, _should_checkpoint
 
     cfg = TrainConfig(ckpt_every=500, ckpt_schedule=[50, 100, 200])
     assert _should_checkpoint(50, cfg) is True
@@ -1094,7 +1094,7 @@ def test_should_checkpoint_uses_schedule_when_set():
 
 def test_should_checkpoint_uses_ckpt_every_when_no_schedule():
     """_should_checkpoint falls back to ckpt_every when schedule is None."""
-    from waivphaet.train.contrastive import TrainConfig, _should_checkpoint
+    from spectra.train.contrastive import TrainConfig, _should_checkpoint
 
     cfg = TrainConfig(ckpt_every=200, ckpt_schedule=None)
     assert _should_checkpoint(200, cfg) is True
@@ -1142,7 +1142,7 @@ class _FakeAdapterBackbone(torch.nn.Module):
 
 
 class _TinyEncoder(torch.nn.Module):
-    """Minimal WaivEncoder-shaped model: ``embed`` -> pooled, ``forward`` -> (pooled, proj).
+    """Minimal SpectraEncoder-shaped model: ``embed`` -> pooled, ``forward`` -> (pooled, proj).
 
     ``use_lora`` selects an adapter-carrying backbone (retention is possible) or a plain
     Linear (retention must refuse -- the full-FT case).
@@ -1220,7 +1220,7 @@ def test_retention_weight_zero_is_bit_identical_to_the_head_implementation():
 
     repo = Path(__file__).resolve().parents[1]
     head_src = subprocess.run(
-        ["git", "show", "HEAD:src/waivphaet/train/contrastive.py"],
+        ["git", "show", "HEAD:src/spectra/train/contrastive.py"],
         cwd=repo, capture_output=True, text=True, check=True,
     ).stdout
     head = _load_module_from_source("_contrastive_at_head", head_src)
@@ -1229,7 +1229,7 @@ def test_retention_weight_zero_is_bit_identical_to_the_head_implementation():
         # comparison is vacuous. Re-point it at the pre-retention commit to re-run it.
         pytest.skip("HEAD already contains the retention term; nothing to compare against")
 
-    import waivphaet.train.contrastive as new
+    import spectra.train.contrastive as new
 
     batches = _retention_batches()
     torch.manual_seed(0)
@@ -1260,7 +1260,7 @@ def test_retention_weight_zero_is_bit_identical_to_the_head_implementation():
 
 def test_relational_kl_is_nonnegative_and_exactly_zero_when_student_equals_teacher():
     """(b) Gibbs' inequality, asserted rather than assumed."""
-    from waivphaet.train.contrastive import relational_kl
+    from spectra.train.contrastive import relational_kl
 
     torch.manual_seed(0)
     g = torch.arange(24) // 8
@@ -1290,7 +1290,7 @@ def test_relational_kl_is_nonnegative_and_exactly_zero_when_student_equals_teach
 def test_relational_kl_masks_self_similarity_and_masks_both_sides_identically():
     """Self-similarity is 1.0 for teacher and student alike; at tau=0.07 leaving it in
     would make both rows ~one-hot and the term silently inert."""
-    from waivphaet.train.contrastive import relational_kl
+    from spectra.train.contrastive import relational_kl
 
     torch.manual_seed(0)
     s, t = torch.randn(12, 8), torch.randn(12, 8)
@@ -1312,7 +1312,7 @@ def test_retention_teacher_is_gradient_free_and_rng_neutral():
     the global generator relative to a weight=0 run, and the "off is identical" claim
     would only hold until the first dropout call.
     """
-    from waivphaet.train.contrastive import retention_teacher_embed
+    from spectra.train.contrastive import retention_teacher_embed
 
     torch.manual_seed(0)
     model = _TinyEncoder()
@@ -1348,7 +1348,7 @@ def test_retention_with_full_ft_raises():
     With no adapter to disable, teacher == student, the KL is identically 0, and the run
     reads as a retention-regularised fine-tune that regularised nothing.
     """
-    from waivphaet.train.contrastive import TrainConfig, assert_retention_teacher_available, train
+    from spectra.train.contrastive import TrainConfig, assert_retention_teacher_available, train
 
     assert_retention_teacher_available(_TinyEncoder(use_lora=True))  # the LoRA case is fine
 
@@ -1370,7 +1370,7 @@ def test_retention_with_full_ft_raises():
 
 def test_retention_defaults_are_off():
     """The one guarantee everything else rests on."""
-    from waivphaet.train.contrastive import TrainConfig
+    from spectra.train.contrastive import TrainConfig
 
     assert TrainConfig().retention_kl_weight == 0.0
     assert TrainConfig().retention_kl_temperature == 0.07
@@ -1378,7 +1378,7 @@ def test_retention_defaults_are_off():
 
 def test_retention_on_logs_both_terms_separately():
     """The trade-off has to be readable in history.json, not just the sum."""
-    from waivphaet.train.contrastive import TrainConfig, train
+    from spectra.train.contrastive import TrainConfig, train
 
     batches = _retention_batches()
     with tempfile.TemporaryDirectory() as tmp:
@@ -1395,7 +1395,7 @@ def test_retention_on_logs_both_terms_separately():
 
 
 # --------------------------------------------------------------------------------------
-# GRID sampler (waivphaet.data.grid): one shared tile list across C condition groups, so
+# GRID sampler (spectra.data.grid): one shared tile list across C condition groups, so
 # every image is both an anchor and a query. It inherits the pair sampler's load-bearing
 # invariant (candidates are condition-homogeneous) and ADDS one: every condition group
 # must use the SAME tiles in the SAME ORDER, because the loss identifies the positive by
@@ -1413,7 +1413,7 @@ class _PixelFreeGridDataset:
     """
 
     def __init__(self, n_conditions: int):
-        from waivphaet.data.grid import GridTileDataset
+        from spectra.data.grid import GridTileDataset
 
         self._real = object.__new__(GridTileDataset)
         self._real.conditions = list(range(n_conditions))
@@ -1429,7 +1429,7 @@ class _PixelFreeGridDataset:
 
 def _grid_collated(n_cond=4, n_tiles=5, n_available=12, seed=0):
     """One real sampler plan, materialised and collated. Returns (plan, collated batch)."""
-    from waivphaet.data.grid import GridBatchSampler, collate_grid_batch
+    from spectra.data.grid import GridBatchSampler, collate_grid_batch
 
     sampler = GridBatchSampler(
         list(range(n_available)), n_cond=n_cond, n_tiles=n_tiles,
@@ -1441,7 +1441,7 @@ def _grid_collated(n_cond=4, n_tiles=5, n_available=12, seed=0):
 
 
 def test_grid_happy_path_reports_the_geometry_it_actually_built():
-    from waivphaet.data.grid import assert_grid_batch
+    from spectra.data.grid import assert_grid_batch
 
     _, batch = _grid_collated(n_cond=4, n_tiles=5)
     stats = assert_grid_batch(batch, allowed_conditions=set(range(12)))
@@ -1460,7 +1460,7 @@ def test_grid_batch_MUST_FAIL_when_tile_sets_differ_between_condition_groups():
     tissue in both, so every cross-group "positive" grid_info_nce scores is a mislabelled
     pair -- and the loss would still fall. Nothing else in the pipeline notices.
     """
-    from waivphaet.data.grid import assert_grid_batch
+    from spectra.data.grid import assert_grid_batch
 
     _, batch = _grid_collated(n_cond=4, n_tiles=5)
     tiles = batch["tile_idx"].clone()
@@ -1478,7 +1478,7 @@ def test_grid_batch_MUST_FAIL_when_the_shared_tiles_are_merely_reordered():
     A set-equality check would pass this batch. It must not: swapping two tiles inside one
     group silently re-labels two positives per pair involving that group.
     """
-    from waivphaet.data.grid import assert_grid_batch
+    from spectra.data.grid import assert_grid_batch
 
     _, batch = _grid_collated(n_cond=4, n_tiles=5)
     tiles = batch["tile_idx"].clone()
@@ -1497,7 +1497,7 @@ def test_grid_batch_MUST_FAIL_when_the_shared_tiles_are_merely_reordered():
 def test_grid_batch_MUST_FAIL_on_a_duplicated_condition():
     """Two groups on the same acquisition: their cross-group 'positive' is one image twice,
     so that row is solvable at similarity 1 without learning anything."""
-    from waivphaet.data.grid import assert_grid_batch
+    from spectra.data.grid import assert_grid_batch
 
     _, batch = _grid_collated(n_cond=4, n_tiles=5)
     cond = batch["cond_idx"].clone()
@@ -1509,7 +1509,7 @@ def test_grid_batch_MUST_FAIL_on_a_duplicated_condition():
 
 
 def test_grid_batch_MUST_FAIL_on_a_duplicated_tile_in_the_shared_list():
-    from waivphaet.data.grid import assert_grid_batch
+    from spectra.data.grid import assert_grid_batch
 
     _, batch = _grid_collated(n_cond=3, n_tiles=5)
     tiles = batch["tile_idx"].clone().view(3, 5)
@@ -1521,7 +1521,7 @@ def test_grid_batch_MUST_FAIL_on_a_duplicated_tile_in_the_shared_list():
 
 
 def test_grid_batch_MUST_FAIL_on_a_heldout_condition_leak():
-    from waivphaet.data.grid import assert_grid_batch
+    from spectra.data.grid import assert_grid_batch
 
     _, batch = _grid_collated(n_cond=3, n_tiles=5, n_available=12)
     allowed = set(range(12)) - {int(batch["cond_idx"][0])}
@@ -1532,7 +1532,7 @@ def test_grid_batch_MUST_FAIL_on_a_heldout_condition_leak():
 def test_grid_batch_MUST_FAIL_when_a_candidate_block_is_not_condition_homogeneous():
     """The original PLAN.md 2 constraint, carried over: a mixed candidate row lets
     'different acquisition' stand in for 'different tile'."""
-    from waivphaet.data.grid import assert_grid_batch
+    from spectra.data.grid import assert_grid_batch
 
     _, batch = _grid_collated(n_cond=3, n_tiles=5)
     cond = batch["cond_idx"].clone()
@@ -1546,7 +1546,7 @@ def test_grid_batch_MUST_FAIL_when_a_candidate_block_is_not_condition_homogeneou
 def test_grid_sampler_refuses_more_conditions_than_exist():
     """Conditions are drawn WITHOUT replacement; asking for more must be an error, not a
     silent fallback to sampling with replacement (which is the duplicate-condition bug)."""
-    from waivphaet.data.grid import GridBatchSampler
+    from spectra.data.grid import GridBatchSampler
 
     with pytest.raises(ValueError, match="exceeds the"):
         GridBatchSampler(list(range(10)), n_cond=11, n_tiles=4)
@@ -1560,8 +1560,8 @@ def test_grid_negative_and_row_counts_at_the_launch_geometries(
     n_cond, n_tiles, expect_neg, expect_rows
 ):
     """G4: the two arms' arithmetic, measured on real batches rather than asserted on paper."""
-    from waivphaet.data.grid import assert_grid_batch
-    from waivphaet.train.contrastive import grid_info_nce
+    from spectra.data.grid import assert_grid_batch
+    from spectra.train.contrastive import grid_info_nce
 
     _, batch = _grid_collated(n_cond=n_cond, n_tiles=n_tiles, n_available=50)
     stats = assert_grid_batch(batch, allowed_conditions=set(range(50)))
@@ -1593,7 +1593,7 @@ def test_grid_loss_on_random_embeddings_sits_at_the_random_guess_value(n_cond, n
     """
     import math
 
-    from waivphaet.train.contrastive import grid_info_nce
+    from spectra.train.contrastive import grid_info_nce
 
     g = torch.Generator().manual_seed(0)
     z = torch.randn(n_cond * n_tiles, 2048, generator=g)
@@ -1620,7 +1620,7 @@ def test_grid_loss_excludes_the_self_pair_and_matches_a_reference_implementation
     """
     import torch.nn.functional as F
 
-    from waivphaet.train.contrastive import grid_info_nce
+    from spectra.train.contrastive import grid_info_nce
 
     c, t, d = 4, 6, 16
     g = torch.Generator().manual_seed(3)
@@ -1639,7 +1639,7 @@ def test_grid_loss_excludes_the_self_pair_and_matches_a_reference_implementation
 
 
 def test_grid_loss_rejects_a_geometry_that_does_not_match_the_tensor():
-    from waivphaet.train.contrastive import grid_info_nce
+    from spectra.train.contrastive import grid_info_nce
 
     z = torch.randn(4 * 5, 8)
     with pytest.raises(ValueError, match="does not match the declared geometry"):
@@ -1663,7 +1663,7 @@ def test_grid_and_pair_batching_flags_are_mutually_exclusive_in_the_cli():
 
 def test_train_config_records_which_sampler_produced_the_run():
     """config.json is the only durable record of the batching; default must stay OFF."""
-    from waivphaet.train.contrastive import TrainConfig
+    from spectra.train.contrastive import TrainConfig
 
     assert TrainConfig().grid is False
     assert TrainConfig().grid_conditions == 0 and TrainConfig().grid_tiles == 0
@@ -1681,7 +1681,7 @@ def test_grid_forward_chunking_is_a_memory_device_not_a_maths_change():
     silently make the grid arms incomparable to CTRL, so both the concatenated output and
     the resulting gradients are checked against a single unchunked forward.
     """
-    from waivphaet.train.contrastive import _chunked_forward
+    from spectra.train.contrastive import _chunked_forward
 
     torch.manual_seed(0)
     model = _TinyEncoder()
@@ -1757,8 +1757,8 @@ def test_grid_heldout_eval_runs_at_its_own_narrower_geometry():
     The gate smoke runs with eval disabled, so nothing else would catch this until step
     250 of a 1500-step run -- i.e. 25 minutes into a job, after the GPUs are committed.
     """
-    from waivphaet.train.contrastive import TrainConfig, evaluate_heldout
-    from waivphaet.data.grid import GridBatchSampler, GridTileDataset, collate_grid_batch
+    from spectra.train.contrastive import TrainConfig, evaluate_heldout
+    from spectra.data.grid import GridBatchSampler, GridTileDataset, collate_grid_batch
 
     d_in = 10
     ds = object.__new__(GridTileDataset)
@@ -1794,7 +1794,7 @@ def test_grid_heldout_eval_runs_at_its_own_narrower_geometry():
 
 
 class _SplitTinyEncoder(torch.nn.Module):
-    """Minimal split-head model that runs the REAL ``WaivEncoder`` pooling/forward code.
+    """Minimal split-head model that runs the REAL ``SpectraEncoder`` pooling/forward code.
 
     Only ``self`` is fake: ``_pool``, ``_pool_parts``, ``pool_from_parts``,
     ``embed_parts`` and ``forward_split`` are the shipped implementations, bound here so
@@ -1809,8 +1809,8 @@ class _SplitTinyEncoder(torch.nn.Module):
                  d_proj=512, use_lora=True, pool_head="mean"):
         import torch.nn as nn
 
-        from waivphaet.models.encoder import ProjectionHead, WaivEncoder
-        from waivphaet.models.pooling import build_pool_head
+        from spectra.models.encoder import ProjectionHead, SpectraEncoder
+        from spectra.models.pooling import build_pool_head
 
         super().__init__()
         self.cfg = types.SimpleNamespace(use_lora=use_lora, pooling="clsmean")
@@ -1828,7 +1828,7 @@ class _SplitTinyEncoder(torch.nn.Module):
         )
         for name in ("_pool", "_pool_parts", "pool_from_parts", "embed_parts",
                      "forward_split", "pool_head_metrics"):
-            setattr(self, name, types.MethodType(getattr(WaivEncoder, name), self))
+            setattr(self, name, types.MethodType(getattr(SpectraEncoder, name), self))
 
     def tokens(self, images):
         return self.backbone(images)
@@ -1856,7 +1856,7 @@ def _split_batches(n_batches=3, n_groups=2, group_size=6, hidden=8, n_tokens=7, 
 def test_split_heads_receive_genuinely_different_inputs():
     """cls_vec and mean_vec must differ by a real margin on a real batch, not merely in
     dtype/shape. If they did not, L_cls + L_mean would be 2x one loss."""
-    from waivphaet.train.contrastive import assert_split_head_inputs
+    from spectra.train.contrastive import assert_split_head_inputs
 
     torch.manual_seed(0)
     model = _SplitTinyEncoder()
@@ -1886,7 +1886,7 @@ def test_split_head_input_assertion_MUST_FAIL_when_both_heads_get_the_same_vecto
     This is the test that has to RAISE. Without it the bug is invisible -- same shapes,
     same dtype, a perfectly plausible falling loss curve.
     """
-    from waivphaet.train.contrastive import assert_split_head_inputs
+    from spectra.train.contrastive import assert_split_head_inputs
 
     torch.manual_seed(0)
     v = torch.randn(12, 8)
@@ -1903,7 +1903,7 @@ def test_split_head_input_assertion_MUST_FAIL_when_both_heads_get_the_same_vecto
 def test_split_head_input_assertion_MUST_FAIL_on_a_concat_width_input():
     """Feeding a head the 2048-d concat instead of one 1024-d pool is a width bug, and
     ``ProjectionHead`` would raise somewhere far away. Catch it at the source."""
-    from waivphaet.train.contrastive import assert_split_head_inputs
+    from spectra.train.contrastive import assert_split_head_inputs
 
     torch.manual_seed(0)
     cls = torch.randn(12, 8)
@@ -1913,7 +1913,7 @@ def test_split_head_input_assertion_MUST_FAIL_on_a_concat_width_input():
 
 def test_split_head_loss_is_not_two_copies_of_one_loss():
     """End to end: the per-head losses must be genuinely different numbers."""
-    from waivphaet.train.contrastive import split_head_info_nce
+    from spectra.train.contrastive import split_head_info_nce
 
     torch.manual_seed(0)
     model = _SplitTinyEncoder()
@@ -1934,7 +1934,7 @@ def test_split_head_loss_is_not_two_copies_of_one_loss():
 
 
 def test_zero_weight_head_is_not_built_at_all():
-    from waivphaet.train.contrastive import build_split_head_names
+    from spectra.train.contrastive import build_split_head_names
 
     assert build_split_head_names(0.5, 0.5) == ("cls", "mean")
     assert build_split_head_names(1.0, 0.0) == ("cls",)
@@ -1951,7 +1951,7 @@ def test_mean_head_is_absent_and_gets_no_gradient_at_mean_weight_zero():
     Absence is checked structurally (no module, no parameter, no state_dict entry) and
     dynamically (a full training run leaves gradient only on cls-head parameters).
     """
-    import waivphaet.train.contrastive as C
+    import spectra.train.contrastive as C
 
     torch.manual_seed(0)
     model = _SplitTinyEncoder(heads=("cls",))
@@ -1995,7 +1995,7 @@ def test_a_zero_weighted_head_would_still_move_its_batchnorm_stats():
     the FORWARD pass and is not gated by the loss weight, so a head built at weight 0 keeps
     mutating state every step while contributing nothing. That is not a single-head arm.
     """
-    from waivphaet.models.encoder import ProjectionHead
+    from spectra.models.encoder import ProjectionHead
 
     torch.manual_seed(0)
     head = ProjectionHead(8, 16, 512).train()
@@ -2011,7 +2011,7 @@ def test_a_zero_weighted_head_would_still_move_its_batchnorm_stats():
 
 def test_train_refuses_a_model_whose_heads_disagree_with_the_weights():
     """A config asking for two heads against a one-head model is the silent-arm bug."""
-    import waivphaet.train.contrastive as C
+    import spectra.train.contrastive as C
 
     torch.manual_seed(0)
     model = _SplitTinyEncoder(heads=("cls",))
@@ -2030,7 +2030,7 @@ def test_train_refuses_a_model_whose_heads_disagree_with_the_weights():
 
 
 def test_checkpoint_roundtrip_preserves_both_projectors():
-    import waivphaet.train.contrastive as C
+    import spectra.train.contrastive as C
 
     torch.manual_seed(0)
     model = _SplitTinyEncoder(heads=("cls", "mean"))
@@ -2068,7 +2068,7 @@ def test_checkpoint_roundtrip_preserves_both_projectors():
 
 def test_single_head_checkpoint_artifact_is_unchanged():
     """The default path must still write exactly one ``projector.pt`` and no manifest."""
-    import waivphaet.train.contrastive as C
+    import spectra.train.contrastive as C
 
     torch.manual_seed(0)
     model = _TinyEncoder()
@@ -2088,12 +2088,12 @@ def test_single_head_checkpoint_artifact_is_unchanged():
 
 def _fake_hf_encoder(monkeypatch, hidden=1024, n_tokens=197, split_heads=(),
                      pooling="clsmean", pool_head="mean", tokens=None):
-    """A REAL ``WaivEncoder`` over a fake HF backbone -- no download, real construction.
+    """A REAL ``SpectraEncoder`` over a fake HF backbone -- no download, real construction.
 
     This is what makes the width assertions meaningful: the ProjectionHeads below are
     built by the shipped ``__init__``, at the real phikon-v2 hidden size.
     """
-    import waivphaet.models.encoder as E
+    import spectra.models.encoder as E
 
     # ``tokens`` is injectable so two encoders can be built over the SAME backbone output,
     # which is what makes "these two arms are byte-identical" a real comparison rather
@@ -2108,7 +2108,7 @@ def _fake_hf_encoder(monkeypatch, hidden=1024, n_tokens=197, split_heads=(),
                         types.SimpleNamespace(from_pretrained=lambda *_a, **_k: backbone))
     monkeypatch.setattr(E, "is_timm_backbone", lambda _b: False)
     monkeypatch.setattr(E, "normalization_for", lambda _b: (E.IMAGENET_MEAN, E.IMAGENET_STD))
-    model = E.WaivEncoder(E.EncoderConfig(
+    model = E.SpectraEncoder(E.EncoderConfig(
         backbone="owkin/phikon-v2", use_lora=False, pooling=pooling,
         split_heads=tuple(split_heads), pool_head=pool_head,
     ))
@@ -2153,7 +2153,7 @@ def test_single_head_encoder_is_structurally_unchanged(monkeypatch):
 
 
 def test_split_encoder_rejects_an_unknown_head_name(monkeypatch):
-    import waivphaet.models.encoder as E
+    import spectra.models.encoder as E
 
     with pytest.raises(ValueError, match="unknown split head"):
         _fake_hf_encoder(monkeypatch, split_heads=("cls", "patchmax"))
@@ -2170,12 +2170,12 @@ def test_pool_parts_reads_num_prefix_tokens_from_the_encoder(num_prefix_tokens, 
     registers in is right-shape, right-dtype, no-warning, just a worse number -- so the
     5-prefix case gets a numerical test against the model card's own expression.
     """
-    from waivphaet.models.encoder import WaivEncoder
+    from spectra.models.encoder import SpectraEncoder
 
     torch.manual_seed(0)
     tokens = torch.randn(3, n_tokens, 32, dtype=torch.float64)
     shim = _PoolOnly("clsmean", num_prefix_tokens)
-    parts = WaivEncoder._pool_parts(shim, tokens)
+    parts = SpectraEncoder._pool_parts(shim, tokens)
 
     assert torch.equal(parts["cls"], tokens[:, 0, :])
     assert torch.equal(parts["mean"], tokens[:, num_prefix_tokens:, :].mean(dim=1))
@@ -2200,10 +2200,10 @@ def test_split_weights_are_scale_neutral_not_a_hidden_lr_change():
     """
     import copy
 
-    from waivphaet.train.contrastive import (
+    from spectra.train.contrastive import (
         TrainConfig, masked_info_nce, split_head_info_nce,
     )
-    from waivphaet.models.encoder import ProjectionHead
+    from spectra.models.encoder import ProjectionHead
 
     torch.manual_seed(0)
     head = ProjectionHead(8, 16, 512).eval()   # eval(): BN in inference mode, so the two
@@ -2308,7 +2308,7 @@ def test_split_heads_and_grid_are_mutually_exclusive(tmp_path):
 
 def test_train_config_records_the_split_head_objective():
     """config.json is the only place a later reader can tell the arms apart."""
-    import waivphaet.train.contrastive as C
+    import spectra.train.contrastive as C
 
     cfg = C.TrainConfig(split_heads=True, cls_weight=1.0, mean_weight=0.0)
     d = json.loads(json.dumps(dataclasses.asdict(cfg)))
@@ -2318,7 +2318,7 @@ def test_train_config_records_the_split_head_objective():
 
 def test_split_head_history_logs_both_terms_separately():
     """Without per-head loss and top1 in history.json the three arms are uninterpretable."""
-    import waivphaet.train.contrastive as C
+    import spectra.train.contrastive as C
 
     torch.manual_seed(0)
     model = _SplitTinyEncoder(heads=("cls", "mean"))
@@ -2395,7 +2395,7 @@ def _layernormed_tokens(b=4, n=196, d=64, seed=7):
 
 def test_G3_mean_pooling_gives_every_token_the_IDENTICAL_gradient():
     """The defect, documented as a number. This test is SUPPOSED to show zero spread."""
-    from waivphaet.models.pooling import MeanPool, token_gradient_spread
+    from spectra.models.pooling import MeanPool, token_gradient_spread
 
     x = _layernormed_tokens()
     stats = token_gradient_spread(MeanPool(), x)
@@ -2420,7 +2420,7 @@ def test_G3_alternative_poolings_have_token_DEPENDENT_gradients(name):
     segmentation null-space argument and is not worth a GPU. The margin is 1e-2, four
     orders of magnitude above the float32 noise floor that `mean` measures at (exactly 0).
     """
-    from waivphaet.models.pooling import build_pool_head, token_gradient_spread
+    from spectra.models.pooling import build_pool_head, token_gradient_spread
 
     torch.manual_seed(0)
     x = _layernormed_tokens()
@@ -2433,8 +2433,8 @@ def test_G3_alternative_poolings_have_token_DEPENDENT_gradients(name):
 def test_G3_pool_head_registry_and_partition_are_consistent():
     """The names the CLI offers, the ones the encoder accepts and the ones G3 claims are
     token-dependent must be ONE list, not three that can drift apart."""
-    import waivphaet.models.pooling as P
-    from waivphaet.models.encoder import EncoderConfig
+    import spectra.models.pooling as P
+    from spectra.models.encoder import EncoderConfig
 
     assert P.POOL_HEAD_NAMES == ("mean", "gem", "gem_clamp", "attn", "lse")
     assert set(P.TOKEN_DEPENDENT_POOLS) == set(P.POOL_HEAD_NAMES) - {"mean"}
@@ -2456,7 +2456,7 @@ def test_G4_clamp_gem_zeroes_about_half_of_every_token_and_says_so():
     The number has to be reported, so it is asserted here and logged as
     ``pool_zero_fraction`` in history.json.
     """
-    from waivphaet.models.pooling import GeMPool
+    from spectra.models.pooling import GeMPool
 
     x = _layernormed_tokens()
     assert (x < 0).float().mean() > 0.4, "the fixture is not actually signed"
@@ -2477,7 +2477,7 @@ def test_G4_clamp_gem_zeroes_about_half_of_every_token_and_says_so():
 @pytest.mark.parametrize("name", ["gem", "attn", "lse"])
 def test_G4_softplus_attn_and_lse_zero_nothing(name):
     """(G4) The shipped variants must not destroy a single entry, nor kill a gradient."""
-    from waivphaet.models.pooling import build_pool_head
+    from spectra.models.pooling import build_pool_head
 
     torch.manual_seed(0)
     x = _layernormed_tokens()
@@ -2501,7 +2501,7 @@ def test_G4_softplus_gem_keeps_the_ordering_the_clamp_destroys():
     """Monotonicity is the whole reason softplus replaces the clamp: two tokens that
     differ ONLY in their negative entries are indistinguishable to clamp-GeM and
     distinguishable to softplus-GeM."""
-    from waivphaet.models.pooling import GeMPool
+    from spectra.models.pooling import GeMPool
 
     a = torch.tensor([[[-1.0, 2.0], [-3.0, 2.0]]])   # (1, 2, 2)
     b = torch.tensor([[[-9.0, 2.0], [-0.5, 2.0]]])   # same positives, different negatives
@@ -2512,7 +2512,7 @@ def test_G4_softplus_gem_keeps_the_ordering_the_clamp_destroys():
 
 
 def test_pool_head_learnable_state_is_reported_and_starts_where_documented():
-    from waivphaet.models.pooling import build_pool_head
+    from spectra.models.pooling import build_pool_head
 
     torch.manual_seed(0)
     x = _layernormed_tokens()
@@ -2538,7 +2538,7 @@ def test_pool_head_learnable_state_is_reported_and_starts_where_documented():
 
 def test_lse_pooling_interpolates_mean_to_max():
     """tau -> 0 is the mean, large tau is the max. The interpolation is the claim."""
-    from waivphaet.models.pooling import LSEPool
+    from spectra.models.pooling import LSEPool
 
     x = _layernormed_tokens(b=2, n=32, d=8)
     tiny = LSEPool(tau_init=1e-6)
@@ -2615,7 +2615,7 @@ def test_G5_pool_head_mean_is_the_SAME_CODE_as_no_pool_head(monkeypatch):
 def test_pool_head_reads_num_prefix_tokens_from_the_encoder(monkeypatch):
     """(G5) 1 on phikon-v2, 5 on Virchow2. The pooling modules never see the prefix slice
     at all -- the ENCODER does it -- so this asserts the encoder passes the right window."""
-    import waivphaet.models.encoder as E
+    import spectra.models.encoder as E
 
     for num_prefix, n_tokens in ((1, 197), (5, 261)):
         model, tokens = _fake_hf_encoder(monkeypatch, hidden=32, n_tokens=n_tokens,
@@ -2647,7 +2647,7 @@ def test_split_head_assertion_watches_the_POOLED_input_not_the_unused_mean():
     retention term needs it) but the head is fed ``parts['pool']``. If the assertion kept
     reading 'mean' it would be comparing CLS against a vector nothing consumed, and a gem
     head accidentally wired to CLS would sail straight past it."""
-    from waivphaet.train.contrastive import assert_split_head_inputs
+    from spectra.train.contrastive import assert_split_head_inputs
 
     cls = torch.randn(6, 8)
     parts = {"cls": cls, "mean": torch.randn(6, 8), "pool": cls.clone()}
@@ -2662,7 +2662,7 @@ def test_split_head_assertion_watches_the_POOLED_input_not_the_unused_mean():
 def test_pool_head_end_to_end_step_trains_the_pooling_parameters(pool_head):
     """One real optimiser step through the shipped split-head loss: the pooling's own
     parameters must receive gradient, or the "learnable p / tau / query" claim is empty."""
-    from waivphaet.train.contrastive import assert_split_head_inputs, split_head_info_nce
+    from spectra.train.contrastive import assert_split_head_inputs, split_head_info_nce
 
     torch.manual_seed(0)
     model = _SplitTinyEncoder(hidden=8, n_tokens=7, pool_head=pool_head)
@@ -2686,7 +2686,7 @@ def test_pool_head_end_to_end_step_trains_the_pooling_parameters(pool_head):
 def test_pool_head_checkpoint_roundtrips(tmp_path):
     """GeM's p, LSE's tau and the attention query are TRAINED and are not reconstructible
     from anything else in the directory, so they have to be in the checkpoint."""
-    from waivphaet.train.contrastive import load_projectors, save_projectors
+    from spectra.train.contrastive import load_projectors, save_projectors
 
     torch.manual_seed(0)
     model = _SplitTinyEncoder(hidden=8, pool_head="gem")
@@ -2704,7 +2704,7 @@ def test_pool_head_checkpoint_roundtrips(tmp_path):
 
 def test_mean_pool_head_checkpoint_artifact_is_unchanged(tmp_path):
     """The arm already running must keep writing exactly the files it writes today."""
-    from waivphaet.train.contrastive import save_projectors
+    from spectra.train.contrastive import save_projectors
 
     model = _SplitTinyEncoder(hidden=8, pool_head="mean")
     man = save_projectors(model, tmp_path)
@@ -2718,7 +2718,7 @@ def test_mean_pool_head_checkpoint_artifact_is_unchanged(tmp_path):
 def test_train_refuses_a_config_pool_head_the_encoder_does_not_have():
     """A run whose name says gem and whose encoder pools with the mean is a result nothing
     downstream could ever catch. Fail before any compute."""
-    from waivphaet.train.contrastive import TrainConfig, train
+    from spectra.train.contrastive import TrainConfig, train
 
     model = _SplitTinyEncoder(hidden=8, pool_head="mean")
     cfg = TrainConfig(split_heads=True, pool_head="gem", max_steps=1)
@@ -2775,8 +2775,8 @@ def test_pool_head_gem_clamp_warns_that_it_is_a_diagnostic():
 
 def test_train_config_and_encoder_config_both_record_the_pooling():
     """config.json is the only place a later reader can tell a gem run from a mean one."""
-    from waivphaet.models.encoder import EncoderConfig
-    from waivphaet.train.contrastive import TrainConfig
+    from spectra.models.encoder import EncoderConfig
+    from spectra.train.contrastive import TrainConfig
 
     assert "pool_head" in dataclasses.asdict(TrainConfig())
     assert EncoderConfig(split_heads=("cls", "mean"), pool_head="attn").pool_head == "attn"
@@ -2802,3 +2802,96 @@ def test_probe_readers_ignore_pool_head_pt():
         assert ".iterdir()" not in body and ".glob(" not in body, (
             f"{rel}:{fn} enumerates the checkpoint dir; an extra artifact could break it"
         )
+
+
+def test_gentle_sbatch_pin_defaults_are_vendored_and_tracked():
+    """(G7) Every arm's DEFAULT pin must resolve inside a fresh clone.
+
+    Training does not run out of the working tree; it runs out of a frozen snapshot named
+    by ``PIN``. That default used to be an absolute path on one machine
+    (``/admin/home/.../waiv-snapshots/...``), so ``sbatch scripts/gentle.sbatch`` on any
+    other checkout died at line 80 -- before the scheduler, before a log, with a run that
+    the published results say is reproducible.
+
+    Existence on THIS disk proves nothing about a clone, so the check is ``git ls-files``:
+    a snapshot that is present but untracked is exactly the failure this guards.
+    """
+    import re
+    from fnmatch import fnmatch
+
+    repo = Path(__file__).resolve().parents[1]
+    src = (repo / "scripts" / "gentle.sbatch").read_text()
+
+    assert "/admin/home" not in src, "gentle.sbatch names a personal absolute path again"
+
+    arms = re.search(r"set WAIV_ARM=([a-z0-9|]+)", src).group(1).split("|")
+    assert len(arms) >= 7, f"expected the full backbone set, got {arms}"
+
+    cases = re.findall(
+        r'^\s*([a-z0-9|*]+)\)\s*DEFAULT_PIN="\$SPECTRA_SNAPSHOTS/([\w.-]+)"', src, re.M
+    )
+    assert cases, "no per-arm DEFAULT_PIN case found in gentle.sbatch"
+
+    for arm in arms:
+        snap = next(
+            (s for pats, s in cases if any(fnmatch(arm, p) for p in pats.split("|"))), None
+        )
+        assert snap is not None, f"arm {arm!r} falls through the DEFAULT_PIN case"
+
+        pin = repo / "snapshots" / snap
+        tracked = subprocess.run(
+            ["git", "ls-files", "--", f"snapshots/{snap}"],
+            cwd=repo, capture_output=True, text=True, check=True,
+        ).stdout.split()
+        assert tracked, f"arm {arm!r} defaults to snapshots/{snap}, which is not in git"
+
+        # The snapshot predates the package rename, so the package directory is discovered
+        # rather than named -- the same rule gentle.sbatch itself uses.
+        pkgs = [d for d in (pin / "src").iterdir() if (d / "train" / "contrastive.py").is_file()]
+        assert len(pkgs) == 1, f"snapshots/{snap}/src holds {len(pkgs)} candidate packages"
+        assert (pin / "scripts" / "train_lora.py").is_file(), f"snapshots/{snap} has no train_lora.py"
+
+        # gentle.sbatch refuses to launch without this, so a pin that lacks it is a pin
+        # that can only fail at step 0.
+        body = (pkgs[0] / "train" / "contrastive.py").read_text()
+        assert "delegate rather than refuse" in body, (
+            f"snapshots/{snap} lacks the pool-head delegation GEM+grid needs"
+        )
+
+
+def test_gated_arms_pin_a_snapshot_that_can_load_a_gated_backbone():
+    """(G7) The four local/gated arms must not default to a pin that cannot serve them.
+
+    ``falseneg-pinned`` reaches the hub for every backbone. For H-optimus-0, UNI2-h,
+    Virchow v1 and OpenMidnight that is a 403 which ``_hub_config`` swallows into ``None``,
+    so the run is misrouted to ``AutoModel`` and dies on "Unrecognized model" -- naming
+    neither gating nor the real architecture. Pinning those arms to the snapshot with the
+    local-directory table is therefore correctness, not preference.
+    """
+    import re
+    from fnmatch import fnmatch
+
+    repo = Path(__file__).resolve().parents[1]
+    src = (repo / "scripts" / "gentle.sbatch").read_text()
+    cases = re.findall(
+        r'^\s*([a-z0-9|*]+)\)\s*DEFAULT_PIN="\$SPECTRA_SNAPSHOTS/([\w.-]+)"', src, re.M
+    )
+
+    for arm in ("hoptimus", "uni2", "openmidnight", "virchow"):
+        snap = next(s for pats, s in cases if any(fnmatch(arm, p) for p in pats.split("|")))
+        pkg = next(d for d in (repo / "snapshots" / snap / "src").iterdir()
+                   if (d / "train" / "contrastive.py").is_file())
+        enc = (pkg / "models" / "encoder.py").read_text()
+        assert "BACKBONE_LOCAL_DIRS" in enc, (
+            f"arm {arm!r} defaults to snapshots/{snap}, whose encoder has no local-directory "
+            "binding -- its backbone is gated or converted and cannot come off the hub"
+        )
+        assert "WAIV_BACKBONE_LOCAL_DIRS" in enc, (
+            f"snapshots/{snap} has no environment override for the local binding; /data has "
+            "been swept before and repointing must not require a code edit"
+        )
+
+    # ...and the non-gated arms keep the snapshot that actually produced their rows.
+    for arm in ("phikon", "midnight", "virchow2"):
+        snap = next(s for pats, s in cases if any(fnmatch(arm, p) for p in pats.split("|")))
+        assert snap == "falseneg-pinned", f"arm {arm!r} moved off its published pin ({snap})"
