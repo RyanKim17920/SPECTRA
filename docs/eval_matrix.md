@@ -32,10 +32,10 @@ steps are sensitivity points, not substitutes for it.
 | `midnight-c50-s0-step150` | midnight | **150 (op)** | done | done | done | done | done | 5/5 |
 | `midnight-c50-s1-step100` | midnight | 100 | done | done | done | done | done | 5/5 |
 | `midnight-c50-s1-step150` | midnight | **150 (op)** | done | done | done | done | done | 5/5 |
-| `midnight-c50-s3-step100` | midnight | 100 | done | done | done | done | -- | 4/5 |
+| `midnight-c50-s3-step100` | midnight | 100 | done | done | done | done | done | 5/5 |
 | `midnightf-c50-s0-step150` | midnightf | 150 | done | -- | -- | -- | done | 2/5 |
 | `midnightf-c50-s1-step100` | midnightf | 100 | done | -- | -- | -- | done | 2/5 |
-| `midnightf-c50-s3-step100` | midnightf | 100 | done | -- | -- | -- | -- | 1/5 |
+| `midnightf-c50-s3-step100` | midnightf | 100 | done | -- | -- | -- | done | 2/5 |
 | `openmidnightsq-c50-s0-step150` | openmidnightsq | 150 | done | done | done | done | done | 5/5 |
 | `openmidnightsq-c50-s1-step150` | openmidnightsq | 150 | done | done | done | done | done | 5/5 |
 | `openmidnightsq-c50-s2-step150` | openmidnightsq | 150 | done | done | done | done | done | 5/5 |
@@ -128,6 +128,6 @@ steps are sensitivity points, not substitutes for it.
 | online | 53 | 73 | 20 |
 | pathorob | 53 | 73 | 20 |
 | cptac | 53 | 73 | 20 |
-| hest | 71 | 73 | 2 |
+| hest | 73 | 73 | 0 |
 
-**303 of 365 cell x suite pairs complete (62 remaining).**
+**305 of 365 cell x suite pairs complete (60 remaining).**
