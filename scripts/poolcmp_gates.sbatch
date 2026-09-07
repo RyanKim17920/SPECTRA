@@ -29,7 +29,7 @@
 #
 # G2 and the hermetic halves of G3/G4/G5 run under `pytest tests/ -q` and are not here.
 #
-#   sbatch scripts/poolcmp_gates.sbatch $SPECTRA_REPO_snapshots/poolcmp_pristine_XXXX
+#   sbatch scripts/poolcmp_gates.sbatch ${SPECTRA_REPO}_snapshots/poolcmp_pristine_XXXX
 
 set -euo pipefail
 

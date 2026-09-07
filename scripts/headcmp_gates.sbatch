@@ -26,7 +26,7 @@
 #
 # The snapshot path is passed in as $1 (PYTHONPATH + its own copy of train_lora.py).
 #
-#   sbatch scripts/headcmp_gates.sbatch $SPECTRA_REPO_snapshots/headcmp_pristine_XXXX
+#   sbatch scripts/headcmp_gates.sbatch ${SPECTRA_REPO}_snapshots/headcmp_pristine_XXXX
 
 set -euo pipefail
 

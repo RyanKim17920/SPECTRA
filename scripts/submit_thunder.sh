@@ -225,4 +225,4 @@ done
 echo
 echo "Submitted HELD. Drain with:"
 echo "  nohup .venv/bin/python scripts/thunder_pilot.py --cap 4 --interval 120 \\"
-echo "      --max-fast-failures 3 >> $SPECTRA_THUNDER_pilot.log 2>&1 &"
+echo "      --max-fast-failures 3 >> ${SPECTRA_DATA}/thunder_pilot.log 2>&1 &"
