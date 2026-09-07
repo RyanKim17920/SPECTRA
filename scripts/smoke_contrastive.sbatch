@@ -27,17 +27,18 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=1              # phikon-v2 is already cached; never hit the hub here
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-smoke}-${SLURM_JOB_ID:-local}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"

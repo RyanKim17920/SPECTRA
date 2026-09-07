@@ -26,15 +26,16 @@
 #
 # The snapshot path is passed in as $1 (PYTHONPATH + its own copy of train_lora.py).
 #
-#   sbatch scripts/headcmp_gates.sbatch /admin/home/ryan.kim/waiv_snapshots/headcmp_pristine_XXXX
+#   sbatch scripts/headcmp_gates.sbatch $SPECTRA_REPO_snapshots/headcmp_pristine_XXXX
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 SNAP="$1"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -43,7 +44,7 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 GATE_DIR="$REPO/runs/headgates-${SLURM_JOB_ID:-local}"
 mkdir -p "$GATE_DIR"

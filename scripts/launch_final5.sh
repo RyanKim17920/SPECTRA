@@ -10,7 +10,8 @@
 # "phikon got 4x the negatives". Defaulting T here would invite that confound straight
 # back in, so the caller must state it and it is recorded in every run name.
 set -euo pipefail
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 T="${1:?usage: launch_final5.sh <T> [seeds...]   e.g. launch_final5.sh 900 0 1 2 3 4}"

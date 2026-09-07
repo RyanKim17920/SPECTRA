@@ -62,10 +62,11 @@
 #   WAIV_ARM=virchow2 WAIV_SEED=0 WAIV_T=900 sbatch scripts/final5.sbatch
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -75,8 +76,8 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-${WAIV_MASK:+/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned}}"
-PIN="${PIN:-/admin/home/ryan.kim/waiv-snapshots/gemgrid-pinned}"
+PIN="${WAIV_PIN:-${WAIV_MASK:+$SPECTRA_SNAPSHOTS/falseneg-pinned}}"
+PIN="${PIN:-$SPECTRA_SNAPSHOTS/gemgrid-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ]     || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
@@ -84,7 +85,7 @@ export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 grep -q 'delegate rather than refuse' "$PIN/src/waivphaet/train/contrastive.py" \
   || { echo "PIN LACKS pool-head delegation -- GEM+grid cannot run: $PIN" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow|virchow2|hoptimus|uni2|openmidnight}"
 SEED="${WAIV_SEED:?set WAIV_SEED}"
 GRID_TILES="${WAIV_T:?set WAIV_T (common across backbones -- that is the point)}"
@@ -99,13 +100,13 @@ case "$ARM" in
   hoptimus) BACKBONE="bioptimus/H-optimus-0" ;;
   uni2)     BACKBONE="MahmoodLab/UNI2-h" ;;
   # OpenMidnight is NOT gated; it is bound locally because the source is a raw DINOv2
-  # training checkpoint, converted once into /data/OpenMidnight by
+  # training checkpoint, converted once into $SPECTRA_INPUTS/OpenMidnight by
   # scripts/convert_openmidnight.py.  Same DINOv2 ViT-g/14 shape as H-Optimus-0.
   openmidnight) BACKBONE="SophontAI/OpenMidnight" ;;
   # Virchow **v1** -- a DIFFERENT model from the virchow2 arm above, not a variant of it:
   # timm ViT-H/14, 32 blocks, 1280-d, packed-SwiGLU FFN, but NO register tokens (1 prefix
   # token / 257 tokens, against Virchow2's 5 / 261).  The repo is gated, so
-  # encoder.BACKBONE_LOCAL_DIRS binds the id to the pinned snapshot under /data/Virchow.
+  # encoder.BACKBONE_LOCAL_DIRS binds the id to the pinned snapshot under $SPECTRA_INPUTS/Virchow.
   #
   # This `case` matches EXACT arm tokens, not globs, so `virchow` and `virchow2` cannot
   # shadow each other here whichever order they are listed in.  Downstream eval scripts

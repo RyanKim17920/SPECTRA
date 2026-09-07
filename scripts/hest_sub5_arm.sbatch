@@ -10,11 +10,12 @@
 # HEST 5-task subset (SKCM COAD READ PAAD LUNG) for ONE checkpoint.
 # usage: sbatch --output=... --error=... scripts/hest_sub5_arm.sbatch <exp_tag> <adapter_dir>
 #
-# NOTE: --output/--error/--chdir MUST be shared storage under /admin/home/ryan.kim.
+# NOTE: --output/--error/--chdir MUST be on shared storage (a home/project volume),
 # /tmp and the agent scratchpad are NODE-LOCAL and silently swallow output.
 set -euo pipefail
 
-REPO=/admin/home/ryan.kim/waiv
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 TAG="$1"
@@ -26,7 +27,7 @@ ADAPTER="$2"
 WORKERS="${3:-2}"
 EXP="sub5_${TAG}_clsmean"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -45,7 +46,7 @@ fi
 # mid-write leaves a truncated .h5 that later runs treat as a valid cache hit.
 # Each arm owns its own embed dir, and we wipe it at the top of every attempt so
 # a requeue can never inherit a half-written cache from its own previous attempt.
-EMBED_DIR="/data/ryan.kim/hest_work/embeddings/$EXP"
+EMBED_DIR="$SPECTRA_HEST_WORK/embeddings/$EXP"
 if [ -d "$EMBED_DIR" ]; then
   echo "=== wiping stale embed cache $EMBED_DIR"
   rm -rf "$EMBED_DIR"
@@ -58,13 +59,13 @@ srun --unbuffered "$REPO/.venv-hest/bin/python" scripts/run_hest.py \
   --lora-rank 32 --lora-alpha 64 --proj-out-dim 512 \
   --tasks SKCM COAD READ PAAD LUNG \
   --num-workers "$WORKERS" \
-  --bench-data /data/ryan.kim/hest_bench \
-  --work-dir /data/ryan.kim/hest_work
+  --bench-data $SPECTRA_HEST_BENCH \
+  --work-dir $SPECTRA_HEST_WORK
 RC=$?
 
 # /data is 94% full and volatile -- mirror the summary to /admin immediately.
 mkdir -p "$REPO/results_backup/hest_sub5"
-SUM="/data/ryan.kim/hest_work/results/${EXP}_summary.json"
+SUM="$SPECTRA_HEST_WORK/results/${EXP}_summary.json"
 if [ -f "$SUM" ]; then
   cp -f "$SUM" "$REPO/results_backup/hest_sub5/"
   echo "=== mirrored $SUM -> results_backup/hest_sub5/"

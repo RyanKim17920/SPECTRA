@@ -9,9 +9,11 @@
 #
 # break_his/phikon-s0 is intentionally skipped: it is canary job 392918, already running.
 set -euo pipefail
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 
-SB=/admin/home/ryan.kim/waiv/scripts/run_thunder.sbatch
-RUNS=/admin/home/ryan.kim/waiv/runs
+SB=$SPECTRA_REPO/scripts/run_thunder.sbatch
+RUNS=$SPECTRA_RUNS
 TASKS="knn linear_probing simple_shot"
 OUT=$RUNS/.thunder_genmask_ci_jobs
 P=genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512

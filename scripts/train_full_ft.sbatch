@@ -59,20 +59,21 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0               # the Tier-2 follower streams the PathoROB parquet
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-fullft}-${SLURM_JOB_ID:-local}"
 # /data, not $REPO/runs: 11 checkpoints x ~3.4 GiB = ~34 GiB.
-OUT_DIR="${WAIV_RUNS_DIR:-/data/ryan.kim/waiv_runs}/$RUN_NAME"
+OUT_DIR="${WAIV_RUNS_DIR:-$SPECTRA_RUNS}/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"
 

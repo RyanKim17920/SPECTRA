@@ -31,7 +31,8 @@
 #   WAIV_RUN=final5-virchow2-s0-t900-XXXX WAIV_STEP=0000500 sbatch scripts/hest_final5.sbatch
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 RUN="${WAIV_RUN:?set WAIV_RUN (run dir name under runs/)}"
@@ -65,7 +66,7 @@ esac
 ADAPTER="$REPO/runs/$RUN/step_$STEP"
 EXP_CODE="${WAIV_EXP_CODE:-f5_${RUN}_s${STEP}_${POOLING}}"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1

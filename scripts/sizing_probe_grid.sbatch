@@ -22,7 +22,8 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 GEOMS="${1:-2x1200 2x1400 2x1600}"
@@ -30,7 +31,7 @@ CHUNK="${2:-600}"
 STEPS="${3:-4}"
 EXTRA="${4:-}"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1

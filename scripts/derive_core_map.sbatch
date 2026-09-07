@@ -9,16 +9,17 @@
 #SBATCH --output=logs/slurm-%x-%j.out
 #SBATCH --error=logs/slurm-%x-%j.err
 set -euo pipefail
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 PY="$REPO/.venv/bin/python"
 "$PY" scripts/derive_core_map.py \
-  --packed-dir /data/plism/repacked \
+  --packed-dir $SPECTRA_PLISM_PACKED \
   --out-labels runs/.plism_core_labels.npy \
   --batch-size 256
 echo "=== done $? ==="

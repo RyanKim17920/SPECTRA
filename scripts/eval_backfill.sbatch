@@ -26,14 +26,15 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 RUN_DIR="${1:?usage: sbatch scripts/eval_backfill.sbatch <run-dir> [lora-rank] [lora-alpha]}"
 LORA_RANK="${2:-32}"
 LORA_ALPHA="${3:-64}"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8

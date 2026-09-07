@@ -45,10 +45,11 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0               # the follower streams the PathoROB parquet
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -60,7 +61,7 @@ export PYTHONUNBUFFERED=1
 # segments and OOMed. expandable_segments hands that back.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 ARM="${WAIV_ARM:?set WAIV_ARM to grid2 | grid12 | ctrlseed}"
 # See gridcmp.sbatch: SLURM_RESTART_COUNT keeps a requeued attempt out of the previous
 # attempt's run dir, so a preemption cannot silently mix two training trajectories.

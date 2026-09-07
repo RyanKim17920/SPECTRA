@@ -20,7 +20,8 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 MODEL_NAME="${1:-phikonv2_clsmean_ours}"
@@ -28,7 +29,7 @@ DATASETS="${2:-camelyon}"
 CKPT="${3:-}"
 ADAPTER="${4:-}"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8

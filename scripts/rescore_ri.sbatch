@@ -12,9 +12,10 @@ set -euo pipefail
 # Score RI for checkpoints that already exist but never got an eval follower run --
 # e.g. an arm cancelled after its checkpoint was written but before the follower
 # evaluated it. eval_checkpoints.py WITHOUT --follow scores whatever is on disk and exits.
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 RUN="${WAIV_RUN:?set WAIV_RUN (run dir name under runs/)}"

@@ -31,7 +31,7 @@
 # scripts/run_hest.py:114-155) -- pooling, backbone AND checkpoint are all absent from
 # the key. Reusing an existing exp_code would silently rescore stale features and return
 # a fabricated result. The exp_code below is fresh and was verified absent from both
-# /data/ryan.kim/hest_work/embeddings/ and /data/ryan.kim/hest_work/results/.
+# $SPECTRA_HEST_WORK/embeddings/ and $SPECTRA_HEST_WORK/results/.
 #
 # --num-workers 0 is REQUIRED, not a preference: the HEST dataloader crashes in shared
 # memory teardown (c10::Error: could not unlink the shared memory file) at 8 workers and
@@ -41,7 +41,8 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 POOLING="clsmean"
@@ -49,7 +50,7 @@ EXP_CODE="${1:-splitgrid_virchow2_ft250_clsmean_v1}"
 BACKBONE="paige-ai/Virchow2"
 ADAPTER="$REPO/runs/splitgrid-386375/step_0000250"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1

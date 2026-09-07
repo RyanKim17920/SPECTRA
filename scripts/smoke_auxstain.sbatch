@@ -31,10 +31,11 @@
 # ======================================================================================
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -48,9 +49,9 @@ export WANDB_MODE=disabled
 export WAIV_NO_FOLLOWER=1
 
 PY="$REPO/.venv/bin/python"
-NEW_PIN="/admin/home/ryan.kim/waiv-snapshots/auxstain-pinned"
-OLD_PIN="/admin/home/ryan.kim/waiv-snapshots/falseneg-pinned"
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+NEW_PIN="$SPECTRA_SNAPSHOTS/auxstain-pinned"
+OLD_PIN="$SPECTRA_SNAPSHOTS/falseneg-pinned"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 BASE_OUT="${WAIV_SMOKE_OUT:-$REPO/runs/smoke-auxstain-${SLURM_JOB_ID:-local}}"
 
 for P in "$NEW_PIN" "$OLD_PIN"; do

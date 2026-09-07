@@ -35,7 +35,7 @@
 #   virchow2   runs/waiv-virchow2-375367  (published FT checkpoint step_0000250)
 #
 # Shared by all three published runs, and reproduced here EXACTLY:
-#   packed_dir /data/plism/repacked | lr 1e-4 | weight_decay 0.05 (default) |
+#   packed_dir $SPECTRA_PLISM_PACKED | lr 1e-4 | weight_decay 0.05 (default) |
 #   warmup 200 | temperature 0.07 | symmetric false | grad_accum 1 | grad_clip 1.0 |
 #   n_groups 2 x group_size 192 (191 negatives, 768 images/step) | seed 0 |
 #   amp bfloat16 | log_every 20 | eval_heldout true | retention_kl_weight 0.0 |
@@ -102,10 +102,11 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0               # the follower streams the PathoROB parquet
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -115,13 +116,13 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/finalgem-pinned}"
+PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ] || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
 
-# The corpus moved from /data/ryan.kim/plism to /data/plism on 2026-08-09.
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+# The corpus moved from $SPECTRA_PLISM to $SPECTRA_PLISM on 2026-08-09.
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 ARM="${WAIV_ARM:?set WAIV_ARM to phikon | midnight | virchow2}"
 # SLURM_RESTART_COUNT keeps a requeued attempt out of the previous attempt's run dir, so a
 # preemption cannot silently mix two training trajectories (commit af243c2).

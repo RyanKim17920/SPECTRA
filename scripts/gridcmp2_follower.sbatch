@@ -27,10 +27,11 @@
 #
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -44,7 +45,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # byte-identical to $PIN for scripts/eval_checkpoints.py (modulo the run-dir absolutising
 # fix), scripts/embed_probe.py, scripts/extract_pathorob_features.py and
 # src/waivphaet/eval/pathorob_adapter.py; src/waivphaet/models/pooling.py differs only by
-# a docstring paragraph. Set WAIV_SRC_ROOT=/admin/home/ryan.kim/waiv-snapshots/gridcmp2-pinned
+# a docstring paragraph. Set WAIV_SRC_ROOT=$SPECTRA_SNAPSHOTS/gridcmp2-pinned
 # to go back to the pinned copy.
 SRC="${WAIV_SRC_ROOT:-$REPO}"
 export PYTHONPATH="$SRC/src${PYTHONPATH:+:$PYTHONPATH}"
@@ -59,7 +60,7 @@ RUN_DIR="${WAIV_RUN_DIR:?set WAIV_RUN_DIR to the run directory of the arm}"
 # snapshot, which has no runs/ directory. A relative --run-dir then sends embed_probe
 # looking for <snapshot>/runs/... and it dies at the first checkpoint, not at launch.
 RUN_DIR=$(cd "$RUN_DIR" && pwd)
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 
 # Fail loudly here rather than 250 steps from now.

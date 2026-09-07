@@ -10,7 +10,8 @@
 # actually reading features dated 2026-08-10 from a different checkpoint. The name below
 # embeds run+step so two final5 checkpoints can never collide.
 set -euo pipefail
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 RUN="${1:?usage: submit_final5_evals.sh <run_name> <step> [--hest-only|--thunder-only]}"

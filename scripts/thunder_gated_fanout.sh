@@ -17,7 +17,8 @@
 # Usage:  scripts/thunder_gated_fanout.sh hoptimus|uni2 [--seg-only|--cls-only]
 
 set -euo pipefail
-REPO=/admin/home/ryan.kim/waiv
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 ARM="${1:?usage: $0 hoptimus|uni2 [--cls-only|--seg-only]}"
 MODE="${2:-all}"
 

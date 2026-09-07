@@ -60,6 +60,8 @@
 # that guard protects is "nothing lands under *ft*_ without an adapter", and base-only
 # writes only under *base_.
 set -uo pipefail
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$(dirname "$0")/.."
 
 BACKBONE_KEY="phikon-v2"
@@ -148,7 +150,7 @@ SEG_TASKS="segmentation"
 CLASSIFICATION="bach bracs break_his ccrcc crc esca mhist patch_camelyon tcga_crc_msi tcga_tils tcga_uniform wilds"
 SEGMENTATION="ocelot pannuke"
 
-ROOT="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
+ROOT="${THUNDER_BASE_DATA_FOLDER:-$SPECTRA_THUNDER}"
 USER_NAME="${USER:-ryan.kim}"
 
 # --cancel-held: SLURM copies the batch script into its spool at *submission* time, so
@@ -223,4 +225,4 @@ done
 echo
 echo "Submitted HELD. Drain with:"
 echo "  nohup .venv/bin/python scripts/thunder_pilot.py --cap 4 --interval 120 \\"
-echo "      --max-fast-failures 3 >> /data/ryan.kim/thunder_pilot.log 2>&1 &"
+echo "      --max-fast-failures 3 >> $SPECTRA_THUNDER_pilot.log 2>&1 &"

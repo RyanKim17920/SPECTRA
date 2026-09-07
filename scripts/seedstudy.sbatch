@@ -60,10 +60,11 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0               # the follower streams the PathoROB parquet
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -72,12 +73,12 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/gridcmp2-pinned}"
+PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/gridcmp2-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ] || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 ARM="${WAIV_ARM:?set WAIV_ARM to split | gem | ctrl}"
 SEED="${WAIV_SEED:?set WAIV_SEED (seed 0 already exists for all three arms)}"
 # SLURM_RESTART_COUNT keeps a requeued attempt out of the previous attempt's run dir, so a
@@ -218,7 +219,7 @@ REF = {"split": "runs/headcmp-split-380856",
        "gem":   "runs/poolcmp-gem-381014",
        "ctrl":  "runs/gridcmp-ctrl-380777"}
 out, arm = Path(sys.argv[1]), sys.argv[2]
-repo = Path("/admin/home/ryan.kim/waiv")
+repo = Path("$SPECTRA_REPO")
 mine = json.loads((out / "config.json").read_text())
 ref = json.loads((repo / REF[arm] / "config.json").read_text())
 

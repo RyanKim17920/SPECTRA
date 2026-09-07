@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
 #SBATCH --time=12:00:00
-#SBATCH --output=/data/ryan.kim/thunder/logs/slurm-%x-%j.out
-#SBATCH --error=/data/ryan.kim/thunder/logs/slurm-%x-%j.err
+#SBATCH --output=$SPECTRA_THUNDER/logs/slurm-%x-%j.out
+#SBATCH --error=$SPECTRA_THUNDER/logs/slurm-%x-%j.err
 #
 # THUNDER retention eval -- our second retention detector (PLAN.md §3 risk 1, §4 phase 11).
 #
@@ -19,14 +19,15 @@
 # stall the rest, and so a failure is isolated to one row of the table.
 #
 # DATA IS READ-ONLY AND NOT OURS. $THUNDER_BASE_DATA_FOLDER/datasets/<name> are symlinks
-# into /data/thunder-data (owner: paul). Everything THUNDER writes -- data_splits/,
-# embeddings/, outputs/ -- lands under /data/ryan.kim/thunder, which we own. Never point
-# THUNDER_BASE_DATA_FOLDER at /data/thunder-data directly: it would try to write splits
+# into another user's shared copy on this cluster. Everything THUNDER writes -- data_splits/,
+# embeddings/, outputs/ -- lands under $SPECTRA_THUNDER, which we own. Never point
+# THUNDER_BASE_DATA_FOLDER at $SPECTRA_DATA/thunder-data directly: it would try to write splits
 # and embeddings into another user's tree.
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 DATASET="${1:?usage: run_thunder.sbatch <dataset> <tasks> [pooling] [run_name] [ckpt] [adapter]}"
@@ -62,8 +63,8 @@ if [ -n "$EPOCHS" ]; then
   EPOCH_ARGS=(--adaptation.epochs "$EPOCHS")
 fi
 
-export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-$SPECTRA_THUNDER}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export TOKENIZERS_PARALLELISM=false
 # wandb.login() is unconditional at thunder/benchmark.py:174 -- offline or the job blocks
 # on an interactive prompt with no tty.

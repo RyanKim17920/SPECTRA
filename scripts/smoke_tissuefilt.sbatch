@@ -10,10 +10,11 @@
 #SBATCH --error=logs/slurm-%x-%j.err
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -21,7 +22,7 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="/admin/home/ryan.kim/waiv-snapshots/tissuefilt-pinned"
+PIN="$SPECTRA_SNAPSHOTS/tissuefilt-pinned"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 
 [ -d "$PIN/src/waivphaet" ]         || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
@@ -31,7 +32,7 @@ grep -q 'delegate rather than refuse' "$PIN/src/waivphaet/train/contrastive.py" 
 grep -q 'min_tissue_frac' "$PIN/src/waivphaet/train/contrastive.py" \
   || { echo "PIN LACKS min_tissue_frac field: $PIN" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 SCRATCHPAD="/tmp/claude-1034600028/-admin-home-ryan-kim-waiv/b1353922-b3ae-4729-bb58-e9034ea942d2/scratchpad"
 
 COMMON=(

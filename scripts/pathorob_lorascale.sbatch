@@ -16,9 +16,10 @@ set -euo pipefail
 #
 # NOTE: Virchow2 adapters have base_model_name_or_path=null, so --backbone is MANDATORY
 # or phikon-v2 is silently built and the adapter keys fail to load.
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1

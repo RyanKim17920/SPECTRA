@@ -26,20 +26,21 @@
 # block at scripts/run_hest.py:114-155) -- pooling is NOT part of the key. Reusing
 # `mbase_clsmean` here would silently score the existing 3072-d clsmean features and
 # manufacture "cls == clsmean". Hence a fresh, never-used exp_code below; verified
-# absent from /data/ryan.kim/hest_work/embeddings/ before submission.
+# absent from $SPECTRA_HEST_WORK/embeddings/ before submission.
 #
 #   sbatch --account=max --qos=high scripts/hest_midnight_cls.sbatch
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 POOLING="cls"
 EXP_CODE="virchow2_base_cls_9task_v1"
 BACKBONE="paige-ai/Virchow2"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1

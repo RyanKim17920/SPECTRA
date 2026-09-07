@@ -1,7 +1,9 @@
 #!/bin/bash
 # Fan out SPIDER THUNDER evals. Canary (spider_thorax / base_cls) is submitted separately.
 set -euo pipefail
-cd /admin/home/ryan.kim/waiv
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
+cd $SPECTRA_REPO
 TASKS="knn linear_probing simple_shot"
 RUNS=runs/genMASK-c3s-lr1e-4-r32-kl0-t0.07-wd0.05-ms500-pd512
 DS_ALL="spider_thorax spider_breast spider_colorectal spider_skin"

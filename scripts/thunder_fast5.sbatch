@@ -11,7 +11,7 @@
 # Used for seed-noise-floor calibration and quick arm comparisons.
 #
 # NOTE: --output/--error must be on shared storage. Logs go under
-#   /admin/home/ryan.kim/waiv/logs/thunderfast5/
+#   $SPECTRA_REPO/logs/thunderfast5/
 # which is set by the caller:
 #   sbatch --output=.../logs/thunderfast5/tfast5-<tag>-%j.out \
 #          --error=.../logs/thunderfast5/tfast5-<tag>-%j.err \
@@ -25,7 +25,8 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 RUN_TAG="${1:?usage: thunder_fast5.sbatch <run_tag> <adapter_dir>}"
@@ -42,8 +43,8 @@ RUN_NAME="fast5_${RUN_TAG}_${POOLING}"
 DATASETS="bach mhist break_his bracs ccrcc"
 TASKS="knn linear_probing"
 
-export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-$SPECTRA_THUNDER}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export TOKENIZERS_PARALLELISM=false
 export WANDB_MODE=offline
 export WANDB_SILENT=true

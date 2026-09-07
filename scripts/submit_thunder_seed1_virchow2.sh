@@ -16,14 +16,16 @@
 # increase one, so they are deliberately generous.
 #
 # All jobs are submitted HELD. Release with:
-#   scontrol release $(cat /admin/home/ryan.kim/waiv/runs/.thunder_seed1_virchow2_jobs)
+#   scontrol release $(cat $SPECTRA_RUNS/.thunder_seed1_virchow2_jobs)
 set -euo pipefail
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 
 RUN=f5_ret0.01-virchow2-s1-t900-392045_s0000250
-ADAPTER=/admin/home/ryan.kim/waiv/runs/ret0.01-virchow2-s1-t900-392045/step_0000250
+ADAPTER=$SPECTRA_RUNS/ret0.01-virchow2-s1-t900-392045/step_0000250
 TASKS="knn linear_probing simple_shot"
-SB=/admin/home/ryan.kim/waiv/scripts/run_thunder.sbatch
-OUT=/admin/home/ryan.kim/waiv/runs/.thunder_seed1_virchow2_jobs
+SB=$SPECTRA_REPO/scripts/run_thunder.sbatch
+OUT=$SPECTRA_RUNS/.thunder_seed1_virchow2_jobs
 
 # dataset=timelimit -- identical to the seed-0 roster.
 # SEPARATOR IS '=', NOT ':'. A ':' separator here is a real bug: SLURM time limits

@@ -15,14 +15,15 @@
 # LoRA r32 / alpha64 / proj_out_dim 512 / clsmean at train time.
 #
 # CACHE KEY: exp_code `splitgrid_midnight_ft250_cls_v1` verified absent from
-#   /data/ryan.kim/hest_work/embeddings/ and /data/ryan.kim/hest_work/results/
+#   $SPECTRA_HEST_WORK/embeddings/ and $SPECTRA_HEST_WORK/results/
 #   before submission.
 #
 #   sbatch --account=max --qos=high scripts/hest_splitgrid_midnight_ft250_cls.sbatch
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 POOLING="cls"
@@ -30,7 +31,7 @@ EXP_CODE="splitgrid_midnight_ft250_cls_v1"
 BACKBONE="kaiko-ai/midnight"
 ADAPTER="$REPO/runs/splitgrid-386380/step_0000250"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1

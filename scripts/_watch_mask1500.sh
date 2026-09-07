@@ -4,7 +4,8 @@
 #  - log each new RI point once
 #  - log each HEST job's completion once
 # All events are logged AT MOST ONCE, state seeded from the log so restarts are idempotent.
-REPO=/admin/home/ryan.kim/waiv
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO" || exit 1
 LOG="$REPO/logs/mask1500_watch.log"
 PFX="runs/genMASK-lr3e-5-r32-kl0-t0.07-wd0.05-ms1500-pd512"

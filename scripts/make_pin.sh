@@ -20,11 +20,12 @@
 # they are large, immutable, and shared, and the thing that actually needs freezing is the
 # python source.
 #
-#   scripts/make_pin.sh /admin/home/ryan.kim/waiv-snapshots/gridcmp3-offload-pinned
+#   scripts/make_pin.sh $SPECTRA_SNAPSHOTS/gridcmp3-offload-pinned
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 DEST="${1:?usage: make_pin.sh <dest-snapshot-dir>}"
 
 [ -e "$DEST" ] && { echo "refusing to overwrite existing pin: $DEST" >&2; exit 1; }

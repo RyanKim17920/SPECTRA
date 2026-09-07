@@ -16,7 +16,7 @@
 # WHY THIS EXISTS. All three finalgem arms trained to completion (TRAIN_DONE present, all
 # checkpoints on disk with adapter/ + projector*.pt + pool_head.pt + metrics.json) but every
 # follower died on its FIRST line: the pin
-#   /admin/home/ryan.kim/waiv-snapshots/finalgem-pinned
+#   $SPECTRA_SNAPSHOTS/finalgem-pinned
 # was created WITHOUT the third_party/ and .venv/ symlinks, so PathoRobPaths.check() raised
 # FileNotFoundError before a single checkpoint was read. That is failure mode #1 in
 # scripts/make_pin.sh's own header. The pin has since been repaired by adding both symlinks;
@@ -52,7 +52,8 @@
 #   sbatch --job-name=waiv-score-virchow2 scripts/score_finalgem.sbatch virchow2
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 ARM="${1:?usage: score_finalgem.sbatch <phikon|midnight|virchow2>}"
@@ -73,13 +74,13 @@ esac
 # and it shells out to scripts/embed_probe.py and scripts/extract_pathorob_features.py with
 # cwd=REPO -- so running the PIN's copy keeps the whole eval chain on pinned source, which
 # is what the three arms were trained against (commit in $PIN/PINNED_COMMIT).
-PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/finalgem-pinned}"
+PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
 [ -d "$PIN/src/waivphaet" ]        || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -d "$PIN/third_party/PathoROB" ] || { echo "pin missing third_party/PathoROB: $PIN" >&2; exit 3; }
 [ -x "$PIN/.venv/bin/python" ]     || { echo "pin missing .venv: $PIN" >&2; exit 3; }
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0               # the PathoROB parquet is streamed
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -88,7 +89,7 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 
 # Read back out of each run's config.json (encoder block), identical across all three arms.

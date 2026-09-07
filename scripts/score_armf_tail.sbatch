@@ -43,7 +43,8 @@
 #
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 # Default target is the resumed arm F. Pass an explicit run dir to score another one.
@@ -58,12 +59,12 @@ case "$RUN_DIR" in /*) ;; *) RUN_DIR="$REPO/$RUN_DIR" ;; esac
 # which is exactly where arm F's steps 250 and 500 already live. Running the working-tree
 # copy instead would score into a DIFFERENT PathoROB tree against a DIFFERENT source
 # snapshot, and the resulting number would not be comparable with the points it joins.
-PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/gridcmp3-f-pinned}"
+PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/gridcmp3-f-pinned}"
 [ -d "$PIN/src/waivphaet" ]        || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -d "$PIN/third_party/PathoROB" ] || { echo "pin missing third_party/PathoROB: $PIN" >&2; exit 3; }
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0               # the PathoROB parquet is streamed
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -71,7 +72,7 @@ export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 
 # Identical to gridcmp3.sbatch. These are the values arm F was TRAINED and SCORED with;

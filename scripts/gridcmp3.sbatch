@@ -61,10 +61,11 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_OFFLINE=0               # the follower streams the PathoROB parquet
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
@@ -85,16 +86,16 @@ ARM="${WAIV_ARM:?set WAIV_ARM to a | b | c | d | e | f}"
 # meaningful as a controlled delta on GRID12/GRID24, so the source is pinned to a
 # read-only snapshot taken at submit time.
 if [ "$ARM" = "f" ]; then
-  PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/gridcmp3-f-pinned}"
+  PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/gridcmp3-f-pinned}"
 else
-  PIN="${WAIV_PIN:-/admin/home/ryan.kim/waiv-snapshots/gridcmp3-pinned}"
+  PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/gridcmp3-pinned}"
 fi
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ]  || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -d "$PIN/third_party/PathoROB" ] || { echo "pin missing third_party/PathoROB: $PIN" >&2; exit 3; }
 [ -x "$PIN/.venv/bin/python" ]     || { echo "pin missing .venv/bin/python: $PIN" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-/data/plism/repacked}"
+PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 # SLURM_RESTART_COUNT keeps a requeued attempt out of the previous attempt's run dir
 # (commit 42990ba). Preemption is routine here; without the suffix a requeue writes
 # attempt-2 weights into attempt-1's directory and marries them to attempt-1's RI points.

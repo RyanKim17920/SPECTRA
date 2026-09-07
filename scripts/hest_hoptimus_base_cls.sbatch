@@ -19,20 +19,21 @@
 #
 # CACHE KEY: run_hest.py keys the embedding cache on --exp-code ALONE (pooling is NOT
 # part of the key -- see scripts/run_hest.py:114-155). Fresh exp_code below, verified
-# absent from /data/ryan.kim/hest_work/embeddings/ before submission.
+# absent from $SPECTRA_HEST_WORK/embeddings/ before submission.
 #
 # --num-workers 0 is REQUIRED: the HEST dataloader crashes in shm teardown with >0.
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 POOLING="cls"
 EXP_CODE="hoptimus_base_cls_9task_v1"
 BACKBONE="bioptimus/H-optimus-0"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1

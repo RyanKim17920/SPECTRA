@@ -67,7 +67,7 @@
 # --only: SUBMIT ONE DATASET AT A TIME
 # ---------------------------------------------------------------------------------------
 # The two datasets do not become ready together -- segpath_lymphocytes (23 GB) was already
-# mirrored under /data/thunder-data, while segpath_epithelial is a separate 47.5 GB Zenodo
+# mirrored under $SPECTRA_DATA/thunder-data, while segpath_epithelial is a separate 47.5 GB Zenodo
 # pull. Guard 0 below is deliberately all-or-nothing over whatever set is SELECTED, so
 # without --only a single absent dataset blocks the four jobs that are perfectly ready.
 #
@@ -76,6 +76,8 @@
 #   bash scripts/submit_segpath_thunder.sh --only segpath_lymphocytes --go # submit those 4
 #   bash scripts/submit_segpath_thunder.sh --go                            # submit all 8
 set -uo pipefail
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$(dirname "$0")/.."
 
 # epochs per guidelines.md:4 -- 9 for epithelial, 21 for lymphocytes. Do not "harmonise".
@@ -118,7 +120,7 @@ MIDNIGHT_ADAPTER="runs/waiv-midnight-369159/step_0000500"
 VIRCHOW2_ADAPTER="${WAIV_VIRCHOW2_ADAPTER:-}"
 VIRCHOW2_FT_RUN="${WAIV_VIRCHOW2_FT_RUN:-vft500_cls}"
 
-ROOT="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
+ROOT="${THUNDER_BASE_DATA_FOLDER:-$SPECTRA_THUNDER}"
 ACTIVE=$(squeue -u ryan.kim -h -o "%j" | sort -u)
 
 # Guard 0: the data has to actually be there. segpath_epithelial is downloaded separately
@@ -188,4 +190,4 @@ done
 echo
 echo "Submitted HELD. Drain with:"
 echo "  nohup .venv/bin/python scripts/thunder_pilot.py --cap 4 --interval 120 \\"
-echo "      --max-fast-failures 3 >> /data/ryan.kim/thunder_pilot.log 2>&1 &"
+echo "      --max-fast-failures 3 >> $SPECTRA_THUNDER_pilot.log 2>&1 &"

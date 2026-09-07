@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=02:00:00
-#SBATCH --output=/data/ryan.kim/thunder/logs/slurm-%x-%j.out
-#SBATCH --error=/data/ryan.kim/thunder/logs/slurm-%x-%j.err
+#SBATCH --output=$SPECTRA_THUNDER/logs/slurm-%x-%j.out
+#SBATCH --error=$SPECTRA_THUNDER/logs/slurm-%x-%j.err
 #
 # THUNDER retention at CHECKPOINT time -- PLAN.md §4 phase 8 ("evaluate retention at every
 # checkpoint, not just at the end") and §6 (retention reported alongside every robustness
@@ -37,7 +37,8 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 RUN_NAME="${1:?usage: run_thunder_retention.sbatch <run-name> [adapter-dir] [checkpoint]}"
@@ -45,8 +46,8 @@ ADAPTER="${2:-}"
 CKPT="${3:-}"
 DATASETS="${THUNDER_RETENTION_DATASETS:-bach break_his mhist bracs}"
 
-export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-/data/ryan.kim/thunder}"
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export THUNDER_BASE_DATA_FOLDER="${THUNDER_BASE_DATA_FOLDER:-$SPECTRA_THUNDER}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export TOKENIZERS_PARALLELISM=false
 export WANDB_MODE=offline
 export WANDB_SILENT=true

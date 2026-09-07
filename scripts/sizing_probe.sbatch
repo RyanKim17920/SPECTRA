@@ -16,14 +16,15 @@
 
 set -euo pipefail
 
-REPO="${WAIV_REPO:-/admin/home/ryan.kim/waiv}"
+REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+. "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 BACKBONE="${1:-owkin/phikon-v2}"
 SHAPES="${2:-2x64 2x128 2x192}"
 CKPT_FLAG="${3:---grad-checkpointing}"
 
-export HF_HOME="${HF_HOME:-/data/huggingface}"
+export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
