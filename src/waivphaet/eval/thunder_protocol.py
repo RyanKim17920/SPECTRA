@@ -14,6 +14,19 @@ protocol constant with none.
 
 from __future__ import annotations
 
+
+def _readouts() -> dict[str, str]:
+    """``repo_id -> published THUNDER pooling`` from the backbone registry.
+
+    Imported lazily-ish inside a function so this module keeps its promise of no
+    third-party imports: ``backbones`` pulls in ``waivphaet.paths`` only (stdlib),
+    never torch or timm.
+    """
+    from waivphaet.models.backbones import readout_table
+
+    return readout_table()
+
+
 #: THUNDER pooling is **per backbone**, and it is not our choice -- it is Waiv's.
 #: arXiv:2607.22861 3, line 106: CLS+mean-pool concatenation was used for ALL models in
 #: PathoROB, but in THUNDER only for Virchow2, AquaViT, H0-mini and **Midnight-12k**.
@@ -27,7 +40,9 @@ from __future__ import annotations
 #: ``get_segmentation_embeddings`` returns raw hidden-d patch tokens. That inequality holds
 #: for every backbone with clsmean pooling, Virchow2 included (2560 != 1280), so
 #: ``resolve_pooling`` in ``thunder_model`` applies to it unchanged.
-THUNDER_CLSMEAN_BACKBONES = frozenset({"kaiko-ai/midnight", "paige-ai/Virchow2"})
+THUNDER_CLSMEAN_BACKBONES = frozenset(
+    r for r, p in _readouts().items() if p == "clsmean"
+)
 
 #: The other half of the same published table: backbones Waiv scored CLS-only.
 #: Both sets are transcriptions of a paper, so membership cannot be inferred for a
@@ -41,11 +56,9 @@ THUNDER_CLSMEAN_BACKBONES = frozenset({"kaiko-ai/midnight", "paige-ai/Virchow2"}
 #: (see ``docs/waiv_published.json`` -- "H0-mini" and "H-Optimus-0" are distinct models
 #: with distinct numbers). Reading H0-mini's protocol onto H-Optimus-0 would silently
 #: double its THUNDER feature width and put it on a different protocol from the paper.
-THUNDER_CLS_BACKBONES = frozenset({
-    "owkin/phikon-v2",
-    "bioptimus/H-optimus-0",
-    "MahmoodLab/UNI2-h",
-})
+THUNDER_CLS_BACKBONES = frozenset(
+    r for r, p in _readouts().items() if p == "cls"
+)
 
 _overlap = THUNDER_CLS_BACKBONES & THUNDER_CLSMEAN_BACKBONES
 if _overlap:

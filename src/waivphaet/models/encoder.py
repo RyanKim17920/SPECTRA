@@ -63,6 +63,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel
 
+from waivphaet.models import backbones as _bb
 from waivphaet.models.pooling import POOL_HEAD_NAMES, build_pool_head
 
 DEFAULT_BACKBONE = "owkin/phikon-v2"
@@ -72,117 +73,42 @@ DEFAULT_BACKBONE = "owkin/phikon-v2"
 #: reconstructs ``_pool``'s output from these and is tested for bitwise equality with it.
 POOL_PARTS: tuple[str, ...] = ("cls", "mean")
 
-# ImageNet stats -- what phikon-v2's own BitImageProcessor uses, and what both PathoROB
-# and plismbench feed it. Keep identical or the reproduced baseline drifts for free.
-IMAGENET_MEAN = (0.485, 0.456, 0.406)
-IMAGENET_STD = (0.229, 0.224, 0.225)
+#: Normalisation constants and the per-backbone tables below are VIEWS over the
+#: registry in ``waivphaet.models.backbones`` -- one entry per model, edited in one
+#: place.  They keep their old names because run scripts, cells and tests import them
+#: by name; what changed is that nothing is transcribed twice.
+IMAGENET_MEAN = _bb.IMAGENET_MEAN
+IMAGENET_STD = _bb.IMAGENET_STD
+HALF_MEAN = _bb.HALF_MEAN
+HALF_STD = _bb.HALF_STD
 
-#: Symmetric [-1, 1] normalisation.
-HALF_MEAN = (0.5, 0.5, 0.5)
-HALF_STD = (0.5, 0.5, 0.5)
-
-#: **Normalisation is a property of the backbone, not of the pipeline.**
-#:
-#: phikon-v2 wants ImageNet stats (its own ``BitImageProcessor``), and PathoROB's
-#: ``Phikonv2ModelWrapper.get_preprocess`` uses exactly those -- which is why our Avg RI
-#: reproduces theirs to 6 decimals. ``kaiko-ai/midnight`` does **not**: its model card is
-#: explicit -- "trained on 224x224 images normalized with a mean of (0.5, 0.5, 0.5) and a
-#: standard deviation of (0.5, 0.5, 0.5). Please ensure you apply these exact
-#: normalization parameters."
-#:
-#: Feeding midnight ImageNet stats does not crash and does not look wrong anywhere: it
-#: just shifts and rescales every channel, quietly costing base accuracy. It would make
-#: our base-midnight row disagree with Waiv's published 0.759 for a reason that has
-#: nothing to do with the harness being faithful -- i.e. exactly the check we are running
-#: it for. So it is table-driven and travels with the backbone id.
-#:
-#: This table is an **override**, not the only source: it wins over whatever the backbone's
-#: own HF preprocessor says. These two entries are the ones our published numbers were
-#: produced with, and they must never move because a hub config was re-uploaded.
-BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float, float, float]]] = {
-    "owkin/phikon-v2": (IMAGENET_MEAN, IMAGENET_STD),
-    "kaiko-ai/midnight": (HALF_MEAN, HALF_STD),
-    # H-Optimus-0's model card publishes its own H&E-corpus statistics. They are NOT
-    # ImageNet's, and feeding it ImageNet's does not crash, does not warn and does not
-    # change a single shape -- it just quietly costs accuracy on every row we then
-    # compare against the paper. Pinned so no lookup is ever attempted.
-    "bioptimus/H-optimus-0": (
-        (0.707223, 0.578729, 0.703617),
-        (0.211883, 0.230117, 0.177517),
-    ),
-    # UNI2-h really is ImageNet -- its timm pretrained_cfg says so. It is pinned anyway
-    # because "ImageNet because we read the card" and "ImageNet because the lookup fell
-    # through" are indistinguishable at the call site, and only one of them is a decision.
-    "MahmoodLab/UNI2-h": (IMAGENET_MEAN, IMAGENET_STD),
-    # SophontAI/OpenMidnight is ImageNet **by statement**: its model card's own
-    # "Extracting Embeddings" snippet is
-    #   transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
-    # commented "# ImageNet normalization". This is NOT inherited from its ancestor:
-    # kaiko-ai/midnight -- the model OpenMidnight replicates -- demands (0.5,0.5,0.5),
-    # so "same family" would have been exactly the wrong reason to pick stats here.
-    # The DINOv2 training config next to the checkpoint carries no normalisation key,
-    # i.e. the fork's upstream default (ImageNet) was used, which agrees with the card.
-    "SophontAI/OpenMidnight": (IMAGENET_MEAN, IMAGENET_STD),
-    # paige-ai/Virchow (v1) is ImageNet **by its own pretrained_cfg**: the repo's
-    # config.json carries mean=[0.485,0.456,0.406] std=[0.229,0.224,0.225], and the model
-    # card's snippet resolves its transform through
-    # ``timm.data.resolve_data_config(model.pretrained_cfg)``, i.e. exactly those numbers.
-    # ``_timm_config_normalization`` would derive the same values, but that path is only
-    # reachable when config.json is; pinning here keeps the stats fixed if the local
-    # binding below is ever repointed, and keeps "ImageNet because we read the card" from
-    # looking like "ImageNet because a lookup fell through" at the call site.
-    # NOTE: this is v1 only. paige-ai/Virchow2 is a separate repo id and is NOT in this
-    # table -- it derives ImageNet from its own pretrained_cfg and must stay that way.
-    "paige-ai/Virchow": (IMAGENET_MEAN, IMAGENET_STD),
-}
-
+#: Per-backbone normalisation OVERRIDES: an entry here wins over whatever the
+#: backbone's own HF preprocessor or timm ``pretrained_cfg`` says, because these are
+#: the statistics our published numbers were produced with and must not move if a hub
+#: config is re-uploaded.  A backbone with no entry resolves its stats from its repo.
+#: Source of truth: ``backbones.BACKBONES[...].normalization``.
+BACKBONE_NORMALIZATION: dict[str, tuple[tuple[float, float, float], tuple[float, float, float]]] = _bb.normalization_table()
 
 # ======================================================================================
-# GATED backbones -- served off a local directory instead of the hub.
+# Locally-served backbones -- served off a directory instead of the hub.
 # ======================================================================================
 #
-# ``bioptimus/H-optimus-0`` and ``MahmoodLab/UNI2-h`` are gated repos that our token is
-# not approved for: every hub call 403s, including the ``config.json`` fetch that decides
-# timm-vs-AutoModel. The checkpoints exist on this machine, so the fix is a binding from
-# repo id -> directory, consulted BEFORE the hub by everything that would otherwise ask
-# the hub: the loader dispatch, the FFN-shape probe, the normalisation lookup, the weights.
+# Gated repos (``bioptimus/H-optimus-0``, ``MahmoodLab/UNI2-h``, ``paige-ai/Virchow``)
+# 403 on EVERY hub call, ``config.json`` included -- and that is the file which decides
+# timm-vs-AutoModel.  So the binding is consulted BEFORE the hub for everything: loader
+# dispatch, the FFN-shape probe, normalisation lookup, weights.  Without it the failure
+# is not a clean 403: ``_hub_config`` swallows the error and returns ``None``,
+# ``is_timm_backbone`` therefore answers ``False``, and the run dies inside ``AutoModel``
+# with "Unrecognized model" -- an error naming nothing about gating, about the real
+# architecture, or about what to do next.
 #
-# Without the binding the failure is not a clean 403. ``_hub_config`` swallows the error
-# and returns ``None``, ``is_timm_backbone`` therefore answers ``False``, and the run takes
-# the ``AutoModel`` path and dies with "Unrecognized model" -- an error whose text names
-# nothing about gating, about the real architecture, or about what to do next.
+# ``SophontAI/OpenMidnight`` is NOT gated; it is bound because the weights we run are a
+# file on this machine (converted by scripts/convert_openmidnight.py), not a hub artefact.
 #
-# Overridable via ``WAIV_BACKBONE_LOCAL_DIRS="repo=/dir,repo2=/dir2"`` so a relocated
-# checkpoint (``/data`` has been swept before) is a job-script edit, not a code change.
-
-BACKBONE_LOCAL_DIRS: dict[str, str] = {
-    "bioptimus/H-optimus-0": "/data/H-optimus-0",
-    "MahmoodLab/UNI2-h": "/data/UNI2-h",
-    # OpenMidnight is NOT gated -- it is bound locally for the other reason this table
-    # exists: the weights we run are a file on this machine, not a hub artefact. The
-    # source is /data/OpenMidnight_ckpts/openmidnight_checkpoint.pth, a raw DINOv2
-    # *training* checkpoint ({"teacher": {"backbone.*", "dino_head.*", "ibot_head.*"}})
-    # with block_chunks=4 nesting and DINOv2's SwiGLU names -- nothing timm can load.
-    # /data/OpenMidnight holds the teacher BACKBONE only, de-chunked and passed through
-    # timm's own ``checkpoint_filter_fn`` (scripts/convert_openmidnight.py), plus the
-    # config.json this loader dispatches on. Sibling files in OpenMidnight_ckpts
-    # (highres_*, *_v2_*, run subdirectories) are DIFFERENT models; the binding names
-    # one directory so no variant can be picked up by accident.
-    "SophontAI/OpenMidnight": "/data/OpenMidnight",
-    # paige-ai/Virchow (v1) is a gated repo like the two above, and the weights that exist
-    # on this machine live in a SEPARATE hub cache root (/data/Virchow) from HF_HOME
-    # (/data/huggingface), so ``timm.create_model("hf-hub:paige-ai/Virchow")`` would go to
-    # the network and 403 rather than find them. The path is the pinned snapshot commit,
-    # not the cache root: the parent holds refs/ and blobs/ that timm cannot load, and
-    # naming the commit means a later re-download of a different revision cannot be picked
-    # up silently. Directory holds config.json + model.safetensors (both symlinks into
-    # ../../blobs -- ``is_file()`` follows them).
-    # This is v1. paige-ai/Virchow2 is hub-served and deliberately absent from this table.
-    "paige-ai/Virchow": (
-        "/data/Virchow/models--paige-ai--Virchow/snapshots/"
-        "19eebc84ae33e79f1b2d866e6ff90ae50e522f9a"
-    ),
-}
+# Each directory is ``$SPECTRA_INPUTS/<local_subdir>`` from the registry, so relocating
+# the weight store is one environment variable.  ``WAIV_BACKBONE_LOCAL_DIRS="repo=/dir"``
+# still overrides individual entries per job.
+BACKBONE_LOCAL_DIRS: dict[str, str] = _bb.local_dir_table()
 
 #: Weight file names we accept in a local backbone directory, in preference order.
 _LOCAL_WEIGHT_NAMES: tuple[str, ...] = ("model.safetensors", "pytorch_model.bin")
@@ -406,85 +332,17 @@ def _timm_extra_kwargs(backbone: str) -> dict:
     return {"mlp_layer": SwiGLUPacked, "act_layer": nn.SiLU}
 
 
-#: Architecture kwargs for locally-served backbones, transcribed from the model cards.
+#: Architecture kwargs for locally-served timm backbones, from the registry.
 #:
 #: These exist because ``pretrained=True`` on a hub id is what normally applies a repo's
 #: ``pretrained_cfg`` and ``model_args``; a gated repo forces ``pretrained=False`` on a
-#: bare architecture name, and then NOTHING applies them. UNI2-h is the sharp case: its
-#: ``config.json`` names ``vit_giant_patch14_224``, whose timm defaults are embed_dim=1408,
-#: depth=40, num_heads=16, plain MLP -- an entirely different model that builds without
-#: complaint and then fails to load a single block. Values that a checkpoint can prove
+#: bare architecture name, and then NOTHING applies them.  Values a checkpoint can prove
 #: (prefix tokens, depth, widths) are re-derived from the built model and asserted in
-#: tests/test_new_backbones.py, so a wrong entry here surfaces as a number, not as drift.
+#: tests/test_new_backbones.py, so a wrong entry surfaces as a number, not as drift.
 #:
-#: ``mlp_layer``/``act_layer`` are named as strings so importing this module does not drag
-#: in timm; ``_timm_local_kwargs`` resolves them.
-BACKBONE_TIMM_KWARGS: dict[str, dict] = {
-    # https://huggingface.co/MahmoodLab/UNI2-h -- the card's ``timm_kwargs`` verbatim.
-    "MahmoodLab/UNI2-h": {
-        "img_size": 224,
-        "patch_size": 14,
-        "depth": 24,
-        "num_heads": 24,
-        "init_values": 1e-5,
-        "embed_dim": 1536,
-        "mlp_ratio": 2.66667 * 2,
-        "no_embed_class": True,
-        "mlp_layer": "SwiGLUPacked",
-        "act_layer": "SiLU",
-        "reg_tokens": 8,
-        "dynamic_img_size": True,
-    },
-    # https://huggingface.co/bioptimus/H-optimus-0 -- ``vit_giant_patch14_reg4_dinov2``
-    # already carries depth/width/SwiGLU/reg_tokens=4, so only the card's ``init_values``
-    # and ``dynamic_img_size`` are added. ``img_size`` is NOT optional: the architecture's
-    # DINOv2 default is 518, whose pos_embed is (1, 1369, 1536) against this checkpoint's
-    # (1, 256, 1536).
-    "bioptimus/H-optimus-0": {
-        "img_size": 224,
-        "init_values": 1e-5,
-        "dynamic_img_size": False,
-    },
-    # SophontAI/OpenMidnight is architecturally the same animal as H-Optimus-0 --
-    # DINOv2 ViT-g/14, 40 blocks, 1536-d, fused SwiGLU FFN, 4 registers -- which the
-    # checkpoint proves rather than the name: its training config.yaml says
-    # ``arch: vit_giant2 / patch_size: 14 / ffn_layer: swiglufused /
-    # num_register_tokens: 4 / layerscale: 1.0e-05``, and the tensors agree
-    # (pos_embed (1, 257, 1536) -> a 16x16 grid, i.e. 224px, NOT the architecture's
-    # DINOv2 default of 518 -> (1, 1369, 1536)). So ``img_size`` is mandatory here for
-    # the same reason it is above, and ``init_values`` must be set or ``ls1.gamma`` /
-    # ``ls2.gamma`` do not exist to load into.
-    "SophontAI/OpenMidnight": {
-        "img_size": 224,
-        "init_values": 1e-5,
-        "dynamic_img_size": False,
-    },
-    # https://huggingface.co/paige-ai/Virchow -- Virchow **v1**, transcribed verbatim from
-    # that repo's config.json ``model_args`` (num_classes / global_pool are forced by
-    # ``_timm_local_kwargs`` and so are not repeated here).
-    #
-    # An explicit entry is MANDATORY here even though the weight-shape probe would find
-    # the packed FFN on its own, because the gated/local path builds the bare architecture
-    # name and NOTHING applies the repo's ``model_args``. timm's ``vit_huge_patch14_224``
-    # defaults are mlp_ratio=4 (-> fc1 out 5120, not the checkpoint's 6832) and
-    # init_values=None (-> no ``ls1.gamma``/``ls2.gamma`` to load into at all), so the
-    # strict load would fail on all 32 blocks. ``img_size`` and ``dynamic_img_size`` are
-    # copied for faithfulness rather than necessity -- this architecture already defaults
-    # to 224, unlike the DINOv2 ViT-g entries above whose default is 518.
-    #
-    # NOT a copy of the Virchow2 entry: v1 has **no register tokens**
-    # (num_prefix_tokens == 1, 257 tokens out of forward_features), where Virchow2 carries
-    # 4 registers (5 prefix tokens, 261). Virchow2 is hub-served and needs no entry here;
-    # nothing in this dict may be shared between the two.
-    "paige-ai/Virchow": {
-        "img_size": 224,
-        "init_values": 1e-5,
-        "mlp_ratio": 5.3375,
-        "dynamic_img_size": True,
-        "mlp_layer": "SwiGLUPacked",
-        "act_layer": "SiLU",
-    },
-}
+#: ``mlp_layer``/``act_layer`` are named as strings so importing the registry does not
+#: drag in timm; ``_timm_local_kwargs`` resolves them.
+BACKBONE_TIMM_KWARGS: dict[str, dict] = _bb.timm_kwargs_table()
 
 #: String -> timm/torch layer classes used inside ``BACKBONE_TIMM_KWARGS``.
 _TIMM_LAYER_NAMES = ("mlp_layer", "act_layer")
