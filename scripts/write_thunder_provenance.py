@@ -157,7 +157,7 @@ def build(run_name: str, backbone: str, adapter: str, pooling_arg: str,
     train_cfg = json.loads(train_cfg_path.read_text()) if train_cfg_path.is_file() else {}
 
     return {
-        "schema": "waiv.thunder.provenance/1",
+        "schema": "spectra.thunder.provenance/1",
         "written_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "run_name": run_name,
         "backbone": backbone,
