@@ -28,7 +28,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
-from waivphaet.eval.hest_adapter import (  # noqa: E402
+from spectra.eval.hest_adapter import (  # noqa: E402
     HEST_RANGE,
     LEADERBOARD_TASKS,
     PUBLISHED_PHAET_AVG,
@@ -42,12 +42,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _config import HEST_WORK  # noqa: E402
 
 # Env-overridable, same shape as collect_thunder.py's THUNDER_BASE_DATA_FOLDER default.
-# WAIV_HEST_RESULTS points straight at the results dir; WAIV_HEST_WORK_DIR mirrors
+# SPECTRA_HEST_RESULTS points straight at the results dir; SPECTRA_HEST_WORK_DIR mirrors
 # hest_adapter.DEFAULT_WORK_DIR and gets "/results" appended, so whichever of the two the
 # caller already exports works. Value with neither set is the previous hardcoded path.
 DEFAULT_RESULTS = Path(
-    os.environ.get("WAIV_HEST_RESULTS")
-    or (Path(os.environ.get("WAIV_HEST_WORK_DIR", str(HEST_WORK))) / "results")
+    os.environ.get("SPECTRA_HEST_RESULTS")
+    or (Path(os.environ.get("SPECTRA_HEST_WORK_DIR", str(HEST_WORK))) / "results")
 )
 
 PHIKONV2 = "owkin/phikon-v2"
@@ -106,7 +106,7 @@ def main() -> int:
     ap.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS)
     ap.add_argument("--pooling", default="cls", choices=("cls", "clsmean"))
     ap.add_argument("--base", default=None, help="default base_<pooling>")
-    ap.add_argument("--backbone", default=os.environ.get("WAIV_BACKBONE"),
+    ap.add_argument("--backbone", default=os.environ.get("SPECTRA_BACKBONE"),
                     help="override the backbone recorded in the base run's summary JSON; "
                          "only owkin/phikon-v2 has a published HEST row")
     ap.add_argument("--runs", nargs="*", default=None,

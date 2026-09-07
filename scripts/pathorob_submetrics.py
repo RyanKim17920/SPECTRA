@@ -118,6 +118,15 @@ def main():
                 delta = "" if (b is None or m is None) else f" ({m - b:+.3f})"
                 cells_md.append(f"{bs} -> {ts}{delta}")
                 ttex = ts.replace("+/-", "$\\pm$")
+                # Single paper-wide highlighting rule: \gain when the base ->
+                # fine-tuned change is an improvement clearing two sample SDs,
+                # \loss when it is a regression clearing two sample SDs, plain
+                # otherwise (and plain when there is no spread to test against).
+                # Every submetric here is higher-is-better.
+                if b is not None and m is not None and sd is not None:
+                    d = m - b
+                    if round(abs(d), 3) > round(2 * sd, 3):
+                        ttex = f"\\gain{{{ttex}}}" if d > 0 else f"\\loss{{{ttex}}}"
                 cells_tex.append(f"{bs}$\\to${ttex}")
             label = "mean of 3" if ds == "mean" else ds
             md.append(f"| {label} | {n_used} | " + " | ".join(cells_md) + " |")

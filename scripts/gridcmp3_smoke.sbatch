@@ -30,7 +30,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -43,26 +43,26 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/gridcmp3-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/gridcmp3-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
-CHUNK="${WAIV_CHUNK:-300}"
-ARMS="${WAIV_ARMS:-a b c}"
+CHUNK="${SPECTRA_CHUNK:-300}"
+ARMS="${SPECTRA_ARMS:-a b c}"
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | chunk $CHUNK | arms '$ARMS' ==="
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 
 declare -A RESULT
 for ARM in $ARMS; do
-  CHUNK="${WAIV_CHUNK:-300}"
+  CHUNK="${SPECTRA_CHUNK:-300}"
   case "$ARM" in
     a) COND=12; TILES=300 ;;
     b) COND=24; TILES=150 ;;
     c) COND=6;  TILES=600 ;;
     d) COND=2;  TILES=1800 ;;
-    e) COND=2;  TILES=1975; CHUNK="${WAIV_CHUNK:-150}" ;;   # ceiling arm: 1974 neg, B=3950
+    e) COND=2;  TILES=1975; CHUNK="${SPECTRA_CHUNK:-150}" ;;   # ceiling arm: 1974 neg, B=3950
     *) echo "unknown arm $ARM" >&2; exit 2 ;;
   esac
   OUT_DIR="$REPO/runs/gridcmp3-smoke-${ARM}-${SLURM_JOB_ID:-local}"

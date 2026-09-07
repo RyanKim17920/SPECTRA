@@ -24,9 +24,9 @@
 #   (b) Every gap is n=1. The +-0.008 claims rest on differences the same size as an
 #       unmeasured between-run seed variance.
 #
-#   WAIV_ARM=grid2     --grid -C 2  -T 1200   2400 img/step  1199 neg/row  R=2,400
-#   WAIV_ARM=grid12    --grid -C 12 -T 200    2400 img/step   199 neg/row  R=26,400
-#   WAIV_ARM=ctrlseed  --n-groups 6 --group-size 200 --seed 1
+#   SPECTRA_ARM=grid2     --grid -C 2  -T 1200   2400 img/step  1199 neg/row  R=2,400
+#   SPECTRA_ARM=grid12    --grid -C 12 -T 200    2400 img/step   199 neg/row  R=26,400
+#   SPECTRA_ARM=ctrlseed  --n-groups 6 --group-size 200 --seed 1
 #
 # GRID2 is the MAX-NEGATIVES point: 6x CTRL's negatives AND 2x its query rows at
 # identical compute. GRID12 is the DISENTANGLING arm -- negatives identical to CTRL
@@ -41,11 +41,11 @@
 # from the preflight so the BEFORE probe and the follower score the SAME condition set
 # the training run saw.
 #
-#   WAIV_ARM=grid12 sbatch --job-name=waiv-gridcmp2-grid12 scripts/gridcmp2.sbatch
+#   SPECTRA_ARM=grid12 sbatch --job-name=waiv-gridcmp2-grid12 scripts/gridcmp2.sbatch
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -77,8 +77,8 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PIN="$SPECTRA_SNAPSHOTS/gridcmp2-pinned"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-ARM="${WAIV_ARM:?set WAIV_ARM to grid2 | grid12 | ctrlseed}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM to grid2 | grid12 | ctrlseed}"
 # See gridcmp.sbatch: SLURM_RESTART_COUNT keeps a requeued attempt out of the previous
 # attempt's run dir, so a preemption cannot silently mix two training trajectories.
 RUN_NAME="gridcmp2-${ARM}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
@@ -97,7 +97,7 @@ case "$ARM" in
   grid2)    SAMPLER_ARGS=(--grid --grid-conditions 2  --grid-tiles 1200 --grid-forward-chunk 600); SEED=0 ;;
   grid12)   SAMPLER_ARGS=(--grid --grid-conditions 12 --grid-tiles 200  --grid-forward-chunk 600); SEED=0 ;;
   ctrlseed) SAMPLER_ARGS=(--n-groups 6 --group-size 200);                                         SEED=1 ;;
-  *) echo "unknown WAIV_ARM=$ARM (want grid2 | grid12 | ctrlseed)" >&2; exit 2 ;;
+  *) echo "unknown SPECTRA_ARM=$ARM (want grid2 | grid12 | ctrlseed)" >&2; exit 2 ;;
 esac
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | run $RUN_NAME ==="

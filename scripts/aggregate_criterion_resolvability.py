@@ -25,7 +25,7 @@ SEEDS = [0,1,2,3,4]
 J = json.load(open(REPO/'docs/thunder_seed_floor_12ds.json'))
 DS12 = J['datasets_12']
 ps = J['per_seed_scores']          # key "bb/task" -> seed -> ds -> f1
-WAIV_T = {
+SPECTRA_T = {
  "phikon":{"base":{"knn":74.0,"linear_probing":79.3,"simple_shot":71.8},
            "ft":{"knn":77.7,"linear_probing":80.7,"simple_shot":73.3}},
  "midnight":{"base":{"knn":80.0,"linear_probing":84.4,"simple_shot":71.5},
@@ -47,7 +47,7 @@ for b in BB:
             T_ours[(b,t,s)] = st.mean(d[str(s)][ds] for ds in DS12)
 
 def pct_t(b,t,s,cap=True):
-    den = (WAIV_T[b]['ft'][t]-WAIV_T[b]['base'][t])/100.0
+    den = (SPECTRA_T[b]['ft'][t]-SPECTRA_T[b]['base'][t])/100.0
     v = (T_ours[(b,t,s)]-OUR_BASE_T[(b,t)])/den*100.0
     return min(v,100.0) if cap else v
 
@@ -114,7 +114,7 @@ print('\nRAW underlying (12ds f1 / hest avg / ri) per seed')
 for b in BB:
     for t in TASKS:
         vs=[T_ours[(b,t,s)] for s in SEEDS]
-        print(f'  T {b:9s} {t:15s} base={OUR_BASE_T[(b,t)]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} waivgain={(WAIV_T[b]["ft"][t]-WAIV_T[b]["base"][t])/100:.4f}')
+        print(f'  T {b:9s} {t:15s} base={OUR_BASE_T[(b,t)]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} waivgain={(SPECTRA_T[b]["ft"][t]-SPECTRA_T[b]["base"][t])/100:.4f}')
 for b in BB:
     vs=[H_ours[(b,s)] for s in SEEDS]
     print(f'  H {b:9s} base={HEST_BASE[b]:.5f} ours={[round(v,5) for v in vs]} sd={sd(vs):.5f} waivgain={WAIV_HEST[b]-HEST_BASE[b]:.4f}')

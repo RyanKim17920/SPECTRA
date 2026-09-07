@@ -94,9 +94,9 @@ RI_BUDGET_FLOOR: dict[str, float | None] = {
     "midnight": 0.9140,
     "phikon":   None,   # never defined -- phikon could not fail this column
 }
-RI_BUDGET_ENABLED = bool(os.environ.get("WAIV_ENABLE_RI_BUDGET_COLUMN"))
+RI_BUDGET_ENABLED = bool(os.environ.get("SPECTRA_ENABLE_RI_BUDGET_COLUMN"))
 RI_BUDGET_WARNING = ("RI-budget column is a TUNED constant with no on-disk source; "
-                     "quarantined 2026-08-26, enable with WAIV_ENABLE_RI_BUDGET_COLUMN=1")
+                     "quarantined 2026-08-26, enable with SPECTRA_ENABLE_RI_BUDGET_COLUMN=1")
 
 # ---------------------------------------------------------------------------
 # Seed-SD noise floors, per backbone × step.
@@ -146,7 +146,7 @@ THUNDER_SEED_SD_SOURCE = ("docs/thunder_seed_floor_12ds.json "
 # Backbone detection
 # ---------------------------------------------------------------------------
 # NOTE: substring match, so order matters only if one name contains another (none do).
-# hoptimus/uni2 are the WAIV_ARM tokens gentle.sbatch folds into RUN_NAME, not the HF ids.
+# hoptimus/uni2 are the SPECTRA_ARM tokens gentle.sbatch folds into RUN_NAME, not the HF ids.
 # "hopt" is an abbreviation used when the full "hoptimus" token would push a run name
 # past the 52-char budget that leaves room for SLURM's .rN requeue suffix.
 _BACKBONES = ("phikon", "midnight", "virchow2", "hoptimus", "hopt", "uni2")

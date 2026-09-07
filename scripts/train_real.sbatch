@@ -49,7 +49,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -63,7 +63,7 @@ export PYTHONUNBUFFERED=1
 # The corpus moved from $SPECTRA_PLISM to $SPECTRA_PLISM on 2026-08-09. The old path is
 # gone, so a stale default here does not degrade -- it fails the preflight in 1 second with
 # FileNotFoundError on manifest.json, which is how jobs 376023/376024 died.
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-real}-${SLURM_JOB_ID:-local}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
@@ -74,18 +74,18 @@ PY="$REPO/.venv/bin/python"
 # here rather than through the trailing "$@", because embed_probe.py and the eval follower
 # below are also given $LORA_RANK -- passing --lora-rank as an extra arg would train one
 # rank and evaluate at another, and build_model hard-fails on that mismatch.
-LORA_RANK="${WAIV_LORA_RANK:-32}"
-LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
-N_GROUPS="${WAIV_N_GROUPS:-2}"
-GROUP_SIZE="${WAIV_GROUP_SIZE:-192}"
-MAX_STEPS="${WAIV_MAX_STEPS:-4000}"
-CKPT_EVERY="${WAIV_CKPT_EVERY:-500}"
-LR="${WAIV_LR:-1e-4}"
-TEMPERATURE="${WAIV_TEMPERATURE:-0.07}"
+LORA_RANK="${SPECTRA_LORA_RANK:-32}"
+LORA_ALPHA="${SPECTRA_LORA_ALPHA:-64}"
+N_GROUPS="${SPECTRA_N_GROUPS:-2}"
+GROUP_SIZE="${SPECTRA_GROUP_SIZE:-192}"
+MAX_STEPS="${SPECTRA_MAX_STEPS:-4000}"
+CKPT_EVERY="${SPECTRA_CKPT_EVERY:-500}"
+LR="${SPECTRA_LR:-1e-4}"
+TEMPERATURE="${SPECTRA_TEMPERATURE:-0.07}"
 
 # Backbone knob. UNSET => nothing is passed and train_lora.py's own default
 # (owkin/phikon-v2) applies, i.e. byte-identical to every run submitted before this knob
-# existed. Set WAIV_BACKBONE=kaiko-ai/midnight (or any HF id) to fine-tune something else;
+# existed. Set SPECTRA_BACKBONE=kaiko-ai/midnight (or any HF id) to fine-tune something else;
 # the same value is threaded into the BEFORE probe and the eval follower below, because a
 # probe run on a different backbone than the training run is not a measurement of anything.
 #
@@ -95,10 +95,10 @@ TEMPERATURE="${WAIV_TEMPERATURE:-0.07}"
 # the parameters, and WILL OOM at 2 x 192. train_lora.py warns about exactly this. Measure
 # the new backbone first with
 #     sbatch scripts/sizing_probe.sbatch kaiko-ai/midnight
-# and then set WAIV_N_GROUPS / WAIV_GROUP_SIZE from what it reports. WAIV_BACKBONE
+# and then set SPECTRA_N_GROUPS / SPECTRA_GROUP_SIZE from what it reports. SPECTRA_BACKBONE
 # deliberately does NOT change the batch defaults -- silently re-sizing them would make two
 # runs incomparable without anything in the log saying so.
-BACKBONE="${WAIV_BACKBONE:-}"
+BACKBONE="${SPECTRA_BACKBONE:-}"
 BACKBONE_ARGS=()
 if [ -n "$BACKBONE" ]; then BACKBONE_ARGS=(--backbone "$BACKBONE"); fi
 

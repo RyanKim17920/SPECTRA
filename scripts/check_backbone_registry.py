@@ -3,13 +3,13 @@
 
 WHY A CHECKER AND NOT AN IMPORT.  The per-checkpoint eval cells (``$SPECTRA_CELLS/<name>/
 model.py``) are executed OUTSIDE this repo, by four different vendored harnesses in four
-different virtualenvs, none of which has ``waivphaet`` installed -- and each cell's
+different virtualenvs, none of which has ``spectra`` installed -- and each cell's
 ``run_manifest.py`` HASHES its own ``model.py`` to bind results to code.  Making a cell
 import this package would therefore (a) not work where the cells actually run and
 (b) invalidate every existing manifest the moment the import line was added, i.e. throw
 away the provenance of results already on disk.
 
-So the cells stay standalone copies, and :mod:`waivphaet.models.backbones` is the SOURCE:
+So the cells stay standalone copies, and :mod:`spectra.models.backbones` is the SOURCE:
 this script proves a copy has not drifted from it.  Run it after editing the registry, or
 before trusting a cell you did not write::
 
@@ -40,7 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _config import CELLS  # noqa: E402
-from waivphaet.models.backbones import BACKBONES  # noqa: E402
+from spectra.models.backbones import BACKBONES  # noqa: E402
 
 #: cell key -> (registry attribute, human name). Only these are compared.
 FIELDS = [
@@ -112,7 +112,7 @@ def check_cell(model_py: Path) -> list[str]:
         bb = BACKBONES.get(repo_id)
         if bb is None:
             bad.append(f"{model_py.parent.name}: {repo_id} is in the cell but NOT in the "
-                       f"registry -- add it to src/waivphaet/models/backbones.py")
+                       f"registry -- add it to src/spectra/models/backbones.py")
             continue
         for cell_key, attr in FIELDS:
             if cell_key not in row:

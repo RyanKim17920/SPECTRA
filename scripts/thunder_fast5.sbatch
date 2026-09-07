@@ -25,16 +25,16 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
 RUN_TAG="${1:?usage: thunder_fast5.sbatch <run_tag> <adapter_dir>}"
 ADAPTER="${2:?usage: thunder_fast5.sbatch <run_tag> <adapter_dir>}"
 
-# Honor a caller-supplied WAIV_POOLING; default to cls (leaderboard-comparable path).
-# Pass WAIV_POOLING=clsmean in the environment for the internal arm-ranking readout.
-POOLING="${WAIV_POOLING:-cls}"
+# Honor a caller-supplied SPECTRA_POOLING; default to cls (leaderboard-comparable path).
+# Pass SPECTRA_POOLING=clsmean in the environment for the internal arm-ranking readout.
+POOLING="${SPECTRA_POOLING:-cls}"
 
 # Encode pooling in the run name so cls and clsmean results never overwrite each other.
 # Results land under outputs/res/<ds>/fast5_<tag>_<pooling>/...
@@ -52,12 +52,12 @@ export PYTHONNOUSERSITE=1
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-export WAIV_POOLING="$POOLING"
-export WAIV_RUN_NAME="$RUN_NAME"
-export WAIV_ADAPTER="$ADAPTER"
-export WAIV_LORA_RANK="${WAIV_LORA_RANK:-32}"
-export WAIV_LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
-export WAIV_PROJ_OUT_DIM="${WAIV_PROJ_OUT_DIM:-512}"
+export SPECTRA_POOLING="$POOLING"
+export SPECTRA_RUN_NAME="$RUN_NAME"
+export SPECTRA_ADAPTER="$ADAPTER"
+export SPECTRA_LORA_RANK="${SPECTRA_LORA_RANK:-32}"
+export SPECTRA_LORA_ALPHA="${SPECTRA_LORA_ALPHA:-64}"
+export SPECTRA_PROJ_OUT_DIM="${SPECTRA_PROJ_OUT_DIM:-512}"
 
 MODEL="custom:${REPO}/src/waivphaet/eval/thunder_model.py"
 

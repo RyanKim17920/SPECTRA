@@ -26,7 +26,7 @@ as more than one run name is given the table grows a `run_name` column (and the 
 The published columns and the `# cross-check` line are BACKBONE-GATED: they appear only for
 a backbone this file actually holds published numbers for (today: phikon-v2). See PUBLISHED
 and BACKBONE_RUN_PREFIXES below for how the backbone is determined and how to override it
-with --backbone / WAIV_BACKBONE.
+with --backbone / SPECTRA_BACKBONE.
 """
 
 from __future__ import annotations
@@ -209,8 +209,8 @@ WAIV_TASK_ALIAS = {
 #   adaptation, ckpt_saving, dataset, data_loading, task, wandb, embedding_recomputing,
 #   model_retraining
 # and not one of those mentions the model -- THUNDER only ever sees `custom:<path>.py`, and
-# thunder_model.py resolves WAIV_BACKBONE internally at import time. run_thunder.sbatch's
-# banner echoes dataset/tasks/pooling/run_name/epochs but NOT WAIV_BACKBONE, so the slurm
+# thunder_model.py resolves SPECTRA_BACKBONE internally at import time. run_thunder.sbatch's
+# banner echoes dataset/tasks/pooling/run_name/epochs but NOT SPECTRA_BACKBONE, so the slurm
 # logs do not carry it either (checked: no hit for backbone/midnight/phikon in the
 # mbase_clsmean job logs). The only physical trace is the embedding cache's width
 # (phikon-v2 ViT-L: 1024 cls / 2048 clsmean; Midnight ViT-g: 1536 / 3072), which lives
@@ -275,7 +275,7 @@ def read_provenance(run_name: str, root: str | Path | None = None) -> dict | Non
 
 
 def infer_backbone(run_name: str, root: str | Path | None = None) -> str | None:
-    """Map a WAIV_RUN_NAME to its backbone, or None when nothing covers it.
+    """Map a SPECTRA_RUN_NAME to its backbone, or None when nothing covers it.
 
     EVIDENCE FIRST: a provenance sidecar records the backbone that was actually exported
     for the run, so it wins over the name-prefix convention -- which is a convention, not a
@@ -327,13 +327,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(THUNDER))
     ap.add_argument("--model", required=True, nargs="+",
-                    help="one or more PretrainedModel.name (WAIV_RUN_NAME), searched in order; "
+                    help="one or more PretrainedModel.name (SPECTRA_RUN_NAME), searched in order; "
                          "the first with results on disk supplies each dataset row")
     ap.add_argument("--adaptation", default="frozen")
-    ap.add_argument("--backbone", default=os.environ.get("WAIV_BACKBONE"),
+    ap.add_argument("--backbone", default=os.environ.get("SPECTRA_BACKBONE"),
                     help="encoder these runs were produced with, e.g. owkin/phikon-v2 or "
                          "kaiko-ai/midnight. Decides whether published columns are shown. "
-                         "Defaults to WAIV_BACKBONE, else inferred from the run name "
+                         "Defaults to SPECTRA_BACKBONE, else inferred from the run name "
                          "prefix (see BACKBONE_RUN_PREFIXES)")
     ap.add_argument("--csv", action="store_true")
     args = ap.parse_args()
@@ -490,7 +490,7 @@ def main() -> None:
                   "BACKBONE_RUN_PREFIXES")
             print("# matches, so published columns and the cross-check are withheld rather "
                   "than guessed. Pass")
-            print("# --backbone (or set WAIV_BACKBONE) to name the encoder these results "
+            print("# --backbone (or set SPECTRA_BACKBONE) to name the encoder these results "
                   "came from.")
 
     # A mean over a partial roster is not the paper's mean; label it so nobody quotes it.

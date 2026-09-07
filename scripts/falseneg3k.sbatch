@@ -20,7 +20,7 @@
 # ======================================================================================
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -46,7 +46,7 @@ grep -q 'mask_same_core' "$PIN/src/waivphaet/train/contrastive.py" \
 [ -f "$REPO/runs/.plism_core_labels.npy" ] \
   || { echo "MISSING core labels: $REPO/runs/.plism_core_labels.npy -- run derive_core_map.sbatch first" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 SEED=0
 GRID_TILES=900
 
@@ -54,7 +54,7 @@ RUN_NAME="falseneg3k-phikon-s0-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_REST
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 
-MAX_STEPS=${WAIV_MAX_STEPS:-3000}
+MAX_STEPS=${SPECTRA_MAX_STEPS:-3000}
 CKPT_EVERY=250
 WORKERS=10
 LORA_RANK=32
@@ -63,7 +63,7 @@ LR=1e-4
 TEMPERATURE=0.07
 GRID_COND=2
 GRID_CHUNK=0
-EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-72000}"
+EVAL_MAX_WAIT_S="${SPECTRA_EVAL_MAX_WAIT_S:-72000}"
 HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem)
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} restart ${SLURM_RESTART_COUNT:-0} ==="

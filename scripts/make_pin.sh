@@ -24,7 +24,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 DEST="${1:?usage: make_pin.sh <dest-snapshot-dir>}"
 
@@ -47,7 +47,7 @@ chmod -R a-w "$DEST/src" "$DEST/scripts" "$DEST/pyproject.toml"
 [ -d "$DEST/tests" ] && chmod -R a-w "$DEST/tests"
 
 # --- verify all three resolve, the way the JOB will use them ------------------------
-[ -d "$DEST/src/waivphaet" ]          || { echo "PIN BROKEN: no src/waivphaet"          >&2; exit 3; }
+[ -d "$DEST/src/spectra" ]          || { echo "PIN BROKEN: no src/spectra"          >&2; exit 3; }
 [ -d "$DEST/third_party/PathoROB" ]   || { echo "PIN BROKEN: no third_party/PathoROB"   >&2; exit 3; }
 [ -x "$DEST/.venv/bin/python" ]       || { echo "PIN BROKEN: no .venv/bin/python"       >&2; exit 3; }
 
@@ -57,12 +57,12 @@ PYTHONPATH="$DEST/src" "$DEST/.venv/bin/python" - "$DEST" <<'EOF'
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(sys.argv[1]) / "src"))
-import waivphaet
-from waivphaet.eval.pathorob_adapter import PathoRobPaths
-assert waivphaet.__file__.startswith(sys.argv[1]), \
-    f"PYTHONPATH lost to the .venv copy: {waivphaet.__file__}"
+import spectra
+from spectra.eval.pathorob_adapter import PathoRobPaths
+assert spectra.__file__.startswith(sys.argv[1]), \
+    f"PYTHONPATH lost to the .venv copy: {spectra.__file__}"
 PathoRobPaths(root=Path(sys.argv[1]) / "third_party" / "PathoROB").check()
-print(f"[pin] waivphaet={waivphaet.__file__}")
+print(f"[pin] spectra={spectra.__file__}")
 print("[pin] PathoROB resolves: OK")
 EOF
 

@@ -13,9 +13,9 @@
 # job, so a node failure or a preemption on one arm does not take the other two with it.
 # Structure lifted from gridcmp.sbatch.
 #
-#   WAIV_ARM=split     --split-heads --cls-weight 0.5 --mean-weight 0.5
-#   WAIV_ARM=clsonly   --split-heads --cls-weight 1.0 --mean-weight 0.0
-#   WAIV_ARM=meanonly  --split-heads --cls-weight 0.0 --mean-weight 1.0
+#   SPECTRA_ARM=split     --split-heads --cls-weight 0.5 --mean-weight 0.5
+#   SPECTRA_ARM=clsonly   --split-heads --cls-weight 1.0 --mean-weight 0.0
+#   SPECTRA_ARM=meanonly  --split-heads --cls-weight 0.0 --mean-weight 1.0
 #
 # Everything else is IDENTICAL to the CTRL arm of the gridcmp experiment (6 x 200 pair
 # path, 2400 images/step, phikon-v2, rank 32 / alpha 64, lr 1e-4, tau 0.07, 1500 steps,
@@ -40,11 +40,11 @@
 # from the preflight so the BEFORE probe and the follower score the SAME condition set the
 # training run saw.
 #
-#   WAIV_ARM=split sbatch --job-name=waiv-headcmp-split scripts/headcmp.sbatch
+#   SPECTRA_ARM=split sbatch --job-name=waiv-headcmp-split scripts/headcmp.sbatch
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -57,8 +57,8 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-ARM="${WAIV_ARM:?set WAIV_ARM to split | clsonly | meanonly}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM to split | clsonly | meanonly}"
 # See gridcmp.sbatch: SLURM_RESTART_COUNT keeps a requeued attempt out of the previous
 # attempt's run dir, so a preemption cannot silently mix two training trajectories.
 RUN_NAME="headcmp-${ARM}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
@@ -74,7 +74,7 @@ case "$ARM" in
   split)    HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5) ;;
   clsonly)  HEAD_ARGS=(--split-heads --cls-weight 1.0 --mean-weight 0.0) ;;
   meanonly) HEAD_ARGS=(--split-heads --cls-weight 0.0 --mean-weight 1.0) ;;
-  *) echo "unknown WAIV_ARM=$ARM (want split | clsonly | meanonly)" >&2; exit 2 ;;
+  *) echo "unknown SPECTRA_ARM=$ARM (want split | clsonly | meanonly)" >&2; exit 2 ;;
 esac
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | run $RUN_NAME ==="

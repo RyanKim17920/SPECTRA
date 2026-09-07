@@ -53,14 +53,14 @@ from typing import Optional
 # Import shared logic from collect_final5 (do not re-implement)
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
-# waivphaet.eval.thunder_protocol is stdlib-only by design (see its docstring) -- it is
+# spectra.eval.thunder_protocol is stdlib-only by design (see its docstring) -- it is
 # the ONE definition of THUNDER's per-backbone pooling, shared with the runner, which
 # itself cannot be imported here because it pulls in the THUNDER package.
 if str(_HERE.parent / "src") not in sys.path:
     sys.path.insert(0, str(_HERE.parent / "src"))
 import collect_final5 as _c5
 import eval_common as _ec
-from waivphaet.eval import thunder_protocol as _thunder_protocol
+from spectra.eval import thunder_protocol as _thunder_protocol
 
 # F6 fix (2026-08-26): _c5.HEST_BASE is now READ FROM DISK from the same field
 # (hest_perf_per_encoder.custom_encoder) that _c5._hest_score reads for fine-tuned
@@ -407,8 +407,8 @@ def _pct_of_waiv_two_base(ours, our_base, waiv_base, waiv_ft):
 def _thunder_pooling(arm):
     """THUNDER *classification* pooling protocol per backbone.
 
-    Delegates to `waivphaet.eval.thunder_protocol`, which is the same table the
-    THUNDER runner itself resolves `WAIV_POOLING=auto` through.  Two earlier
+    Delegates to `spectra.eval.thunder_protocol`, which is the same table the
+    THUNDER runner itself resolves `SPECTRA_POOLING=auto` through.  Two earlier
     versions of this function were local re-derivations and both were wrong:
     first `cls unless virchow2` (the HEST rule, wrong for midnight), then
     `cls if phikon else clsmean` -- which is right for the published trio by

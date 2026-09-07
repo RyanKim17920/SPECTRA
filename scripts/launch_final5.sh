@@ -10,7 +10,7 @@
 # "phikon got 4x the negatives". Defaulting T here would invite that confound straight
 # back in, so the caller must state it and it is recorded in every run name.
 set -euo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -24,7 +24,7 @@ for ARM in phikon midnight virchow2; do
   for S in "${SEEDS[@]}"; do
     jid=$(sbatch --parsable --account=max --qos=high \
           --job-name="f5-${ARM}-s${S}" \
-          --export=ALL,WAIV_ARM=$ARM,WAIV_SEED=$S,WAIV_T=$T \
+          --export=ALL,SPECTRA_ARM=$ARM,SPECTRA_SEED=$S,SPECTRA_T=$T \
           scripts/final5.sbatch)
     echo "  $ARM seed=$S T=$T -> $jid"
   done

@@ -56,7 +56,7 @@ def main() -> int:
         log("MIDNIGHT_GATE_TIMEOUT features never completed")
         return 2
 
-    from waivphaet.eval.pathorob_adapter import read_results, run_robustness_index
+    from spectra.eval.pathorob_adapter import read_results, run_robustness_index
 
     model = "midnight_clsmean_ours"
     run_robustness_index(model, list(DATASETS))

@@ -78,7 +78,7 @@ HEST_BASE_RETIRED_LITERALS = {
 
 # ---------------------------------------------------------------------------
 # ARM <-> BACKBONE.  The single mapping between the short arm token that appears
-# in run names / result dirs / sbatch WAIV_ARM and the HF repo id the encoder is
+# in run names / result dirs / sbatch SPECTRA_ARM and the HF repo id the encoder is
 # built from.  Every other table in this file, in scoreboard.py and in
 # final_recipe_report.py is keyed by ARM; anything that needs the repo id (e.g.
 # the THUNDER pooling protocol, which is published per model) must come through
@@ -150,7 +150,7 @@ THUNDER_BASE_DIRS: dict[str, dict[str, str]] = {
     "midnight": {"cls": "mbase_clsmean", "seg": "mbase_cls"},
     "virchow2": {"cls": "vbase_clsmean", "seg": "vbase_cls"},
     # hoptimus / uni2: BOTH task kinds are cls-pooled for these two backbones
-    # (waivphaet.eval.thunder_protocol.THUNDER_CLS_BACKBONES), unlike midnight/virchow2
+    # (spectra.eval.thunder_protocol.THUNDER_CLS_BACKBONES), unlike midnight/virchow2
     # whose classification dir is clsmean -- so these two dirs differ only by the seg
     # suffix, not by pooling.  Same split-dir base layout as the trio above (one dir per
     # task kind for base; the FT runs still use ONE dir for all task kinds).
@@ -192,7 +192,7 @@ HEST_BASE_FILES = {
 # HEST pooling protocol, per backbone arm.  The ONLY definition in the repo.
 #
 # NOT the same as the THUNDER pooling rule -- that one lives in
-# waivphaet.eval.thunder_protocol and is read by scoreboard._thunder_pooling.
+# spectra.eval.thunder_protocol and is read by scoreboard._thunder_pooling.
 # midnight is `cls` on HEST but `clsmean` on THUNDER classification, so the two
 # rules must never be shared.
 #

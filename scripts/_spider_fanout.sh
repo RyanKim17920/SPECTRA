@@ -1,7 +1,7 @@
 #!/bin/bash
 # Fan out SPIDER THUNDER evals. Canary (spider_thorax / base_cls) is submitted separately.
 set -euo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd $SPECTRA_REPO
 TASKS="knn linear_probing simple_shot"
@@ -33,7 +33,7 @@ for spec in "${SPECS[@]}"; do
     # alternate accounts to spread load
     if [ $((i % 2)) -eq 0 ]; then ACCT="--account=max --qos=high"; else ACCT="--account=training"; fi
     i=$((i+1))
-    export WAIV_BACKBONE="$BB"
+    export SPECTRA_BACKBONE="$BB"
     if [ -n "$AD" ]; then
       sbatch $ACCT -J "$JN" scripts/run_thunder.sbatch "$DS" "$TASKS" auto "$RN" "" "$AD"
     else

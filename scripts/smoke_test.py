@@ -10,7 +10,7 @@ which is the degenerate case PLAN.md 2 warns about.
 
 Assumes the local ``.h5`` have been repacked::
 
-    python -m waivphaet.data.repack --h5-dir $SPECTRA_PLISM \
+    python -m spectra.data.repack --h5-dir $SPECTRA_PLISM \
         --out-dir $SPECTRA_PLISM_PACKED --verify
 """
 
@@ -22,10 +22,10 @@ from pathlib import Path
 
 import torch
 
-from waivphaet.data.conditions import available_conditions, all_conditions, default_split
-from waivphaet.data.pairs import build_pair_loader
-from waivphaet.models.encoder import build_encoder
-from waivphaet.train.contrastive import TrainConfig, train
+from spectra.data.conditions import available_conditions, all_conditions, default_split
+from spectra.data.pairs import build_pair_loader
+from spectra.models.encoder import build_encoder
+from spectra.train.contrastive import TrainConfig, train
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))

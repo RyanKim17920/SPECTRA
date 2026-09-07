@@ -136,8 +136,8 @@ def section1(rep: dict) -> list[str]:
     L = ["## 1. Headline: the graded criterion (RI / HEST / THUNDER)", "",
          "Source: `scripts/final_recipe_report.py` (`build_report()`), re-run by this",
          "command; machine-readable copy in `docs/final_recipe_verdict.json`.", "",
-         f"Run family: `{rf.get('glob')}` -- the FINALISED recipe (WAIV_BCLS=3.0, "
-         "WAIV_BMEAN=-inf, ms500, warmup 200, lr 1e-4, rank 32, projdim 512, t900,",
+         f"Run family: `{rf.get('glob')}` -- the FINALISED recipe (SPECTRA_BCLS=3.0, "
+         "SPECTRA_BMEAN=-inf, ms500, warmup 200, lr 1e-4, rank 32, projdim 512, t900,",
          "CKPT_EVERY=50, pin `falseneg-gated`), five backbones, "
          f"{rf.get('n_runs_discovered')} runs discovered.", "",
          f"Checkpoint per run is chosen by the **{cr.get('rule')} rule**: "

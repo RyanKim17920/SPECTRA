@@ -44,8 +44,8 @@ from pathlib import Path
 # Make `src/` importable when run as a plain script from a checkout.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from waivphaet.data.conditions import NUM_TILES, all_conditions  # noqa: E402
-from waivphaet.data.repack import (  # noqa: E402
+from spectra.data.conditions import NUM_TILES, all_conditions  # noqa: E402
+from spectra.data.repack import (  # noqa: E402
     TILE_SHAPE,
     npy_path,
     repack_slide,
@@ -295,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def already_done_name(filename: str, out_dir: Path, manifest: dict) -> bool:
-    from waivphaet.data.conditions import parse_filename
+    from spectra.data.conditions import parse_filename
 
     try:
         return already_done(parse_filename(filename), out_dir, manifest)

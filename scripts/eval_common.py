@@ -270,7 +270,7 @@ WAIV, WAIV_THUNDER = load_waiv_published()
 def load_ri_waiv():
     """{arm: Waiv's fine-tuned Avg RI} for EVERY arm in WAIV_ROWS, from the JSON.
 
-    Was: re-keyed out of src/waivphaet/eval/pathorob_adapter.TARGETS, which is a second
+    Was: re-keyed out of src/spectra/eval/pathorob_adapter.TARGETS, which is a second
     transcription of the same Table-1 column and covers only the published trio.  That
     module keeps its per-DATASET targets (the gate script indexes them by dataset); this
     average is now read from the one file that has the whole table.
@@ -313,7 +313,7 @@ def check_retired_literals():
     _cmp("RI_WAIV", RI_WAIV_RETIRED_LITERALS, {a: v["ri"] for a, v in WAIV.items()})
     _cmp("HEST_WAIV", HEST_WAIV_RETIRED_LITERALS, HEST_WAIV)
     try:
-        from waivphaet.eval.pathorob_adapter import TARGETS  # noqa: PLC0415
+        from spectra.eval.pathorob_adapter import TARGETS  # noqa: PLC0415
     except Exception:  # noqa: BLE001 -- the cross-check is a bonus, not a requirement
         return out
     ft_keys = {"phikon": "phaet_target", "midnight": "mascaret_target",

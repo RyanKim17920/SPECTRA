@@ -129,7 +129,7 @@ CLS_TASKS = ("knn", "linear_probing", "simple_shot")   # segmentation deliberate
 # THE RUN FAMILY.  Changed 2026-08-31 from the retired `genMASK-c3s-*` pilot (2 seeds,
 # 3 ungated backbones, CKPT_EVERY=125) to the FINALISED `genMASK-c50-*` sweep: five
 # backbones, CKPT_EVERY=50, ms500, warmup 200, lr 1e-4, rank 32, projdim 512, t900,
-# WAIV_BCLS=3.0 / WAIV_BMEAN=-inf, pin `falseneg-gated`  (docs/RUNBOOK.md section 1.2).
+# SPECTRA_BCLS=3.0 / SPECTRA_BMEAN=-inf, pin `falseneg-gated`  (docs/RUNBOOK.md section 1.2).
 # The c3s family is still selectable with --run-glob for before/after inspection.
 # ---------------------------------------------------------------------------
 RUN_GLOB = "genMASK-c50-*"
@@ -161,7 +161,7 @@ N_CI_DATASETS = 3   # camelyon, tolkach_esca, tcga          # stopping rule: fir
 # path).  When they are present in a run's ri_curve.json the rule is fully automatic.
 #
 # THEY ARE NOT PRESENT ANYWHERE ON DISK TODAY.  The bootstrap flag
-# (src/waivphaet/eval/pathorob_adapter.py:161 `bootstrap: bool = False`) has never been
+# (src/spectra/eval/pathorob_adapter.py:161 `bootstrap: bool = False`) has never been
 # switched on by any caller, and eval_checkpoints.RESULT_KEYS would drop the fields even
 # if it had been.  So `--ri-se` exists as an EXPLICIT, operator-supplied override: a
 # number the reader can see, argue with, and vary, rather than one buried in the code.
@@ -222,7 +222,7 @@ HEST_BASE_SOURCE = _c5.HEST_BASE_SOURCE
 #            is PathoROB's own results_summary.json for the untuned feature dirs, and
 #            that is what eval_common.load_ri_base() reads.
 #   RI_WAIV  used to be re-typed here; it is a transcription of Waiv Table 1 that already
-#            has exactly one owner, src/waivphaet/eval/pathorob_adapter.TARGETS.
+#            has exactly one owner, src/spectra/eval/pathorob_adapter.TARGETS.
 #   HEST_WAIV likewise now has one owner (eval_common), for the same reason.
 #
 # The literals are kept ONLY as an assertion target: a disagreement between the value on
@@ -1017,7 +1017,7 @@ def build_report(hest_assume_step: int | None = None,
             "se_measured_on_disk": False,   # overwritten below if any point carries one
             "se_unmeasured_note": (
                 "PathoROB's bootstrap fields are absent from every checkpoint in this "
-                "corpus: src/waivphaet/eval/pathorob_adapter.py:161 defaults "
+                "corpus: src/spectra/eval/pathorob_adapter.py:161 defaults "
                 "bootstrap=False and no caller sets it, and "
                 "scripts/eval_checkpoints.RESULT_KEYS does not copy the fields into "
                 "ri_curve.json.  Until one of those changes, --ri-se is the ONLY way to "

@@ -13,9 +13,9 @@
 # job, so a node failure or a preemption on one arm does not take the other two with it.
 # Structure lifted verbatim from headcmp.sbatch -- see the comparison note below.
 #
-#   WAIV_ARM=gem   --split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem
-#   WAIV_ARM=attn  --split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head attn
-#   WAIV_ARM=lse   --split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head lse
+#   SPECTRA_ARM=gem   --split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem
+#   SPECTRA_ARM=attn  --split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head attn
+#   SPECTRA_ARM=lse   --split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head lse
 #
 # THE BASELINE IS headcmp's SPLIT ARM, not the gridcmp CTRL. Every flag here is the SPLIT
 # arm's (--split-heads, 0.5/0.5, 6 x 200 pair path, phikon-v2, rank 32 / alpha 64, lr 1e-4,
@@ -47,11 +47,11 @@
 # from the preflight so the BEFORE probe and the follower score the SAME condition set the
 # training run saw.
 #
-#   WAIV_ARM=gem sbatch --job-name=waiv-poolcmp-gem scripts/poolcmp.sbatch
+#   SPECTRA_ARM=gem sbatch --job-name=waiv-poolcmp-gem scripts/poolcmp.sbatch
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -64,8 +64,8 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-ARM="${WAIV_ARM:?set WAIV_ARM to gem | attn | lse}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM to gem | attn | lse}"
 # See gridcmp.sbatch: SLURM_RESTART_COUNT keeps a requeued attempt out of the previous
 # attempt's run dir, so a preemption cannot silently mix two training trajectories.
 RUN_NAME="gemseed3-${ARM}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
@@ -84,7 +84,7 @@ case "$ARM" in
   gem)  HEAD_ARGS=("${SPLIT_ARGS[@]}" --pool-head gem) ;;
   attn) HEAD_ARGS=("${SPLIT_ARGS[@]}" --pool-head attn) ;;
   lse)  HEAD_ARGS=("${SPLIT_ARGS[@]}" --pool-head lse) ;;
-  *) echo "unknown WAIV_ARM=$ARM (want gem | attn | lse)" >&2; exit 2 ;;
+  *) echo "unknown SPECTRA_ARM=$ARM (want gem | attn | lse)" >&2; exit 2 ;;
 esac
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | run $RUN_NAME ==="

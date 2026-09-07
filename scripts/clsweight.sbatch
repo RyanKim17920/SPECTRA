@@ -59,10 +59,10 @@
 # the ONLY snapshot carrying the pool-head delegation; finalgem-pinned (commit 386283a)
 # still has the old guard that raises unconditionally, so GEM+grid CANNOT run there.
 #
-#   WAIV_ARM=virchow2 WAIV_SEED=0 WAIV_T=900 sbatch scripts/final5.sbatch
+#   SPECTRA_ARM=virchow2 SPECTRA_SEED=0 SPECTRA_T=900 sbatch scripts/final5.sbatch
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -76,7 +76,7 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/gemgrid-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/gemgrid-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ]     || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
@@ -84,10 +84,10 @@ export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 grep -q 'delegate rather than refuse' "$PIN/src/waivphaet/train/contrastive.py" \
   || { echo "PIN LACKS pool-head delegation -- GEM+grid cannot run: $PIN" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow2|hoptimus|uni2}"
-SEED="${WAIV_SEED:?set WAIV_SEED}"
-GRID_TILES="${WAIV_T:?set WAIV_T (common across backbones -- that is the point)}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM=phikon|midnight|virchow2|hoptimus|uni2}"
+SEED="${SPECTRA_SEED:?set SPECTRA_SEED}"
+GRID_TILES="${SPECTRA_T:?set SPECTRA_T (common across backbones -- that is the point)}"
 
 case "$ARM" in
   phikon)   BACKBONE="" ;;                        # unset => train_lora.py default owkin/phikon-v2
@@ -95,29 +95,29 @@ case "$ARM" in
   virchow2) BACKBONE="paige-ai/Virchow2" ;;
   # Both hub repos are GATED (403).  encoder.BACKBONE_LOCAL_DIRS binds these ids to the
   # local checkpoints under /data; nothing here needs a path.  Override with
-  # WAIV_BACKBONE_LOCAL_DIRS if /data is swept again.
+  # SPECTRA_BACKBONE_LOCAL_DIRS if /data is swept again.
   hoptimus) BACKBONE="bioptimus/H-optimus-0" ;;
   uni2)     BACKBONE="MahmoodLab/UNI2-h" ;;
-  *) echo "bad WAIV_ARM=$ARM" >&2; exit 2 ;;
+  *) echo "bad SPECTRA_ARM=$ARM" >&2; exit 2 ;;
 esac
 BACKBONE_ARGS=()
 [ -n "$BACKBONE" ] && BACKBONE_ARGS=(--backbone "$BACKBONE")
 
-RUN_NAME="clsw${WAIV_CW}-${ARM}-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
+RUN_NAME="clsw${SPECTRA_CW}-${ARM}-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 
-MAX_STEPS="${WAIV_MAX_STEPS:-1500}"
-CKPT_EVERY="${WAIV_CKPT_EVERY:-250}"
-WORKERS="${WAIV_WORKERS:-10}"
+MAX_STEPS="${SPECTRA_MAX_STEPS:-1500}"
+CKPT_EVERY="${SPECTRA_CKPT_EVERY:-250}"
+WORKERS="${SPECTRA_WORKERS:-10}"
 LORA_RANK=32
 LORA_ALPHA=64
 LR=1e-4
 TEMPERATURE=0.07
 GRID_COND=2
 GRID_CHUNK=0          # NOT tunable: GEM requires unchunked. See header.
-EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-72000}"
-CW="${WAIV_CW:-0.75}"; MW=$(python3 -c "print(1-$CW)")
+EVAL_MAX_WAIT_S="${SPECTRA_EVAL_MAX_WAIT_S:-72000}"
+CW="${SPECTRA_CW:-0.75}"; MW=$(python3 -c "print(1-$CW)")
 # At mean-weight 0 the mean head is never built, so --pool-head has nothing to pool and
 # train_lora.py refuses. cls-only is therefore run WITHOUT the pool head by construction.
 if [ "$MW" = "0.0" ] || [ "$MW" = "0" ]; then
@@ -166,13 +166,13 @@ SAMPLER=$!
 trap 'kill $SAMPLER 2>/dev/null || true' EXIT
 
 rm -f "$OUT_DIR/TRAIN_DONE"
-# WAIV_NO_FOLLOWER=1 skips the RI eval follower. ONLY for memory/geometry smokes, which
+# SPECTRA_NO_FOLLOWER=1 skips the RI eval follower. ONLY for memory/geometry smokes, which
 # write no checkpoints and so give the follower nothing to read. Never set it for a real
 # run: the follower is where ri_curve.json comes from, and RI is the only readout in this
 # project with the dynamic range to rank arms.
 FOLLOWER=""
-if [ "${WAIV_NO_FOLLOWER:-0}" = "1" ]; then
-  echo "=== eval follower DISABLED (WAIV_NO_FOLLOWER=1) -- smoke only, no ri_curve.json ==="
+if [ "${SPECTRA_NO_FOLLOWER:-0}" = "1" ]; then
+  echo "=== eval follower DISABLED (SPECTRA_NO_FOLLOWER=1) -- smoke only, no ri_curve.json ==="
 else
 CUDA_VISIBLE_DEVICES=1 "$PY" "$PIN"/scripts/eval_checkpoints.py \
   --run-dir "$OUT_DIR" \

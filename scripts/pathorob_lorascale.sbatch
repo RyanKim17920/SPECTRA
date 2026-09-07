@@ -16,7 +16,7 @@ set -euo pipefail
 #
 # NOTE: Virchow2 adapters have base_model_name_or_path=null, so --backbone is MANDATORY
 # or phikon-v2 is silently built and the adapter keys fail to load.
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
@@ -26,12 +26,12 @@ export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS=8
 
-ADAPTER="${WAIV_ADAPTER:?set WAIV_ADAPTER (checkpoint dir)}"
-S="${WAIV_S:?set WAIV_S (lora scale)}"
-BACKBONE="${WAIV_BACKBONE:?set WAIV_BACKBONE}"
-POOL="${WAIV_POOL:-clsmean}"
-BASETAG="${WAIV_TAG:?set WAIV_TAG (features model-name stem)}"
-DATASETS="${WAIV_DATASETS:-camelyon tcga tolkach_esca}"
+ADAPTER="${SPECTRA_ADAPTER:?set SPECTRA_ADAPTER (checkpoint dir)}"
+S="${SPECTRA_S:?set SPECTRA_S (lora scale)}"
+BACKBONE="${SPECTRA_BACKBONE:?set SPECTRA_BACKBONE}"
+POOL="${SPECTRA_POOL:-clsmean}"
+BASETAG="${SPECTRA_TAG:?set SPECTRA_TAG (features model-name stem)}"
+DATASETS="${SPECTRA_DATASETS:-camelyon tcga tolkach_esca}"
 
 # Derived from S, never hand-written: the features dir keys on --model-name alone, so a
 # stale token would score another scale's embeddings and read as "interpolation flat".

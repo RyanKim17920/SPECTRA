@@ -12,7 +12,7 @@
 # HEST-Benchmark, Midnight-12k BASE, CLS-ONLY pooling, 9-task leaderboard protocol.
 #
 # Why this exists as its own file rather than `sbatch scripts/run_hest.sbatch cls ...`:
-# the generic wrapper takes the backbone from $WAIV_BACKBONE, and an env var that is
+# the generic wrapper takes the backbone from $SPECTRA_BACKBONE, and an env var that is
 # silently unset falls back to owkin/phikon-v2 -- which would produce a phikon row
 # labelled "midnight". The backbone is pinned in-file here so the label cannot drift.
 #
@@ -32,7 +32,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 

@@ -16,7 +16,7 @@ from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from waivphaet.models.encoder import build_encoder
+from spectra.models.encoder import build_encoder
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _config import PLISM_PACKED, RUNS  # noqa: E402

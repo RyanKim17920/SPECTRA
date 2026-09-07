@@ -59,10 +59,10 @@
 # the ONLY snapshot carrying the pool-head delegation; finalgem-pinned (commit 386283a)
 # still has the old guard that raises unconditionally, so GEM+grid CANNOT run there.
 #
-#   WAIV_ARM=virchow2 WAIV_SEED=0 WAIV_T=900 sbatch scripts/final5.sbatch
+#   SPECTRA_ARM=virchow2 SPECTRA_SEED=0 SPECTRA_T=900 sbatch scripts/final5.sbatch
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -76,7 +76,7 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/auxstain-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/auxstain-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ]     || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
@@ -90,10 +90,10 @@ grep -q 'aux_stain_weight' "$PIN/src/waivphaet/train/contrastive.py" \
 [ -f "$REPO/runs/.plism_core_labels.npy" ] \
   || { echo "MISSING core labels: $REPO/runs/.plism_core_labels.npy" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow2|hoptimus|uni2}"
-SEED="${WAIV_SEED:?set WAIV_SEED}"
-GRID_TILES="${WAIV_T:?set WAIV_T (common across backbones -- that is the point)}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM=phikon|midnight|virchow2|hoptimus|uni2}"
+SEED="${SPECTRA_SEED:?set SPECTRA_SEED}"
+GRID_TILES="${SPECTRA_T:?set SPECTRA_T (common across backbones -- that is the point)}"
 
 case "$ARM" in
   phikon)   BACKBONE="" ;;                        # unset => train_lora.py default owkin/phikon-v2
@@ -101,27 +101,27 @@ case "$ARM" in
   virchow2) BACKBONE="paige-ai/Virchow2" ;;
   # Both hub repos are GATED (403).  encoder.BACKBONE_LOCAL_DIRS binds these ids to the
   # local checkpoints under /data; nothing here needs a path.  Override with
-  # WAIV_BACKBONE_LOCAL_DIRS if /data is swept again.
+  # SPECTRA_BACKBONE_LOCAL_DIRS if /data is swept again.
   hoptimus) BACKBONE="bioptimus/H-optimus-0" ;;
   uni2)     BACKBONE="MahmoodLab/UNI2-h" ;;
-  *) echo "bad WAIV_ARM=$ARM" >&2; exit 2 ;;
+  *) echo "bad SPECTRA_ARM=$ARM" >&2; exit 2 ;;
 esac
 BACKBONE_ARGS=()
 [ -n "$BACKBONE" ] && BACKBONE_ARGS=(--backbone "$BACKBONE")
 
-# WAIV_TAG: free-form discriminator folded into RUN_NAME. REQUIRED whenever an arm differs
+# SPECTRA_TAG: free-form discriminator folded into RUN_NAME. REQUIRED whenever an arm differs
 # from another only by a parameter that RUN_NAME does not otherwise encode -- above all
-# WAIV_BCLS / WAIV_BMEAN, which are invisible here. HEST and PathoROB caches are keyed on
+# SPECTRA_BCLS / SPECTRA_BMEAN, which are invisible here. HEST and PathoROB caches are keyed on
 # run name / exp_code ALONE, so two arms that collide in this string silently share results.
 # ----------------------------------------------------------------------------------------
 # FACTORED INVARIANCE (aux stain/scanner heads on the pooled BACKBONE embedding).
 # At least one weight must be > 0 -- with both at 0 this script is byte-identical to
 # gentle.sbatch and the "aux" in the run name would be a lie.
-AUXS="${WAIV_AUXS:?set WAIV_AUXS (--aux-stain-weight)}"
-AUXSC="${WAIV_AUXSC:?set WAIV_AUXSC (--aux-scanner-weight)}"
+AUXS="${SPECTRA_AUXS:?set SPECTRA_AUXS (--aux-stain-weight)}"
+AUXSC="${SPECTRA_AUXSC:?set SPECTRA_AUXSC (--aux-scanner-weight)}"
 AUX_ARGS=(--aux-stain-weight "$AUXS" --aux-scanner-weight "$AUXSC")
 DETTAG=""
-if [ "${WAIV_AUXDET:-0}" = "1" ]; then
+if [ "${SPECTRA_AUXDET:-0}" = "1" ]; then
   AUX_ARGS+=(--aux-detach-backbone)
   DETTAG="det"
 fi
@@ -133,21 +133,21 @@ fi
 # ALONE, so two aux arms that collide here would silently share results.
 AUXTAG="aux${AUXS}-${AUXSC}${DETTAG}"
 
-RUN_NAME="${AUXTAG}${WAIV_MASK:+MASK}${WAIV_TAG:+-${WAIV_TAG}}${WAIV_MINTF:+-mtf${WAIV_MINTF}}-lr${WAIV_LR:-1e-4}-r${WAIV_RANK:-32}-kl${WAIV_KL:-0}-t${WAIV_TEMP:-0.07}-wd${WAIV_WD:-0.05}-ms${WAIV_MAX_STEPS:-1500}-pd${WAIV_PROJDIM:-512}-${ARM}-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
+RUN_NAME="${AUXTAG}${SPECTRA_MASK:+MASK}${SPECTRA_TAG:+-${SPECTRA_TAG}}${SPECTRA_MINTF:+-mtf${SPECTRA_MINTF}}-lr${SPECTRA_LR:-1e-4}-r${SPECTRA_RANK:-32}-kl${SPECTRA_KL:-0}-t${SPECTRA_TEMP:-0.07}-wd${SPECTRA_WD:-0.05}-ms${SPECTRA_MAX_STEPS:-1500}-pd${SPECTRA_PROJDIM:-512}-${ARM}-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 
-MAX_STEPS="${WAIV_MAX_STEPS:-1500}"
-CKPT_EVERY="${WAIV_CKPT_EVERY:-250}"
-WORKERS="${WAIV_WORKERS:-10}"
-LORA_RANK="${WAIV_RANK:-32}"
-LORA_ALPHA="${WAIV_ALPHA:-$((LORA_RANK * 2))}"
-LR="${WAIV_LR:-1e-4}"
-TEMPERATURE="${WAIV_TEMP:-0.07}"
+MAX_STEPS="${SPECTRA_MAX_STEPS:-1500}"
+CKPT_EVERY="${SPECTRA_CKPT_EVERY:-250}"
+WORKERS="${SPECTRA_WORKERS:-10}"
+LORA_RANK="${SPECTRA_RANK:-32}"
+LORA_ALPHA="${SPECTRA_ALPHA:-$((LORA_RANK * 2))}"
+LR="${SPECTRA_LR:-1e-4}"
+TEMPERATURE="${SPECTRA_TEMP:-0.07}"
 GRID_COND=2
 GRID_CHUNK=0          # NOT tunable: GEM requires unchunked. See header.
-EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-72000}"
-HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem --retention-kl-weight "${WAIV_KL:-0}")
+EVAL_MAX_WAIT_S="${SPECTRA_EVAL_MAX_WAIT_S:-72000}"
+HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem --retention-kl-weight "${SPECTRA_KL:-0}")
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} restart ${SLURM_RESTART_COUNT:-0} ==="
 echo "run       $RUN_NAME"
@@ -190,13 +190,13 @@ SAMPLER=$!
 trap 'kill $SAMPLER 2>/dev/null || true' EXIT
 
 rm -f "$OUT_DIR/TRAIN_DONE"
-# WAIV_NO_FOLLOWER=1 skips the RI eval follower. ONLY for memory/geometry smokes, which
+# SPECTRA_NO_FOLLOWER=1 skips the RI eval follower. ONLY for memory/geometry smokes, which
 # write no checkpoints and so give the follower nothing to read. Never set it for a real
 # run: the follower is where ri_curve.json comes from, and RI is the only readout in this
 # project with the dynamic range to rank arms.
 FOLLOWER=""
-if [ "${WAIV_NO_FOLLOWER:-0}" = "1" ]; then
-  echo "=== eval follower DISABLED (WAIV_NO_FOLLOWER=1) -- smoke only, no ri_curve.json ==="
+if [ "${SPECTRA_NO_FOLLOWER:-0}" = "1" ]; then
+  echo "=== eval follower DISABLED (SPECTRA_NO_FOLLOWER=1) -- smoke only, no ri_curve.json ==="
 else
 CUDA_VISIBLE_DEVICES=1 "$PY" "$PIN"/scripts/eval_checkpoints.py \
   --run-dir "$OUT_DIR" \
@@ -219,18 +219,18 @@ CUDA_VISIBLE_DEVICES=0 "$PY" "$PIN"/scripts/train_lora.py \
   --heldout-scanners GT450 S210 \
   --heldout-stains HRH KR MY \
   --pooling clsmean \
-  --proj-out-dim "${WAIV_PROJDIM:-512}" \
+  --proj-out-dim "${SPECTRA_PROJDIM:-512}" \
   "${BACKBONE_ARGS[@]}" \
   --lora-rank "$LORA_RANK" --lora-alpha "$LORA_ALPHA" \
   --temperature "$TEMPERATURE" \
   --lr "$LR" \
-  --weight-decay "${WAIV_WD:-0.05}" \
-  ${WAIV_MINTF:+--min-tissue-frac ${WAIV_MINTF}} \
-  ${WAIV_MASK:+--mask-same-core} \
-  ${WAIV_MASK:+--same-core-logit-bias-cls=${WAIV_BCLS:--inf}} \
-  ${WAIV_MASK:+--same-core-logit-bias-mean=${WAIV_BMEAN:--inf}} \
+  --weight-decay "${SPECTRA_WD:-0.05}" \
+  ${SPECTRA_MINTF:+--min-tissue-frac ${SPECTRA_MINTF}} \
+  ${SPECTRA_MASK:+--mask-same-core} \
+  ${SPECTRA_MASK:+--same-core-logit-bias-cls=${SPECTRA_BCLS:--inf}} \
+  ${SPECTRA_MASK:+--same-core-logit-bias-mean=${SPECTRA_BMEAN:--inf}} \
   --max-steps "$MAX_STEPS" \
-  --warmup-steps "${WAIV_WARMUP:-200}" \
+  --warmup-steps "${SPECTRA_WARMUP:-200}" \
   --grid --grid-conditions "$GRID_COND" --grid-tiles "$GRID_TILES" \
   --grid-forward-chunk "$GRID_CHUNK" \
   "${HEAD_ARGS[@]}" \

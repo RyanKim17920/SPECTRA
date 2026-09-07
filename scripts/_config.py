@@ -2,8 +2,8 @@
 
 The generators and submitters in this directory are run as ``./.venv/bin/python
 scripts/foo.py`` from four different virtualenvs (main, hest, thunder, pathorob), and
-only some of those have ``waivphaet`` installed.  So this shim puts ``<repo>/src`` on
-``sys.path`` first and then re-exports :mod:`waivphaet.paths`, which stays the single
+only some of those have ``spectra`` installed.  So this shim puts ``<repo>/src`` on
+``sys.path`` first and then re-exports :mod:`spectra.paths`, which stays the single
 definition of every root.  Import it as::
 
     import sys
@@ -11,7 +11,7 @@ definition of every root.  Import it as::
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from _config import RUNS, PAPER_TABLES
 
-See :mod:`waivphaet.paths` for the variable names, defaults and the ``.env`` contract.
+See :mod:`spectra.paths` for the variable names, defaults and the ``.env`` contract.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ _SRC = str(REPO_ROOT / "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from waivphaet.paths import (  # noqa: E402,F401  -- re-export is the point
+from spectra.paths import (  # noqa: E402,F401  -- re-export is the point
     BACKUPS,
     CELLS,
     DATA,

@@ -99,6 +99,7 @@ def gen_per_task():
 
     n_improve = 0
     n_regress = 0
+    n_nospread = 0   # value cells with <2 seeds, so no spread printed and no mark
     per_bb_improve = {bb: 0 for bb in ORDER}
 
     lines = [r"\begin{tabular}{l" + "c" * len(ORDER) + "}", r"\toprule",
@@ -127,9 +128,22 @@ def gen_per_task():
                     per_bb_improve[bb] += 1
                 elif delta < -1e-12:
                     n_regress += 1
-                tuned = f"{m:.3f}"
-                tuned = f"\\gain{{{tuned}}}" if delta > 0 else (
-                    f"\\loss{{{tuned}}}" if delta < 0 else tuned)
+                # Single paper-wide rule: mark \gain / \loss only when the change
+                # clears the two-sample-SD spread (compared at the printed 3-dp
+                # precision).  AUC is higher-is-better.  The spread gates the mark
+                # but is NOT printed in this table: 266 extra terms widened it past
+                # what the \resizebox can render legibly, so the per-seed block
+                # below the table carries the underlying values instead.  With
+                # fewer than two seeds for this task there is no spread to test,
+                # so the cell stays plain.
+                sd2 = 2 * statistics.stdev(vals) if len(vals) > 1 else None
+                if sd2 is None:
+                    n_nospread += 1
+                    tuned = f"{m:.3f}"
+                else:
+                    tuned = f"{m:.3f}"
+                    if round(abs(delta), 3) > round(sd2, 3):
+                        tuned = f"\\gain{{{tuned}}}" if delta > 0 else f"\\loss{{{tuned}}}"
                 cells_tex.append(f"{b:.3f}$\\to${tuned}")
             else:
                 cells_tex.append(f"{b:.3f}$\\to$--")
@@ -145,8 +159,19 @@ def gen_per_task():
         assert abs(b_mean - want_b) < 5e-5, (bb, "base", b_mean, want_b)
         assert abs(t_mean - want_t) < 5e-5, (bb, "tuned", t_mean, want_t)
         delta = t_mean - b_mean
-        tuned = f"{t_mean:.3f}"
-        tuned = f"\\gain{{{tuned}}}" if delta > 0 else (f"\\loss{{{tuned}}}" if delta < 0 else tuned)
+        # Mean-row spread is the SD across seeds of each seed's own mean over
+        # tasks, matching every other Mean row in the paper.
+        _, seed_pts = per_bb[bb]
+        seed_means = [sum(d[k] for k in task_order) / n_tasks_total
+                      for d in seed_pts if all(k in d for k in task_order)]
+        sd2 = 2 * statistics.stdev(seed_means) if len(seed_means) > 1 else None
+        if sd2 is None:
+            n_nospread += 1
+            tuned = f"{t_mean:.3f}"
+        else:
+            tuned = f"{t_mean:.3f}"
+            if round(abs(delta), 3) > round(sd2, 3):
+                tuned = f"\\gain{{{tuned}}}" if delta > 0 else f"\\loss{{{tuned}}}"
         mean_cells.append(f"{b_mean:.3f}$\\to${tuned}")
     lines.append(f"Mean ({n_tasks_total}) & " + " & ".join(mean_cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
@@ -159,6 +184,7 @@ def gen_per_task():
           f"={len(ORDER) * n_tasks_total}): {n_improve} improve, {n_regress} regress, "
           f"{len(ORDER) * n_tasks_total - n_improve - n_regress} flat")
     print("per-backbone improving task count:", per_bb_improve)
+    print(f"value cells with <2 seeds (no spread printed, left plain): {n_nospread}")
 
 
 def main():

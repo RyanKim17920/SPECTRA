@@ -28,7 +28,7 @@ def embed_all(packed_dir, device, batch_size, backbone="owkin/phikon-v2"):
     export_legacy_env()
     # Add waiv source to path
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-    from waivphaet.models.encoder import build_encoder
+    from spectra.models.encoder import build_encoder
     import torchvision.transforms.functional as TF
 
     print("[embed] loading {backbone} base model (no LoRA)...", flush=True)
@@ -40,7 +40,7 @@ def embed_all(packed_dir, device, batch_size, backbone="owkin/phikon-v2"):
     N = ref.shape[0]
     print(f"[embed] embedding {N} tiles (shape {ref.shape}, dtype {ref.dtype})...", flush=True)
 
-    # NOTE: hand-rolled ImageNet normalisation was WRONG -- WaivEncoder.tokens() applies
+    # NOTE: hand-rolled ImageNet normalisation was WRONG -- SpectraEncoder.tokens() applies
     # normalization_for(backbone) itself when handed uint8 NHWC. Feed it uint8 NHWC so the
     # tiles are normalised with exactly the constants training/eval uses.
     embeddings = None

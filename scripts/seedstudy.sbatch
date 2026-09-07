@@ -23,9 +23,9 @@
 # split-vs-GEM question currently FLIPS SIGN between the cls and clsmean THUNDER
 # protocols. So: more seeds, ranked on RI.
 #
-#   WAIV_ARM=split  --split-heads --cls-weight 0.5 --mean-weight 0.5
-#   WAIV_ARM=gem    --split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem
-#   WAIV_ARM=ctrl   --n-groups 6 --group-size 200          (no head args at all)
+#   SPECTRA_ARM=split  --split-heads --cls-weight 0.5 --mean-weight 0.5
+#   SPECTRA_ARM=gem    --split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem
+#   SPECTRA_ARM=ctrl   --n-groups 6 --group-size 200          (no head args at all)
 #
 # EXISTING SEED-0 POINTS -- do NOT re-run:
 #   split seed 0   runs/headcmp-split-380856   (job 380856, 2026-08-14 05:24)
@@ -55,12 +55,12 @@
 #
 # The pin is read-only and shared with completed runs. Do NOT edit it.
 #
-#   WAIV_ARM=split WAIV_SEED=1 sbatch --account=max --qos=high \
+#   SPECTRA_ARM=split SPECTRA_SEED=1 sbatch --account=max --qos=high \
 #     --job-name=waiv-seedstudy-split-s1 scripts/seedstudy.sbatch
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -73,14 +73,14 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/gridcmp2-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/gridcmp2-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ] || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-ARM="${WAIV_ARM:?set WAIV_ARM to split | gem | ctrl}"
-SEED="${WAIV_SEED:?set WAIV_SEED (seed 0 already exists for all three arms)}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM to split | gem | ctrl}"
+SEED="${SPECTRA_SEED:?set SPECTRA_SEED (seed 0 already exists for all three arms)}"
 # SLURM_RESTART_COUNT keeps a requeued attempt out of the previous attempt's run dir, so a
 # preemption cannot silently mix two training trajectories (commit 42990ba).
 RUN_NAME="seedstudy-${ARM}-s${SEED}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
@@ -99,7 +99,7 @@ LORA_ALPHA=64
 # the fix here is to pass a value that cannot be reached inside the 10 h wall: 20 h. Under
 # EITHER semantics -- total cap or idle timeout -- 20 h means the follower only ever exits
 # via --stop-file (TRAIN_DONE) or a genuinely wedged trainer.
-EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-$((20 * 3600))}"
+EVAL_MAX_WAIT_S="${SPECTRA_EVAL_MAX_WAIT_S:-$((20 * 3600))}"
 
 # --- the ONE axis that differs between arms (seed is the other, and it is the point) ---
 # Read verbatim from the seed-0 configs. split and gem share the loss-head block; gem adds
@@ -108,7 +108,7 @@ case "$ARM" in
   split) HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5) ;;
   gem)   HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem) ;;
   ctrl)  HEAD_ARGS=() ;;
-  *) echo "unknown WAIV_ARM=$ARM (want split | gem | ctrl)" >&2; exit 2 ;;
+  *) echo "unknown SPECTRA_ARM=$ARM (want split | gem | ctrl)" >&2; exit 2 ;;
 esac
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | restart ${SLURM_RESTART_COUNT:-0} | run $RUN_NAME ==="

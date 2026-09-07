@@ -26,7 +26,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -35,14 +35,14 @@ TASKS="${2:-knn linear_probing}"
 # Pooling is BACKBONE-DEPENDENT in THUNDER and it is not a free choice -- arXiv:2607.22861
 # 3 line 106 uses CLS+mean only for Virchow2 / AquaViT / H0-mini / Midnight-12k, CLS
 # elsewhere. Pass "auto" (or nothing, for the phikon-v2 default) to let
-# thunder_model._default_pooling resolve it from WAIV_BACKBONE. An explicit 3rd argument
+# thunder_model._default_pooling resolve it from SPECTRA_BACKBONE. An explicit 3rd argument
 # still wins, so the in-flight phikon-v2 sweep (which passes `cls`) is unchanged.
 POOLING="${3:-auto}"
 RUN_NAME="${4:-base_${POOLING}}"
 CKPT="${5:-}"
 ADAPTER="${6:-}"
 
-# Optional epochs override, read from the ENVIRONMENT (WAIV_EPOCHS), not a 7th positional.
+# Optional epochs override, read from the ENVIRONMENT (SPECTRA_EPOCHS), not a 7th positional.
 # third_party/thunder/docs/guidelines.md:4 mandates overriding the generic frozen.yaml 200
 # epochs for exactly two datasets -- `9` for segpath_epithelial and `21` for
 # segpath_lymphocytes -- because of their size. Without it those runs are both infeasible
@@ -52,9 +52,9 @@ ADAPTER="${6:-}"
 # [ckpt] [adapter] and both existing callers (resubmit_thunder.sh,
 # submit_midnight_thunder.sh) *conditionally append* the adapter, so a 7th slot could not
 # be reached by a base job without also inventing a dummy adapter argument. An env var is
-# strictly additive -- every existing call site is untouched and, with WAIV_EPOCHS unset,
+# strictly additive -- every existing call site is untouched and, with SPECTRA_EPOCHS unset,
 # the thunder command line below is byte-identical to what produced the current results.
-EPOCHS="${WAIV_EPOCHS:-}"
+EPOCHS="${SPECTRA_EPOCHS:-}"
 EPOCH_ARGS=()
 if [ -n "$EPOCHS" ]; then
   # `thunder benchmark` collects unknown flags pairwise into **kwargs (main.py:83) and
@@ -76,32 +76,32 @@ export PYTHONNOUSERSITE=1
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-# Read by src/waivphaet/eval/thunder_model.py. THUNDER instantiates the custom model with
-# obj() and no arguments, so env vars are the only channel. WAIV_RUN_NAME becomes
+# Read by src/spectra/eval/thunder_model.py. THUNDER instantiates the custom model with
+# obj() and no arguments, so env vars are the only channel. SPECTRA_RUN_NAME becomes
 # PretrainedModel.name, which is the <model> path component of
 # outputs/res/<dataset>/<model>/<task>/<adaptation>/ -- get it wrong and one checkpoint's
 # numbers silently overwrite another's.
-if [ "$POOLING" != "auto" ]; then export WAIV_POOLING="$POOLING"; else unset WAIV_POOLING || true; fi
-export WAIV_RUN_NAME="$RUN_NAME"
-# WAIV_BACKBONE is inherited from the submitting environment if set; unset => phikon-v2.
+if [ "$POOLING" != "auto" ]; then export SPECTRA_POOLING="$POOLING"; else unset SPECTRA_POOLING || true; fi
+export SPECTRA_RUN_NAME="$RUN_NAME"
+# SPECTRA_BACKBONE is inherited from the submitting environment if set; unset => phikon-v2.
 # Written as if-blocks, not `[ -n "$X" ] && export ...`: under `set -e` a short-circuiting
 # AND-OR list is a footgun, and the base run passes both of these empty.
-if [ -n "$CKPT" ];    then export WAIV_CHECKPOINT="$CKPT"; fi
+if [ -n "$CKPT" ];    then export SPECTRA_CHECKPOINT="$CKPT"; fi
 if [ -n "$ADAPTER" ]; then
-  export WAIV_ADAPTER="$ADAPTER"
+  export SPECTRA_ADAPTER="$ADAPTER"
   # thunder_model.py defaults to r16/alpha32; the real run is r32/alpha64. Without these the
   # adapter load fails the config cross-check in build_model. Overridable from the caller.
-  export WAIV_LORA_RANK="${WAIV_LORA_RANK:-32}"
-  export WAIV_LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
-  export WAIV_PROJ_OUT_DIM="${WAIV_PROJ_OUT_DIM:-512}"
+  export SPECTRA_LORA_RANK="${SPECTRA_LORA_RANK:-32}"
+  export SPECTRA_LORA_ALPHA="${SPECTRA_LORA_ALPHA:-64}"
+  export SPECTRA_PROJ_OUT_DIM="${SPECTRA_PROJ_OUT_DIM:-512}"
 fi
 
-MODEL="custom:${REPO}/src/waivphaet/eval/thunder_model.py"
+MODEL="custom:${REPO}/src/spectra/eval/thunder_model.py"
 
 # PROVENANCE SIDECAR. THUNDER's own config.json (outputs/res/<ds>/<run>/<task>/frozen/)
 # carries adaptation/ckpt_saving/dataset/data_loading/task/wandb/embedding_recomputing/
 # model_retraining and NOTHING about the encoder -- it only ever sees `custom:<path>.py`,
-# and thunder_model.py reads WAIV_BACKBONE/WAIV_ADAPTER from the environment at import
+# and thunder_model.py reads SPECTRA_BACKBONE/SPECTRA_ADAPTER from the environment at import
 # time. So without this, a finished results directory cannot be attributed to the
 # checkpoint that produced it except by timing inference against the slurm log.
 #
@@ -116,7 +116,7 @@ write_provenance() {
   [ -n "$ADAPTER" ] || return 0
   "$REPO/.venv-thunder/bin/python" "$REPO/scripts/write_thunder_provenance.py" \
       --run-name "$RUN_NAME" \
-      --backbone "${WAIV_BACKBONE:-owkin/phikon-v2}" \
+      --backbone "${SPECTRA_BACKBONE:-owkin/phikon-v2}" \
       --adapter "$ADAPTER" \
       --pooling "$POOLING" \
       --jobs "${SLURM_JOB_ID:-}" >/dev/null 2>&1 || true
@@ -126,11 +126,11 @@ write_provenance() {
 write_provenance
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} ==="
-# WAIV_POOL_HEAD (opt-in, default unset) is inherited from the submitting environment via
-# sbatch's default --export=ALL, exactly like WAIV_BACKBONE above. Unset => the historical
+# SPECTRA_POOL_HEAD (opt-in, default unset) is inherited from the submitting environment via
+# sbatch's default --export=ALL, exactly like SPECTRA_BACKBONE above. Unset => the historical
 # arithmetic-mean eval pooling, which is what every THUNDER number in this repo was scored
 # with. Echoed so the log says which protocol produced the row.
-echo "dataset=$DATASET tasks='$TASKS' pooling=$POOLING run_name=$RUN_NAME pool_head=${WAIV_POOL_HEAD:-<none, arithmetic mean>} epochs=${EPOCHS:-<thunder default>}"
+echo "dataset=$DATASET tasks='$TASKS' pooling=$POOLING run_name=$RUN_NAME pool_head=${SPECTRA_POOL_HEAD:-<none, arithmetic mean>} epochs=${EPOCHS:-<thunder default>}"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || true
 
 # embedding_pre_loading, not the online_loading default. Under online_loading the linear
@@ -214,7 +214,7 @@ for TASK in $TASKS; do
   case "$TASK" in pre_computing_embeddings) TASK_MODE=online_loading ;; esac
   echo "--- $(date) | $DATASET / $TASK (loading-mode=$TASK_MODE) ---"
   # ${EPOCH_ARGS[@]+...} guard: an unset/empty array expanded as "${A[@]}" is an unbound
-  # variable under `set -u` on some bashes. With WAIV_EPOCHS unset this expands to nothing
+  # variable under `set -u` on some bashes. With SPECTRA_EPOCHS unset this expands to nothing
   # at all, so the command line is exactly what it was before this option existed.
   srun --unbuffered "$REPO/.venv-thunder/bin/thunder" benchmark \
       "$MODEL" "$DATASET" "$TASK" --loading-mode "$TASK_MODE" \

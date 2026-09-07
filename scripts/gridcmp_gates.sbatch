@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 SNAP="$1"
 cd "$REPO"
@@ -40,7 +40,7 @@ export PYTHONUNBUFFERED=1
 # segments and OOMed. expandable_segments hands that back.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 GATE_DIR="$REPO/runs/gridgates-${SLURM_JOB_ID:-local}"
 mkdir -p "$GATE_DIR"

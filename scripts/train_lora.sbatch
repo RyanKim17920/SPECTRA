@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -38,7 +38,7 @@ mkdir -p "$OUT_DIR"
 
 # Backbone knob. UNSET => nothing is passed and train_lora.py's own default
 # (owkin/phikon-v2) applies, i.e. byte-identical to every run submitted before this knob
-# existed. Set WAIV_BACKBONE=kaiko-ai/midnight (or any HF id) to fine-tune something else.
+# existed. Set SPECTRA_BACKBONE=kaiko-ai/midnight (or any HF id) to fine-tune something else.
 #
 # SWITCHING THE BACKBONE ALMOST CERTAINLY MEANS RE-SIZING THE BATCH. The --n-groups 4 /
 # --group-size 64 below are sized for phikon-v2 (ViT-L/16, 24 blocks, 1024-d). midnight is
@@ -46,10 +46,10 @@ mkdir -p "$OUT_DIR"
 # a phikon-v2-sized batch will OOM on a wider backbone. Measure the new one first with
 #     sbatch scripts/sizing_probe.sbatch kaiko-ai/midnight
 # and pass the result through as `sbatch scripts/train_lora.sbatch --n-groups N
-# --group-size M` (the trailing "$@" below). WAIV_BACKBONE deliberately does NOT change the
+# --group-size M` (the trailing "$@" below). SPECTRA_BACKBONE deliberately does NOT change the
 # batch defaults -- a silent re-size would make two runs incomparable with nothing in the
 # log to say so.
-BACKBONE="${WAIV_BACKBONE:-}"
+BACKBONE="${SPECTRA_BACKBONE:-}"
 BACKBONE_ARGS=()
 if [ -n "$BACKBONE" ]; then BACKBONE_ARGS=(--backbone "$BACKBONE"); fi
 
@@ -60,12 +60,12 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 # --- preflight ------------------------------------------------------------------------
 # Repack must have run: 16,278 tiny HDF5 datasets per slide makes random pair sampling
 # I/O bound (~112-125x slower than the contiguous memmap, measured).
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 # Only used to print the fix-it command below; never read.
-H5_DIR="${WAIV_H5_DIR:-$SPECTRA_PLISM}"
+H5_DIR="${SPECTRA_H5_DIR:-$SPECTRA_PLISM}"
 if [ ! -f "$PACKED_DIR/keys.json" ]; then
   echo "FATAL: $PACKED_DIR not repacked. Run:"
-  echo "  ./.venv/bin/python -m waivphaet.data.repack --h5-dir $H5_DIR \\"
+  echo "  ./.venv/bin/python -m spectra.data.repack --h5-dir $H5_DIR \\"
   echo "      --out-dir $PACKED_DIR --verify"
   exit 1
 fi

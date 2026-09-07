@@ -43,13 +43,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from waivphaet.eval.pathorob_adapter import (  # noqa: E402
+from spectra.eval.pathorob_adapter import (  # noqa: E402
     TARGETS,
     PathoRobPaths,
     read_results,
     run_robustness_index,
 )
-from waivphaet.train.contrastive import prior_attempt_dirs  # noqa: E402
+from spectra.train.contrastive import prior_attempt_dirs  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _config import PLISM_PACKED, export_legacy_env  # noqa: E402
@@ -182,7 +182,7 @@ def run_pathorob(args, ckpt: Path, step: int, paths: PathoRobPaths) -> dict:
                    "--proj-out-dim", str(args.proj_out_dim),
                    "--batch-size", str(args.batch_size), "--num-workers", str(args.num_workers)]
         # Same rule as run_probe: only appended when explicitly asked for.
-        # extract_pathorob_features.py already falls back to $WAIV_BACKBONE and then to the
+        # extract_pathorob_features.py already falls back to $SPECTRA_BACKBONE and then to the
         # checkpoint's own recorded backbone, and refuses an override that contradicts the
         # checkpoint -- so passing nothing keeps the pre-existing behaviour exactly.
         if args.backbone:
@@ -308,7 +308,7 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", type=Path, required=True)
     ap.add_argument("--packed-dir",
-                    default=os.environ.get("WAIV_PACKED_DIR", str(PLISM_PACKED)))
+                    default=os.environ.get("SPECTRA_PACKED_DIR", str(PLISM_PACKED)))
     ap.add_argument("--datasets", nargs="+", default=list(DATASETS))
     ap.add_argument("--model-prefix", default=None,
                     help="features/results dir prefix; defaults to waiv_<run-dir name>")
@@ -320,11 +320,11 @@ def main() -> int:
     ap.add_argument("--lora-alpha", type=int, default=64)
     # Default None (not DEFAULT_BACKBONE) so nothing is forwarded unless asked: the probe
     # and the extractor both derive the backbone from the checkpoint when told nothing, and
-    # both refuse an override that contradicts it. $WAIV_BACKBONE is the same knob the
+    # both refuse an override that contradicts it. $SPECTRA_BACKBONE is the same knob the
     # training sbatch files and thunder_model.py use, so exporting it once is enough.
-    ap.add_argument("--backbone", default=os.environ.get("WAIV_BACKBONE") or None,
+    ap.add_argument("--backbone", default=os.environ.get("SPECTRA_BACKBONE") or None,
                     help="HF id of the base backbone, e.g. kaiko-ai/midnight. Defaults to "
-                         "$WAIV_BACKBONE, else unset (each sub-tool falls back to the "
+                         "$SPECTRA_BACKBONE, else unset (each sub-tool falls back to the "
                          "checkpoint's own recorded backbone / owkin/phikon-v2).")
     ap.add_argument("--proj-out-dim", type=int, default=512)
     ap.add_argument("--conditions-file", type=Path, default=None)

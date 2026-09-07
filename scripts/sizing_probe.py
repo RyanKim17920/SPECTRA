@@ -42,8 +42,8 @@ export_legacy_env()
 
 import torch
 
-from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
-from waivphaet.train.contrastive import masked_info_nce
+from spectra.models.encoder import DEFAULT_BACKBONE, build_encoder
+from spectra.train.contrastive import masked_info_nce
 import sys
 from pathlib import Path
 

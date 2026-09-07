@@ -20,7 +20,7 @@
 # ======================================================================================
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -46,11 +46,11 @@ grep -q 'mask_same_core' "$PIN/src/waivphaet/train/contrastive.py" \
 [ -f "$REPO/runs/.plism_core_labels.npy" ] \
   || { echo "MISSING core labels: $REPO/runs/.plism_core_labels.npy -- run derive_core_map.sbatch first" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-SEED="${WAIV_SEED:-0}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+SEED="${SPECTRA_SEED:-0}"
 GRID_TILES=900
 
-RUN_NAME="ph-c${WAIV_BCLS}m${WAIV_BMEAN}-phikon-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
+RUN_NAME="ph-c${SPECTRA_BCLS}m${SPECTRA_BMEAN}-phikon-s${SEED}-t${GRID_TILES}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
 OUT_DIR="$REPO/runs/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 
@@ -63,7 +63,7 @@ LR=1e-4
 TEMPERATURE=0.07
 GRID_COND=2
 GRID_CHUNK=0
-EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-72000}"
+EVAL_MAX_WAIT_S="${SPECTRA_EVAL_MAX_WAIT_S:-72000}"
 HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem)
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} restart ${SLURM_RESTART_COUNT:-0} ==="
@@ -142,8 +142,8 @@ CUDA_VISIBLE_DEVICES=0 "$PY" "$PIN"/scripts/train_lora.py \
   --ckpt-every "$CKPT_EVERY" --eval-every "$CKPT_EVERY" \
   --seed "$SEED" \
   --mask-same-core \
-  --same-core-logit-bias-cls="${WAIV_BCLS:-2.0}" \
-  --same-core-logit-bias-mean="${WAIV_BMEAN:--2.0}"
+  --same-core-logit-bias-cls="${SPECTRA_BCLS:-2.0}" \
+  --same-core-logit-bias-mean="${SPECTRA_BMEAN:--2.0}"
 TRAIN_RC=$?
 set -e
 

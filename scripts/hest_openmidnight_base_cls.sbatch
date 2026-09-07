@@ -11,7 +11,7 @@
 #
 # HEST-Benchmark, SophontAI/OpenMidnight BASE, cls pooling, 9-task leaderboard protocol.
 #
-# Backbone pinned in-file (NOT $WAIV_BACKBONE) because an unset env var silently
+# Backbone pinned in-file (NOT $SPECTRA_BACKBONE) because an unset env var silently
 # falls back to owkin/phikon-v2 and would produce a phikon row wearing this label.
 #
 # Pooling is `cls`: neither H-Optimus-0 nor UNI2-h is on Waiv's clsmean list
@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 

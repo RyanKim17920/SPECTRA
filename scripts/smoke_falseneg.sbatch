@@ -10,7 +10,7 @@
 #SBATCH --error=logs/slurm-%x-%j.err
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -34,7 +34,7 @@ grep -q 'mask_same_core' "$PIN/src/waivphaet/train/contrastive.py" \
 [ -f "$REPO/runs/.plism_core_labels.npy" ] \
   || { echo "MISSING core labels -- run derive_core_map.sbatch first" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 SMOKE_OUT="/tmp/smoke-falseneg-$$"
 mkdir -p "$SMOKE_OUT"
 

@@ -75,7 +75,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -89,7 +89,7 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 
 # --- pin preflight: the three things whose absence killed three prior runs -------------
@@ -98,7 +98,7 @@ export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/third_party/PathoROB" ] || { echo "pin missing third_party/PathoROB: $PIN" >&2; exit 3; }
 [ -x "$PIN/.venv/bin/python" ]   || { echo "pin missing .venv/bin/python: $PIN" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 
 # SLURM_RESTART_COUNT keeps a requeued attempt out of the previous attempt's run dir, so
 # preemption cannot silently mix two training trajectories (commit af243c2).
@@ -108,27 +108,27 @@ mkdir -p "$OUT_DIR"
 
 REF_RUN="runs/headcmp-split-380856"
 
-MAX_STEPS="${WAIV_MAX_STEPS:-1500}"
-CKPT_EVERY="${WAIV_CKPT_EVERY:-250}"
-WORKERS="${WAIV_WORKERS:-20}"
-LORA_RANK="${WAIV_LORA_RANK:-32}"
-LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
-LR="${WAIV_LR:-1e-4}"
-TEMPERATURE="${WAIV_TEMPERATURE:-0.07}"
-SEED="${WAIV_SEED:-0}"
+MAX_STEPS="${SPECTRA_MAX_STEPS:-1500}"
+CKPT_EVERY="${SPECTRA_CKPT_EVERY:-250}"
+WORKERS="${SPECTRA_WORKERS:-20}"
+LORA_RANK="${SPECTRA_LORA_RANK:-32}"
+LORA_ALPHA="${SPECTRA_LORA_ALPHA:-64}"
+LR="${SPECTRA_LR:-1e-4}"
+TEMPERATURE="${SPECTRA_TEMPERATURE:-0.07}"
+SEED="${SPECTRA_SEED:-0}"
 
 # arm d's geometry, verbatim.
-GRID_COND="${WAIV_GRID_CONDITIONS:-2}"
-GRID_TILES="${WAIV_GRID_TILES:-1800}"
-GRID_CHUNK="${WAIV_GRID_CHUNK:-300}"
+GRID_COND="${SPECTRA_GRID_CONDITIONS:-2}"
+GRID_TILES="${SPECTRA_GRID_TILES:-1800}"
+GRID_CHUNK="${SPECTRA_GRID_CHUNK:-300}"
 # Inert under --grid; carried from arm d so the config diff stays geometry-clean.
-N_GROUPS="${WAIV_N_GROUPS:-4}"
-GROUP_SIZE="${WAIV_GROUP_SIZE:-64}"
+N_GROUPS="${SPECTRA_N_GROUPS:-4}"
+GROUP_SIZE="${SPECTRA_GROUP_SIZE:-64}"
 
 # --max-wait-s is an IDLE clock, not a cap on total follower runtime (commit fa1083c).
 # Passed explicitly regardless of pin, so the follower cannot inherit a short default and
 # quietly give up between two widely-spaced checkpoints.
-EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-72000}"
+EVAL_MAX_WAIT_S="${SPECTRA_EVAL_MAX_WAIT_S:-72000}"
 
 HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5)   # NO --pool-head, on purpose
 
@@ -192,7 +192,7 @@ CUDA_VISIBLE_DEVICES=1 "$PY" "$PIN"/scripts/eval_checkpoints.py \
   --conditions-file "$OUT_DIR/conditions_used.json" \
   --lora-rank "$LORA_RANK" --lora-alpha "$LORA_ALPHA" \
   --num-workers 8 \
-  ${WAIV_BACKBONE:+--backbone "$WAIV_BACKBONE"} \
+  ${SPECTRA_BACKBONE:+--backbone "$SPECTRA_BACKBONE"} \
   --max-wait-s "$EVAL_MAX_WAIT_S" \
   --follow --stop-file "$OUT_DIR/TRAIN_DONE" --poll-s 60 \
   > "$OUT_DIR/eval_follow.log" 2>&1 &

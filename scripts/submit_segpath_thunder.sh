@@ -16,7 +16,7 @@
 # run_thunder.sbatch would otherwise inherit, and at the measured 5170 s/epoch that is
 # 287 h for lymphocytes -- infeasible, AND a different protocol from the published
 # leaderboard, so the number would not be comparable even if it finished. This is passed
-# through run_thunder.sbatch's WAIV_EPOCHS env var (added 2026-08-03), which is a no-op
+# through run_thunder.sbatch's SPECTRA_EPOCHS env var (added 2026-08-03), which is a no-op
 # for every other dataset.
 #
 # ---------------------------------------------------------------------------------------
@@ -76,7 +76,7 @@
 #   bash scripts/submit_segpath_thunder.sh --only segpath_lymphocytes --go # submit those 4
 #   bash scripts/submit_segpath_thunder.sh --go                            # submit all 8
 set -uo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$(dirname "$0")/.."
 
@@ -117,8 +117,8 @@ MIDNIGHT_ADAPTER="runs/waiv-midnight-369159/step_0000500"
 # the vthdft- row is SKIPPED and the vthd- base row still goes -- these jobs run 96h, so
 # the base half must not wait on the fine-tune. Same property as submit_thunder.sh
 # --base-only: nothing lands under vft*_ without a real adapter.
-VIRCHOW2_ADAPTER="${WAIV_VIRCHOW2_ADAPTER:-}"
-VIRCHOW2_FT_RUN="${WAIV_VIRCHOW2_FT_RUN:-vft500_cls}"
+VIRCHOW2_ADAPTER="${SPECTRA_VIRCHOW2_ADAPTER:-}"
+VIRCHOW2_FT_RUN="${SPECTRA_VIRCHOW2_FT_RUN:-vft500_cls}"
 
 ROOT="${THUNDER_BASE_DATA_FOLDER:-$SPECTRA_THUNDER}"
 ACTIVE=$(squeue -u ryan.kim -h -o "%j" | sort -u)
@@ -153,10 +153,10 @@ submit() {  # <jobname> <dataset> <run_name> <epochs> <wall> <backbone|""> <adap
   fi
 
   # --export: ALL keeps the submitting environment (that is how the existing sweeps work);
-  # WAIV_EPOCHS is the guidelines-mandated override and is set ONLY here. WAIV_BACKBONE is
+  # SPECTRA_EPOCHS is the guidelines-mandated override and is set ONLY here. SPECTRA_BACKBONE is
   # appended only for Midnight -- unset means phikon-v2 (thunder_model.py's default).
-  local exports="ALL,WAIV_EPOCHS=$epochs"
-  [ -n "$backbone" ] && exports="$exports,WAIV_BACKBONE=$backbone"
+  local exports="ALL,SPECTRA_EPOCHS=$epochs"
+  [ -n "$backbone" ] && exports="$exports,SPECTRA_BACKBONE=$backbone"
 
   # Positional contract of run_thunder.sbatch is unchanged:
   #   <dataset> <tasks> <pooling> <run_name> <ckpt> [adapter]
@@ -183,7 +183,7 @@ for spec in "${SPECS[@]}"; do
   if [ -n "$VIRCHOW2_ADAPTER" ] && [ -d "$VIRCHOW2_ADAPTER" ]; then
     submit "vthdft-$ds" "$ds" "$VIRCHOW2_FT_RUN" "$ep" 96:00:00 paige-ai/Virchow2 "$VIRCHOW2_ADAPTER"
   else
-    echo "SKIP vthdft-$ds -- no Virchow2 adapter (set WAIV_VIRCHOW2_ADAPTER + WAIV_VIRCHOW2_FT_RUN)"
+    echo "SKIP vthdft-$ds -- no Virchow2 adapter (set SPECTRA_VIRCHOW2_ADAPTER + SPECTRA_VIRCHOW2_FT_RUN)"
   fi
 done
 

@@ -13,7 +13,7 @@ averaging -- is ``hest.bench.benchmark``, unmodified, imported off the pinned cl
 ``third_party/HEST``. This file only builds the encoder, hands over the transform, and
 prints the comparison against the published row.
 
-See ``waivphaet.eval.hest_adapter`` for why ``--pooling cls`` is what reproduces 0.3747
+See ``spectra.eval.hest_adapter`` for why ``--pooling cls`` is what reproduces 0.3747
 while ``--pooling clsmean`` is what stays comparable to our PathoROB row.
 """
 
@@ -28,7 +28,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from waivphaet.eval import hest_adapter as H  # noqa: E402
+from spectra.eval import hest_adapter as H  # noqa: E402
 
 H.apply_env_defaults()
 
@@ -44,7 +44,7 @@ def main() -> int:
     ap.add_argument("--checkpoint", default=None, help="omit for the base backbone")
     ap.add_argument("--backbone", default=None,
                     help="HF id of the base backbone (default owkin/phikon-v2, or "
-                         "WAIV_BACKBONE). Note the published 0.3747 row is phikon-v2 "
+                         "SPECTRA_BACKBONE). Note the published 0.3747 row is phikon-v2 "
                          "CLS only -- another backbone has no such counterpart")
     ap.add_argument("--adapter", type=Path, default=None,
                     help="LoRA checkpoint dir (adapter/ + projector.pt)")
@@ -111,7 +111,7 @@ def main() -> int:
     # Hard-fail rather than auto-suffix: exp_code is also the results filename that the
     # collectors key on, and silently renaming it would orphan those.
     if args.lora_scale != 1.0:
-        from waivphaet.models.encoder import lora_scale_tag
+        from spectra.models.encoder import lora_scale_tag
         tag = lora_scale_tag(args.lora_scale)
         if tag not in (args.exp_code or ""):
             raise SystemExit(

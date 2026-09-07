@@ -16,7 +16,7 @@
 #
 # segpath_lymphocytes/_epithelial are NOT covered here: guidelines.md:4 mandates
 # --adaptation.epochs 21/9 for them versus frozen.yaml's generic 200 (~281 h vs a 12 h
-# wall, job 369061), so they have their own submitter with the WAIV_EPOCHS override and a
+# wall, job 369061), so they have their own submitter with the SPECTRA_EPOCHS override and a
 # longer --time -- scripts/submit_segpath_thunder.sh.
 #
 # Resubmits in HELD state so scripts/thunder_pilot.py governs concurrency.

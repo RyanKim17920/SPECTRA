@@ -21,7 +21,7 @@
 # ======================================================================================
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -45,7 +45,7 @@ grep -q 'delegate rather than refuse' "$PIN/src/waivphaet/train/contrastive.py" 
 grep -q 'min_tissue_frac' "$PIN/src/waivphaet/train/contrastive.py" \
   || { echo "PIN LACKS min_tissue_frac field: $PIN" >&2; exit 3; }
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 SEED=0
 GRID_TILES=900
 
@@ -62,7 +62,7 @@ LR=1e-4
 TEMPERATURE=0.07
 GRID_COND=2
 GRID_CHUNK=0
-EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-72000}"
+EVAL_MAX_WAIT_S="${SPECTRA_EVAL_MAX_WAIT_S:-72000}"
 HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem)
 MIN_TISSUE_FRAC=0.25
 

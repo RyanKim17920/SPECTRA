@@ -200,8 +200,8 @@ def embed_backbone(args, name, cfg, tiles: np.ndarray, conds):
 
     import torch
     import embed_probe as ep
-    from waivphaet.data.repack import open_slide
-    from waivphaet.models.encoder import build_encoder
+    from spectra.data.repack import open_slide
+    from spectra.models.encoder import build_encoder
 
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     if device.type != "cuda":
@@ -362,8 +362,8 @@ def main() -> int:
         )
     core_labels = np.load(args.core_labels)
 
-    from waivphaet.data.conditions import NUM_TILES, make_split, available_conditions
-    from waivphaet.data.repack import present_filenames
+    from spectra.data.conditions import NUM_TILES, make_split, available_conditions
+    from spectra.data.repack import present_filenames
 
     if core_labels.shape[0] != NUM_TILES:
         raise SystemExit(f"core_labels has {core_labels.shape[0]} entries, expected NUM_TILES={NUM_TILES}")

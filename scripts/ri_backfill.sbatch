@@ -14,7 +14,7 @@
 # This recomputes RI for every checkpoint already on disk -- no retraining required.
 # eval_checkpoints.py without --follow processes existing steps and exits.
 set -euo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
@@ -24,9 +24,9 @@ export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 PY="$REPO/.venv/bin/python"
 # Default to the gated snapshot: it resolves all five backbones, gemgrid-pinned only three.
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/falseneg-gated}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/falseneg-gated}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
-RUN="${WAIV_RUN:?set WAIV_RUN}"
+RUN="${SPECTRA_RUN:?set SPECTRA_RUN}"
 OUT="$REPO/runs/$RUN"
 # H-Optimus-0 and UNI2-h are gated: they resolve only under the falseneg-gated snapshot,
 # which is the one carrying BACKBONE_LOCAL_DIRS.  Matching `*hopt*` as well as `*hoptimus*`
@@ -44,7 +44,7 @@ echo "=== $(date) | $(hostname) | RI backfill $RUN ==="
 ls -d "$OUT"/step_* 2>/dev/null | sed 's/.*step_/  step /'
 "$PY" "$PIN"/scripts/eval_checkpoints.py \
   --run-dir "$OUT" \
-  --packed-dir "${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}" \
+  --packed-dir "${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}" \
   --conditions-file "$OUT/conditions_used.json" \
   --lora-rank 32 --lora-alpha 64 "${BBA[@]}" \
   --num-workers 8

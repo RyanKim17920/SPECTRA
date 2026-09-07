@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -43,7 +43,7 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 
 ARGS=(--pooling "$POOLING" --exp-code "$EXP_CODE" --num-workers 8)
 # Unset => owkin/phikon-v2, i.e. every existing invocation is unchanged.
-if [ -n "${WAIV_BACKBONE:-}" ]; then ARGS+=(--backbone "$WAIV_BACKBONE"); fi
+if [ -n "${SPECTRA_BACKBONE:-}" ]; then ARGS+=(--backbone "$SPECTRA_BACKBONE"); fi
 if [ -n "$CKPT" ];    then ARGS+=(--checkpoint "$CKPT"); fi
 if [ -n "$ADAPTER" ]; then
   # Defaults are the real run's geometry (runs/waiv-real-369043 == r32/alpha64). build_model

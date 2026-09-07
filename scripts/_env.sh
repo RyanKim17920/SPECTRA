@@ -1,11 +1,11 @@
 # shellcheck shell=bash
 # ======================================================================================
-# Path roots for every shell/sbatch script here -- the shell half of waivphaet.paths.
+# Path roots for every shell/sbatch script here -- the shell half of spectra.paths.
 # ======================================================================================
 #
 # Source it near the top of a job script:
 #
-#     REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+#     REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 #     . "$REPO/scripts/_env.sh"
 #
 # SLURM copies a batch script into its spool directory, so $0 and BASH_SOURCE do NOT
@@ -14,10 +14,26 @@
 # SPECTRA_REPO, and both work.
 #
 # Every root is <VAR>=${VAR:-<default>}, so anything already exported by the caller wins,
-# then .env fills the rest, then repo-relative defaults. See src/waivphaet/paths.py for
+# then .env fills the rest, then repo-relative defaults. See src/spectra/paths.py for
 # what each root means; the two files must agree on names and defaults.
 
-SPECTRA_REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+# Legacy `WAIV_*` aliases. The project was called `waivphaet` while the pinned code
+# snapshots under $SPECTRA_SNAPSHOTS were frozen, and those copies -- plus the launchers
+# that submit against them -- read `WAIV_ARM`, `WAIV_SEED`, `WAIV_PACKED_DIR` and the rest
+# by their old names. A pin is frozen on purpose and must never be rewritten, so instead
+# every `WAIV_X` in the environment is mirrored to `SPECTRA_X` and vice versa, without
+# either side clobbering a value that is already set. Set whichever name you like; both
+# reach the job. Drop this block once no snapshot in use still reads the old names.
+for _spectra_old in $(env | sed -n 's/^\(WAIV_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  _spectra_new="SPECTRA_${_spectra_old#WAIV_}"
+  if [ -z "$(eval "printf '%s' \"\${$_spectra_new:-}\"")" ]; then
+    eval "$_spectra_new=\$$_spectra_old"
+    eval "export $_spectra_new"
+  fi
+done
+unset _spectra_old _spectra_new
+
+SPECTRA_REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 
 # .env is optional and must not clobber the real environment, so each line is only
 # applied when its variable is unset. `export -n` after the fact would be too late.
@@ -62,6 +78,18 @@ export SPECTRA_REPO SPECTRA_RUNS SPECTRA_DATA SPECTRA_PLISM SPECTRA_PLISM_PACKED
        SPECTRA_THUNDER SPECTRA_HEST_WORK SPECTRA_HEST_BENCH SPECTRA_EVALS \
        SPECTRA_HF_HOME SPECTRA_INPUTS SPECTRA_CELLS SPECTRA_PAPER \
        SPECTRA_SNAPSHOTS SPECTRA_BACKUPS
+
+# Second half of the legacy aliasing above: now that .env and the defaults have filled in
+# the SPECTRA_* roots, mirror every one of them back to its WAIV_* name so a pinned
+# snapshot's python -- which still reads the old names -- sees the same values.
+for _spectra_new in $(env | sed -n 's/^\(SPECTRA_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  _spectra_old="WAIV_${_spectra_new#SPECTRA_}"
+  if [ -z "$(eval "printf '%s' \"\${$_spectra_old:-}\"")" ]; then
+    eval "$_spectra_old=\$$_spectra_new"
+    eval "export $_spectra_old"
+  fi
+done
+unset _spectra_old _spectra_new
 
 # Names the third-party harnesses read. Set only if the caller has not already.
 export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"

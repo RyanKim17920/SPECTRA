@@ -35,7 +35,7 @@ OPERATING_STEP = {"phikon2": 200, "midnight": 150, "virchow2": 100,
 EXTRA_OPERATING = {"uni2h": {150}}
 
 ROLES = [
-    ("c50", "FINAL RECIPE (WAIV_BCLS=3.0 / WAIV_BMEAN=-inf)"),
+    ("c50", "FINAL RECIPE (SPECTRA_BCLS=3.0 / SPECTRA_BMEAN=-inf)"),
     ("b00", "ABLATION: bias 0/0 -- arithmetically identical to no same-core masking"),
     ("bm3", "ABLATION: symmetric bias +3/+3 on both heads"),
     ("base-control", "BASE CONTROL: published backbone, no adapter"),

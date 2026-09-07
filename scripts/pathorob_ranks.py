@@ -68,6 +68,16 @@ def mark(delta, text):
     return f"\\gain{{{text}}}" if delta > 0 else (f"\\loss{{{text}}}" if delta < 0 else text)
 
 
+def mark_2sd(delta, sd2, text, nd=3):
+    r"""Single paper-wide VALUE-cell rule: \gain / \loss only when |delta| clears
+    two sample SDs (compared at the printed precision), plain otherwise and plain
+    when there is no spread.  `delta` is oriented so positive = better; `sd2` is
+    already two sample SDs.  Rank cells keep the ungated `mark`."""
+    if sd2 is None or not round(abs(delta), nd) > round(sd2, nd):
+        return text
+    return mark(delta, text)
+
+
 # The main-body table reports AGGREGATES only (mean RI, Sigma-rank, PLISM retrieval). The
 # three per-dataset RI columns were dropped so the table fits \textwidth unscaled at \small;
 # per-dataset RI is still reported, in the appendix submetrics table (tables/pathorob_submetrics).
@@ -146,7 +156,7 @@ def _retr_cell(retr, bb):
             continue
         b, t, s2 = e[axis]
         tail = "" if s2 is None else f"$\\pm${s2:.3f}"
-        parts.append(f"{b:.3f}$\\to$" + mark(t - b, f"{t:.3f}{tail}"))
+        parts.append(f"{b:.3f}$\\to$" + mark_2sd(t - b, s2, f"{t:.3f}{tail}"))
     return " / ".join(parts)
 
 
@@ -253,7 +263,7 @@ def main():
             mb, mt, msd, mn = ss[bb]
             # 3 dp throughout this table: the per-dataset RI and retrieval columns are 3 dp, so
             # a 4 dp mean column was the only inconsistent precision in the table.
-            meancol = f"{mb:.3f}$\\to$" + mark(mt - mb, f"{mt:.3f}$\\pm${2 * msd:.3f}")
+            meancol = f"{mb:.3f}$\\to$" + mark_2sd(mt - mb, 2 * msd, f"{mt:.3f}$\\pm${2 * msd:.3f}")
             tex.append(f"{NAME[bb]} & {meancol} & "
                        f"{rs_b}~({pb})$\\to$" + mark(rs_b - rs_t, f"{rs_t}~({pt})")
                        + "$^\\dagger$" + f" & {_retr_cell(retr, bb)} \\\\")
@@ -276,7 +286,7 @@ def main():
         mb, mt, msd, mn = ss[bb]
         # 3 dp throughout this table: the per-dataset RI and retrieval columns are 3 dp, so
         # a 4 dp mean column was the only inconsistent precision in the table.
-        meancol = f"{mb:.3f}$\\to$" + mark(mt - mb, f"{mt:.3f}$\\pm${2 * msd:.3f}") 
+        meancol = f"{mb:.3f}$\\to$" + mark_2sd(mt - mb, 2 * msd, f"{mt:.3f}$\\pm${2 * msd:.3f}") 
         tex.append(f"{NAME[bb]} & {meancol} & {rs_b}~({pb})$\\to$"
                    + mark(rs_b - rs_t, f"{rs_t}~({pt})")
                    + f" & {_retr_cell(retr, bb)} \\\\")

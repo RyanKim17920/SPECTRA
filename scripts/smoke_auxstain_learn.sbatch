@@ -29,7 +29,7 @@
 # ======================================================================================
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -41,11 +41,11 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export WANDB_DISABLED=true
 export WANDB_MODE=disabled
-export WAIV_NO_FOLLOWER=1
+export SPECTRA_NO_FOLLOWER=1
 
 PY="$REPO/.venv/bin/python"
 PIN="$SPECTRA_SNAPSHOTS/auxstain-pinned"
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 OUT="$REPO/runs/smoke-auxlearn-${SLURM_JOB_ID:-local}"
 
 mkdir -p "$OUT"

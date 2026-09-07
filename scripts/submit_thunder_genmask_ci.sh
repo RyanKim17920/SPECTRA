@@ -9,7 +9,7 @@
 #
 # break_his/phikon-s0 is intentionally skipped: it is canary job 392918, already running.
 set -euo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 
 SB=$SPECTRA_REPO/scripts/run_thunder.sbatch
@@ -61,7 +61,7 @@ for arm in $ARMS; do
     jid=$(sbatch --parsable \
         --job-name="ci-${TAG}-${DS}" \
         --time="$TL" \
-        --export=ALL,WAIV_BACKBONE="$BB" \
+        --export=ALL,SPECTRA_BACKBONE="$BB" \
         "$SB" "$DS" "$TASKS" auto "$RUN" "" "$ADAPTER")
     echo "$jid  ci-${TAG}-${DS}  $RUN  $TL"
     echo -n "$jid " >> "$OUT"

@@ -35,7 +35,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -48,15 +48,15 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 
 COND=2
 TILES=1800
-CHUNK="${WAIV_CHUNK:-300}"
+CHUNK="${SPECTRA_CHUNK:-300}"
 
 OUT_DIR="$REPO/runs/splitgrid-smoke-${SLURM_JOB_ID:-local}"
 mkdir -p "$OUT_DIR"

@@ -17,7 +17,7 @@
 # PINNED host RAM, which is not swappable. Under-requesting turns a GPU-memory win into a
 # host OOM and reads as "offload does not work".
 set -euo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
@@ -27,17 +27,17 @@ export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PY="$REPO/.venv/bin/python"
-ARM="${WAIV_ARM:?set WAIV_ARM=phikon|midnight|virchow2}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM=phikon|midnight|virchow2}"
 case "$ARM" in
   phikon)   BB="owkin/phikon-v2" ;;
   midnight) BB="kaiko-ai/midnight" ;;
   virchow2) BB="paige-ai/Virchow2" ;;
   hoptimus) BB="bioptimus/H-optimus-0" ;;   # gated hub repo; served from BACKBONE_LOCAL_DIRS
   uni2)     BB="MahmoodLab/UNI2-h" ;;       # gated hub repo; served from BACKBONE_LOCAL_DIRS
-  *) echo "bad WAIV_ARM=$ARM" >&2; exit 2 ;;
+  *) echo "bad SPECTRA_ARM=$ARM" >&2; exit 2 ;;
 esac
-GEOMS="${WAIV_GEOMS:-2x450 2x900 2x1800 2x2400}"
-CHUNK="${WAIV_CHUNK:-300}"
+GEOMS="${SPECTRA_GEOMS:-2x450 2x900 2x1800 2x2400}"
+CHUNK="${SPECTRA_CHUNK:-300}"
 echo "=== $(date) | $(hostname) | job ${SLURM_JOB_ID:-none} | arm=$ARM bb=$BB ==="
 echo "geoms='$GEOMS' chunk=$CHUNK offload=ON gradckpt=ON"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv || true

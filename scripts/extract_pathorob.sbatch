@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -44,15 +44,15 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || tr
 # cannot be fetched. It fails the job BEFORE 151k patches of inference on a model whose
 # normalisation fell through to ImageNet or whose blocks are partly random -- both of
 # which produce a complete, plausible, silently-wrong results_summary.json.
-"$REPO/.venv/bin/python" scripts/preflight_gated_backbone.py "${WAIV_BACKBONE:-owkin/phikon-v2}"
+"$REPO/.venv/bin/python" scripts/preflight_gated_backbone.py "${SPECTRA_BACKBONE:-owkin/phikon-v2}"
 
 for DS in $DATASETS; do
   echo "--- $DS ---"
   ARGS=(--dataset "$DS" --model-name "$MODEL_NAME" --batch-size "${BATCH_SIZE:-256}" --num-workers 16)
   # Backbone is a parameter now. Unset => owkin/phikon-v2 (the Phase-2 gate model);
-  # WAIV_BACKBONE=kaiko-ai/midnight for the ViT-g row. --pooling likewise.
-  if [ -n "${WAIV_BACKBONE:-}" ]; then ARGS+=(--backbone "$WAIV_BACKBONE"); fi
-  if [ -n "${WAIV_POOLING:-}" ]; then ARGS+=(--pooling "$WAIV_POOLING"); fi
+  # SPECTRA_BACKBONE=kaiko-ai/midnight for the ViT-g row. --pooling likewise.
+  if [ -n "${SPECTRA_BACKBONE:-}" ]; then ARGS+=(--backbone "$SPECTRA_BACKBONE"); fi
+  if [ -n "${SPECTRA_POOLING:-}" ]; then ARGS+=(--pooling "$SPECTRA_POOLING"); fi
   if [ -n "$CKPT" ]; then ARGS+=(--checkpoint "$CKPT"); fi
   if [ -n "$ADAPTER" ]; then
     ARGS+=(--adapter "$ADAPTER" --lora-rank "${LORA_RANK:-8}" --lora-alpha "${LORA_ALPHA:-32}" --proj-out-dim "${PROJ_OUT_DIM:-512}")

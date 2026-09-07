@@ -18,7 +18,7 @@
 # All jobs are submitted HELD. Release with:
 #   scontrol release $(cat $SPECTRA_RUNS/.thunder_seed1_virchow2_jobs)
 set -euo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 
 RUN=f5_ret0.01-virchow2-s1-t900-392045_s0000250
@@ -53,7 +53,7 @@ for entry in $ROSTER; do
   jid=$(sbatch --hold --parsable \
       --job-name="tsdv-${DS}" \
       --time="$TL" \
-      --export=ALL,WAIV_BACKBONE=paige-ai/Virchow2 \
+      --export=ALL,SPECTRA_BACKBONE=paige-ai/Virchow2 \
       "$SB" "$DS" "$TASKS" auto "$RUN" "" "$ADAPTER")
   echo "$jid  tsdv-${DS}  $TL"
   echo -n "$jid " >> "$OUT"

@@ -18,7 +18,8 @@ from matplotlib.patches import Rectangle, FancyArrowPatch
 OUT = PAPER_FIGURES
 INK, MUTED, ACCENT = "#1f2937", "#9ca3af", "#2563eb"
 plt.rcParams.update({"font.size": 9, "font.family": "serif", "mathtext.fontset": "stix",
-                     "axes.edgecolor": INK, "pdf.fonttype": 42, "hatch.linewidth": 0.6})
+                     "axes.edgecolor": INK, "pdf.fonttype": 42, "ps.fonttype": 42,
+                     "hatch.linewidth": 0.6})
 
 
 PLISM = PLISM_PACKED

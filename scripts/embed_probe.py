@@ -47,9 +47,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from waivphaet.data.conditions import available_conditions, make_split
-from waivphaet.data.repack import open_slide, present_filenames
-from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
+from spectra.data.conditions import available_conditions, make_split
+from spectra.data.repack import open_slide, present_filenames
+from spectra.models.encoder import DEFAULT_BACKBONE, build_encoder
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -85,7 +85,7 @@ def parse_args():
 
 
 def load_adapter(model, ckpt: Path) -> None:
-    """Restore a LoRA checkpoint written by ``waivphaet.train.contrastive.save_checkpoint``."""
+    """Restore a LoRA checkpoint written by ``spectra.train.contrastive.save_checkpoint``."""
     from peft import set_peft_model_state_dict
     from safetensors.torch import load_file
 
@@ -123,7 +123,7 @@ def load_adapter(model, ckpt: Path) -> None:
 
 
 def load_full_ft_checkpoint(model, ckpt: Path) -> None:
-    """Restore a full-FT checkpoint written by ``waivphaet.train.contrastive.save_checkpoint``.
+    """Restore a full-FT checkpoint written by ``spectra.train.contrastive.save_checkpoint``.
 
     Loads backbone.safetensors (~1.2 GB for ViT-L) and projector.pt.
     """
@@ -216,7 +216,7 @@ def main() -> int:
             raise SystemExit(f"pinned conditions not all available: missing {sorted(pinned - got)}")
 
     rng = np.random.default_rng(args.seed)
-    from waivphaet.data.conditions import NUM_TILES
+    from spectra.data.conditions import NUM_TILES
 
     tiles = np.sort(rng.choice(NUM_TILES, size=args.n_tiles, replace=False))
 

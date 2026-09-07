@@ -52,7 +52,7 @@
 #   sbatch --job-name=waiv-score-virchow2 scripts/score_finalgem.sbatch virchow2
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -74,7 +74,7 @@ esac
 # and it shells out to scripts/embed_probe.py and scripts/extract_pathorob_features.py with
 # cwd=REPO -- so running the PIN's copy keeps the whole eval chain on pinned source, which
 # is what the three arms were trained against (commit in $PIN/PINNED_COMMIT).
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
 [ -d "$PIN/src/waivphaet" ]        || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -d "$PIN/third_party/PathoROB" ] || { echo "pin missing third_party/PathoROB: $PIN" >&2; exit 3; }
 [ -x "$PIN/.venv/bin/python" ]     || { echo "pin missing .venv: $PIN" >&2; exit 3; }
@@ -89,7 +89,7 @@ export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 
 # Read back out of each run's config.json (encoder block), identical across all three arms.

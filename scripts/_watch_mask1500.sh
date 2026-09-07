@@ -4,7 +4,7 @@
 #  - log each new RI point once
 #  - log each HEST job's completion once
 # All events are logged AT MOST ONCE, state seeded from the log so restarts are idempotent.
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO" || exit 1
 LOG="$REPO/logs/mask1500_watch.log"
@@ -22,7 +22,7 @@ for i in $(seq 1 2880); do
     RUN=$(basename "$D")
     for STEP in 0000250 0000500; do
       if [ -d "$D/step_$STEP/adapter" ] && ! seen "hest-$ARM-$STEP"; then
-        HJ=$(WAIV_RUN="$RUN" WAIV_STEP=$STEP sbatch --parsable scripts/hest_final5.sbatch 2>>"$LOG")
+        HJ=$(SPECTRA_RUN="$RUN" SPECTRA_STEP=$STEP sbatch --parsable scripts/hest_final5.sbatch 2>>"$LOG")
         mark "hest-$ARM-$STEP"
         echo "$(date) HEST_SUBMITTED $ARM step=$STEP job=$HJ" >> "$LOG"
       fi

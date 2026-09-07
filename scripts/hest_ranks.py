@@ -160,8 +160,15 @@ def main():
         sd, n = (ss[bb][2], ss[bb][3]) if bb in ss else (None, None)
         tail = f"$\\pm${2 * sd:.4f}" if sd is not None else ""  # two sample SDs
         ncol = ""  # seed count is stated once in the text, not repeated per table
+        # Mean r is a VALUE cell, so it follows the single paper-wide rule:
+        # \gain / \loss only when the change clears two sample SDs (compared at
+        # the printed 4-dp precision), plain otherwise.  Higher is better.
+        # The rank columns are rank cells and keep their own move-based mark.
+        mean_body = f"{at:.4f}{tail}"
+        if sd is not None and round(abs(at - ab), 4) > round(2 * sd, 4):
+            mean_body = g(at - ab, mean_body)
         tex.append(f"{LBNAME[bb]} & " + " & ".join(taskcells)
-                   + f" & {ab:.4f}$\\to$" + g(at - ab, f"{at:.4f}{tail}") + ncol
+                   + f" & {ab:.4f}$\\to$" + mean_body + ncol
                    + f" & {rs_b}~({ra})$\\to$" + g(rs_b - rs_t, f"{rs_t}~({rt})") + " \\\\")
     tex += ["\\bottomrule", "\\end{tabular}"]
     raw = ["# HEST per-task raw values, base vs fine-tuned", "",

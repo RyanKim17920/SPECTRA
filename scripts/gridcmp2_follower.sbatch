@@ -23,11 +23,11 @@
 # a follower to an already-running arm. Checkpoints persist on disk, so a follower
 # started late still discovers and evaluates every step_* dir that already landed.
 #
-#   WAIV_RUN_DIR=runs/gridcmp2-ctrlseed-380889 sbatch scripts/gridcmp2_follower.sbatch
+#   SPECTRA_RUN_DIR=runs/gridcmp2-ctrlseed-380889 sbatch scripts/gridcmp2_follower.sbatch
 #
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -45,22 +45,22 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # byte-identical to $PIN for scripts/eval_checkpoints.py (modulo the run-dir absolutising
 # fix), scripts/embed_probe.py, scripts/extract_pathorob_features.py and
 # src/waivphaet/eval/pathorob_adapter.py; src/waivphaet/models/pooling.py differs only by
-# a docstring paragraph. Set WAIV_SRC_ROOT=$SPECTRA_SNAPSHOTS/gridcmp2-pinned
+# a docstring paragraph. Set SPECTRA_SRC_ROOT=$SPECTRA_SNAPSHOTS/gridcmp2-pinned
 # to go back to the pinned copy.
-SRC="${WAIV_SRC_ROOT:-$REPO}"
+SRC="${SPECTRA_SRC_ROOT:-$REPO}"
 export PYTHONPATH="$SRC/src${PYTHONPATH:+:$PYTHONPATH}"
 
 # NOTE: no apostrophes in this message -- bash applies quoting rules to the text inside
 # ${var:?...}, so an unpaired ' opens a string and the script dies with a confusing
 # "unexpected EOF" reported at some unrelated later line.
-RUN_DIR="${WAIV_RUN_DIR:?set WAIV_RUN_DIR to the run directory of the arm}"
+RUN_DIR="${SPECTRA_RUN_DIR:?set SPECTRA_RUN_DIR to the run directory of the arm}"
 [ -d "$RUN_DIR" ] || { echo "no such run dir: $RUN_DIR" >&2; exit 2; }
 # MUST be absolute. eval_checkpoints.sh() spawns its subprocesses with cwd=REPO, and REPO
 # is derived from the script's own __file__ -- so under the PINNED copy that cwd is the
 # snapshot, which has no runs/ directory. A relative --run-dir then sends embed_probe
 # looking for <snapshot>/runs/... and it dies at the first checkpoint, not at launch.
 RUN_DIR=$(cd "$RUN_DIR" && pwd)
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 
 # Fail loudly here rather than 250 steps from now.

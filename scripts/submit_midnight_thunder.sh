@@ -8,7 +8,7 @@
 #
 # Midnight had PathoROB only; this closes that gap so the second backbone gets the same
 # retention treatment phikon-v2 got. The backbone-specific choices it used to hardcode
-# (WAIV_BACKBONE=kaiko-ai/midnight, "auto" classification pooling per arXiv:2607.22861 3
+# (SPECTRA_BACKBONE=kaiko-ai/midnight, "auto" classification pooling per arXiv:2607.22861 3
 # line 106, explicit "cls" segmentation pooling to dodge the emb_dim/patch-dim crash at
 # task_specific_models.py:121, the mbase_*/mft500_* run names, the mthd-/mthdft- job
 # prefixes and the step-500 adapter) now live in submit_thunder.sh's backbone_spec()

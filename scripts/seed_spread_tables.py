@@ -21,7 +21,11 @@ Outputs (LaTeX, \\input from waiv-asci/appendix.tex):
                                   (fp32-attack cells, thunder_ranks.FP32_CELLS)
 
 Cell format: base -> tuned +/- 2 SD, sample SD over the n seeds; the tuned
-value is bold when |tuned - base| exceeds 2 SD.  The Mean row/column is the
+value is marked \\gain (improvement) or \\loss (regression) when
+|tuned - base| exceeds 2 SD, and left plain otherwise -- the single
+highlighting rule used by every result table in the paper.  Improvement
+respects metric direction via the higher_is_better flag in PANELS (ECE and
+adversarial F1 drop are lower-is-better).  The Mean row/column is the
 mean over tasks/datasets; its SD is the SD across seeds of each seed's own
 mean, so it matches the aggregate tables (thunder_ranks.py, hest_ranks.py).
 
@@ -65,14 +69,21 @@ PANELS = [
 ]
 
 
-def cell(base, seeds, nd, n_expected=3):
-    """base -> mean +/- 2 SD; bold tuned when the change clears 2 SD."""
+def cell(base, seeds, nd, n_expected=3, hib=True):
+    """base -> mean +/- 2 SD, highlighted by the single paper-wide rule.
+
+    \\gain when the change is an IMPROVEMENT clearing 2 SD, \\loss when it is a
+    REGRESSION clearing 2 SD, plain otherwise.  `hib` is the higher-is-better
+    flag carried per panel in PANELS (False for ECE and adversarial F1 drop),
+    so direction is read from the same source the header arrows come from.
+    """
     m = statistics.mean(seeds)
     sd2 = 2 * statistics.stdev(seeds) if len(seeds) > 1 else float("nan")
     t = f"{m:.{nd}f}$\\pm${sd2:.{nd}f}"
-    # compare at the printed precision so bold never contradicts the digits shown
+    # compare at the printed precision so the mark never contradicts the digits shown
     if round(abs(m - base), nd) > round(sd2, nd):
-        t = f"\\textbf{{{t}}}"
+        improved = (m > base) if hib else (m < base)
+        t = f"\\gain{{{t}}}" if improved else f"\\loss{{{t}}}"
     if len(seeds) != n_expected:
         t += f"$^{{(n={len(seeds)})}}$"
     return f"{base:.{nd}f}$\\to${t}"
@@ -156,7 +167,7 @@ def thunder():
                 else:
                     row.append("--")
                     continue
-                row.append(cell(b, s, 1))
+                row.append(cell(b, s, 1, hib=hib))
                 if d != "Mean":
                     total += 1
                     resolved += abs(statistics.mean(s) - b) > 2 * statistics.stdev(s)

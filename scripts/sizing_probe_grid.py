@@ -5,7 +5,7 @@ Why this exists
 ---------------
 ``scripts/sizing_probe.py`` sizes the PAIR path, where the batch is ``n_groups x
 group_size`` and negatives are ``group_size - 1``. The GRID sampler
-(:mod:`waivphaet.data.grid`) has a different arithmetic: with ``C`` conditions and ``T``
+(:mod:`spectra.data.grid`) has a different arithmetic: with ``C`` conditions and ``T``
 shared tiles the step forwards ``B = C*T`` images, every row gets ``T - 1`` negatives and
 there are ``B*(C-1)`` query rows. Negatives per row therefore depend ONLY on ``T``, so at
 a fixed memory budget they are maximised by spending the whole budget on tiles -- i.e.
@@ -44,8 +44,8 @@ export_legacy_env()
 
 import torch
 
-from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
-from waivphaet.train.contrastive import _chunked_forward, grid_info_nce
+from spectra.models.encoder import DEFAULT_BACKBONE, build_encoder
+from spectra.train.contrastive import _chunked_forward, grid_info_nce
 import sys
 from pathlib import Path
 

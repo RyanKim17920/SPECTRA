@@ -3,7 +3,7 @@
 
 This is the extraction half of the Phase-2 gate. The metric half is PathoROB's own
 ``robustness_index`` module, which we never reimplement (see
-``waivphaet.eval.pathorob_adapter``).
+``spectra.eval.pathorob_adapter``).
 
 Why this script exists rather than ``python -m pathorob.features.extract_features``
 -----------------------------------------------------------------------------------
@@ -112,7 +112,7 @@ def build_preprocess(backbone: str | None = None):
     """
     import torchvision.transforms as T
 
-    from waivphaet.models.encoder import (
+    from spectra.models.encoder import (
         DEFAULT_BACKBONE,
         IMAGENET_MEAN,
         IMAGENET_STD,
@@ -212,9 +212,9 @@ def assert_checkpoint_applied(model, checkpoint_path: str | Path,
     backbone_id = model.cfg.backbone
 
     # Build a fresh base model (no checkpoint) for comparison.
-    from waivphaet.models.encoder import EncoderConfig, WaivEncoder
+    from spectra.models.encoder import EncoderConfig, SpectraEncoder
     base_cfg = EncoderConfig(backbone=backbone_id, pooling=model.cfg.pooling, use_lora=False)
-    base_model = WaivEncoder(base_cfg).to(device).eval()
+    base_model = SpectraEncoder(base_cfg).to(device).eval()
 
     was_training = model.training
     model.eval()
@@ -276,9 +276,9 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
     overridden -- evaluating a midnight adapter on top of phikon-v2 would load, produce
     numbers, and be silently meaningless.
     """
-    from waivphaet.models.encoder import DEFAULT_BACKBONE, EncoderConfig, WaivEncoder
+    from spectra.models.encoder import DEFAULT_BACKBONE, EncoderConfig, SpectraEncoder
 
-    backbone = backbone or os.environ.get("WAIV_BACKBONE") or None
+    backbone = backbone or os.environ.get("SPECTRA_BACKBONE") or None
 
     # --lora-scale is a LoRA-only knob: it rescales the low-rank delta. A full-FT
     # checkpoint has no separable delta and the base backbone has none at all, so an
@@ -301,7 +301,7 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
                 raise SystemExit(
                     f"adapter at {adapter} was saved with r={saved_r} alpha={saved_alpha} "
                     f"but was asked to load with r={lora_rank} alpha={lora_alpha}; "
-                    "pass --lora-rank/--lora-alpha (or WAIV_LORA_RANK/WAIV_LORA_ALPHA) to match"
+                    "pass --lora-rank/--lora-alpha (or SPECTRA_LORA_RANK/SPECTRA_LORA_ALPHA) to match"
                 )
             saved_base = acfg.get("base_model_name_or_path")
             if saved_base:
@@ -319,7 +319,7 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
                             lora_alpha=lora_alpha, proj_out_dim=proj_out_dim,
                             pool_head=pool_head or "mean",
                             infer_pool_head=infer_pool_head)
-        model = WaivEncoder(cfg)
+        model = SpectraEncoder(cfg)
         if infer_pool_head:
             _restore_pool_head(model, adapter)
         from peft import set_peft_model_state_dict
@@ -360,7 +360,7 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
         # Base backbone: no LoRA, no adapter deltas -- this is the Phase-2 gate model.
         cfg = EncoderConfig(backbone=backbone or DEFAULT_BACKBONE,
                             pooling=pooling, use_lora=False)
-        model = WaivEncoder(cfg)
+        model = SpectraEncoder(cfg)
     else:
         # --- Checkpoint loading: handle both legacy torch.load format and full-FT safetensors ---
         ckpt_path = Path(checkpoint)
@@ -407,7 +407,7 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
                                 f"checkpoint {checkpoint} carries backbone {backbone_id!r}; "
                                 f"refusing the requested override {backbone!r}"
                             )
-                        model = WaivEncoder(cfg_from_ckpt)
+                        model = SpectraEncoder(cfg_from_ckpt)
                         model.load_state_dict(model_state, strict=False)
                     else:
                         # raw is a plain state_dict (legacy full-FT format).
@@ -415,7 +415,7 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
                             backbone=backbone or DEFAULT_BACKBONE,
                             pooling=pooling, use_lora=False,
                         )
-                        model = WaivEncoder(cfg_from_ckpt)
+                        model = SpectraEncoder(cfg_from_ckpt)
                         model.load_state_dict(raw, strict=False)
             except Exception as e:
                 raise SystemExit(
@@ -429,7 +429,7 @@ def build_model(checkpoint: str | None, pooling: str, adapter: Path | None = Non
             backbone_id = backbone or DEFAULT_BACKBONE
             cfg_from_ckpt = EncoderConfig(backbone=backbone_id, pooling=pooling, use_lora=False)
 
-        model = WaivEncoder(cfg_from_ckpt)
+        model = SpectraEncoder(cfg_from_ckpt)
 
         # Load full-FT backbone weights from safetensors if present.
         backbone_safetensors = ckpt_path / "backbone.safetensors"
@@ -487,7 +487,7 @@ def main() -> int:
                          "with --adapter. Omit for the base backbone.")
     ap.add_argument("--backbone", default=None,
                     help="HF id of the base backbone (default: owkin/phikon-v2, or "
-                         "WAIV_BACKBONE, or whatever --adapter/--checkpoint was trained "
+                         "SPECTRA_BACKBONE, or whatever --adapter/--checkpoint was trained "
                          "on). e.g. kaiko-ai/midnight")
     ap.add_argument("--adapter", type=Path, default=None,
                     help="LoRA checkpoint dir written by save_checkpoint (contains adapter/ + "
@@ -527,7 +527,7 @@ def main() -> int:
     # depend on a LoRA-sweep helper it never calls, so when that helper went missing from
     # encoder.py the plain PathoROB base path died on ImportError before loading a model.
     if args.lora_scale != 1.0:
-        from waivphaet.models.encoder import lora_scale_tag
+        from spectra.models.encoder import lora_scale_tag
 
         tag = lora_scale_tag(args.lora_scale)
         if tag not in args.model_name:

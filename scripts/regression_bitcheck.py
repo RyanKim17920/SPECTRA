@@ -29,7 +29,7 @@ from pathlib import Path
 
 def load(repo, n=64, pooling="clsmean"):
     for m in list(sys.modules):
-        if m.startswith("waivphaet") or m.startswith("_waiv"):
+        if m.startswith("spectra") or m.startswith("_waiv"):
             del sys.modules[m]
     sys.path.insert(0, os.path.join(repo, "src"))
     src = os.path.join(repo, "scripts", "extract_pathorob_features.py")

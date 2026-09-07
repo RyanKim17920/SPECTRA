@@ -19,7 +19,7 @@
 # result into two cls results would manufacture a wrong mean rather than a third seed,
 # so it was correctly dropped.  This job produces the missing cls/step-100 cell.
 #
-# Backbone pinned in-file, NOT via $WAIV_BACKBONE: an unset env var silently falls back
+# Backbone pinned in-file, NOT via $SPECTRA_BACKBONE: an unset env var silently falls back
 # to owkin/phikon-v2 and would emit a phikon row labelled "midnight".
 #
 # CACHE KEY: run_hest.py keys the embedding cache on --exp-code ALONE; pooling is NOT
@@ -38,7 +38,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 

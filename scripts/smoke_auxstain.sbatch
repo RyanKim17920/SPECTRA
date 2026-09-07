@@ -31,7 +31,7 @@
 # ======================================================================================
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -46,13 +46,13 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # No wandb, no eval follower -- this is a code-path smoke, not an experiment.
 export WANDB_DISABLED=true
 export WANDB_MODE=disabled
-export WAIV_NO_FOLLOWER=1
+export SPECTRA_NO_FOLLOWER=1
 
 PY="$REPO/.venv/bin/python"
 NEW_PIN="$SPECTRA_SNAPSHOTS/auxstain-pinned"
 OLD_PIN="$SPECTRA_SNAPSHOTS/falseneg-pinned"
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-BASE_OUT="${WAIV_SMOKE_OUT:-$REPO/runs/smoke-auxstain-${SLURM_JOB_ID:-local}}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+BASE_OUT="${SPECTRA_SMOKE_OUT:-$REPO/runs/smoke-auxstain-${SLURM_JOB_ID:-local}}"
 
 for P in "$NEW_PIN" "$OLD_PIN"; do
   [ -f "$P/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $P" >&2; exit 3; }

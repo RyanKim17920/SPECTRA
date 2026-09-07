@@ -32,16 +32,16 @@
 # no checkpoints (--ckpt-every/--eval-every are pushed past --max-steps): the only
 # artifact this experiment needs is history.json.
 #
-# WAIV_NEG_C_SCALE halves/doubles the number of groups in ALL THREE arms at once -- the
+# SPECTRA_NEG_C_SCALE halves/doubles the number of groups in ALL THREE arms at once -- the
 # arms must stay compute-matched, so the scale is deliberately global rather than
 # per-arm. Set it to 0.5 if 2400 images/step OOMs.
 #
 #   sbatch scripts/negprobe.sbatch
-#   WAIV_NEG_C_SCALE=0.5 sbatch scripts/negprobe.sbatch    # 1200 images/step fallback
+#   SPECTRA_NEG_C_SCALE=0.5 sbatch scripts/negprobe.sbatch    # 1200 images/step fallback
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -55,11 +55,11 @@ export PYTHONNOUSERSITE=1
 # largest arm fits.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 JOB="${SLURM_JOB_ID:-local}"
 
-SCALE="${WAIV_NEG_C_SCALE:-1}"
+SCALE="${SPECTRA_NEG_C_SCALE:-1}"
 NG_A=$("$PY" -c "print(max(1,int(6*$SCALE)))")
 NG_B=$("$PY" -c "print(max(1,int(12*$SCALE)))")
 NG_C=$("$PY" -c "print(max(1,int(24*$SCALE)))")

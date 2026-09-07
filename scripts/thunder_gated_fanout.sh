@@ -17,7 +17,7 @@
 # Usage:  scripts/thunder_gated_fanout.sh hoptimus|uni2 [--seg-only|--cls-only]
 
 set -euo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 ARM="${1:?usage: $0 hoptimus|uni2 [--cls-only|--seg-only]}"
 MODE="${2:-all}"
@@ -40,7 +40,7 @@ submit () {  # $1=dataset $2=tasks $3=run_name $4=jobtag
   local ds=$1 tasks=$2 rn=$3 tag=$4
   if [ ${#rn} -gt 64 ]; then echo "run_name >64 chars, THUNDER will reject: $rn" >&2; exit 3; fi
   sbatch --account=max --qos=high -J "$tag" \
-    --export="ALL,WAIV_BACKBONE=$BACKBONE" \
+    --export="ALL,SPECTRA_BACKBONE=$BACKBONE" \
     "$REPO/scripts/run_thunder.sbatch" "$ds" "$tasks" cls "$rn"
 }
 

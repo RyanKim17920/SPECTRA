@@ -9,9 +9,9 @@
 # scripts/run_thunder.sbatch:51-52 and several run logs reference them by name.
 #
 # Modelled on scripts/submit_segpath_thunder.sh, which already had the right shape: ONE
-# submit() that takes the backbone explicitly and appends WAIV_BACKBONE to --export only
+# submit() that takes the backbone explicitly and appends SPECTRA_BACKBONE to --export only
 # when it is non-empty. Empty backbone == phikon-v2, which is thunder_model.py's default
-# (src/waivphaet/eval/thunder_model.py:140, `os.environ.get("WAIV_BACKBONE") or None`), so
+# (src/spectra/eval/thunder_model.py:140, `os.environ.get("SPECTRA_BACKBONE") or None`), so
 # the phikon-v2 jobs must carry NO --export at all -- that is what the in-flight sweep did
 # and changing it would change nothing but is gratuitous churn on a live queue.
 #
@@ -20,7 +20,7 @@
 # ---------------------------------------------------------------------------------------
 # CLASSIFICATION pooling is backbone-dependent in THUNDER, not a free choice:
 # arXiv:2607.22861 3 line 106 uses CLS+mean for Midnight-12k and CLS elsewhere. Midnight
-# therefore passes "auto" (thunder_model._default_pooling resolves it from WAIV_BACKBONE);
+# therefore passes "auto" (thunder_model._default_pooling resolves it from SPECTRA_BACKBONE);
 # phikon-v2 passes "cls" explicitly, matching the sweep already on disk.
 #
 # SEGMENTATION pooling is "cls" for EVERY backbone and must never become "auto": clsmean
@@ -60,7 +60,7 @@
 # that guard protects is "nothing lands under *ft*_ without an adapter", and base-only
 # writes only under *base_.
 set -uo pipefail
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$(dirname "$0")/.."
 
@@ -81,7 +81,7 @@ while [ $# -gt 0 ]; do
 done
 
 # Everything that differs between backbones lives here and nowhere else.
-#   BACKBONE   value for WAIV_BACKBONE; "" means thunder_model.py's default (phikon-v2)
+#   BACKBONE   value for SPECTRA_BACKBONE; "" means thunder_model.py's default (phikon-v2)
 #              and suppresses --export entirely
 #   P_BASE/P_FT  job-name prefixes -- MUST be known to thunder_pilot.py
 #   CLS_POOL     classification pooling ("cls" or "auto"); segmentation is always "cls"
@@ -120,19 +120,19 @@ backbone_spec() {
       # "best PathoROB checkpoint" rule, so it comes from the environment rather than
       # being frozen at 500 the way Midnight's is. collect_thunder.py matches on the
       # bare "vft" prefix (BACKBONE_RUN_PREFIXES), so any step merges into the table.
-      V_FT_STEP="${WAIV_VIRCHOW2_FT_STEP:-500}"
+      V_FT_STEP="${SPECTRA_VIRCHOW2_FT_STEP:-500}"
       CLS_BASE_RUN="vbase_clsmean"; CLS_FT_RUN="vft${V_FT_STEP}_clsmean"
       SEG_BASE_RUN="vbase_cls";     SEG_FT_RUN="vft${V_FT_STEP}_cls"
       # PLACEHOLDER. No Virchow2 fine-tune has been trained yet, so there is no adapter
       # to point at. The path below does not exist on purpose: a --go run refuses rather
       # than quietly submitting the *_FT jobs with no adapter, which would produce a full
       # sweep of base numbers filed under vft500_* and silently corrupt the comparison.
-      # Override with WAIV_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX once one exists.
-      ADAPTER="${WAIV_VIRCHOW2_ADAPTER:-runs/PLACEHOLDER-virchow2-adapter}"
+      # Override with SPECTRA_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX once one exists.
+      ADAPTER="${SPECTRA_VIRCHOW2_ADAPTER:-runs/PLACEHOLDER-virchow2-adapter}"
       # --base-only submits no *_FT job, so a missing adapter cannot mislabel anything.
       if [ $GO -eq 1 ] && [ $BASE_ONLY -eq 0 ] && [ ! -d "$ADAPTER" ]; then
         echo "refusing to submit: Virchow2 adapter '$ADAPTER' does not exist."
-        echo "  set WAIV_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX, pass --base-only for the"
+        echo "  set SPECTRA_VIRCHOW2_ADAPTER=runs/<run>/step_XXXXXXX, pass --base-only for the"
         echo "  base rows alone, or drop --go for a dry run."
         exit 2
       fi
@@ -201,7 +201,7 @@ submit() {  # submit <jobname> <dataset> <tasks> <pooling> <run_name> [adapter]
   # --export is appended ONLY when a backbone is named. ALL keeps the submitting
   # environment, which is how the existing sweeps work.
   local args=(--hold --job-name="$name")
-  [ -n "$BACKBONE" ] && args+=(--export="ALL,WAIV_BACKBONE=$BACKBONE")
+  [ -n "$BACKBONE" ] && args+=(--export="ALL,SPECTRA_BACKBONE=$BACKBONE")
   # Positional contract of run_thunder.sbatch:
   #   <dataset> <tasks> <pooling> <run_name> <ckpt> [adapter]
   args+=(scripts/run_thunder.sbatch "$ds" "$tasks" "$pool" "$run" "")

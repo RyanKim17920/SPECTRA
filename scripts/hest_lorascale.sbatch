@@ -17,17 +17,17 @@ set -euo pipefail
 #
 # NOTE: Virchow2 adapters have base_model_name_or_path=null, so --backbone is MANDATORY
 # or phikon-v2 is silently built and the adapter keys fail to load.
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export PYTHONNOUSERSITE=1
 export PYTHONUNBUFFERED=1
-ADAPTER="${WAIV_ADAPTER:?set WAIV_ADAPTER (checkpoint dir)}"
-S="${WAIV_S:?set WAIV_S (lora scale)}"
-BACKBONE="${WAIV_BACKBONE:?set WAIV_BACKBONE}"
-POOL="${WAIV_POOL:?set WAIV_POOL (cls|clsmean)}"
-BASETAG="${WAIV_TAG:?set WAIV_TAG (exp-code stem)}"
+ADAPTER="${SPECTRA_ADAPTER:?set SPECTRA_ADAPTER (checkpoint dir)}"
+S="${SPECTRA_S:?set SPECTRA_S (lora scale)}"
+BACKBONE="${SPECTRA_BACKBONE:?set SPECTRA_BACKBONE}"
+POOL="${SPECTRA_POOL:?set SPECTRA_POOL (cls|clsmean)}"
+BASETAG="${SPECTRA_TAG:?set SPECTRA_TAG (exp-code stem)}"
 TAG=$("$REPO/.venv/bin/python" -c "print(f'ls{int(round(float('$S')*100)):03d}')")
 EXP="${BASETAG}_${TAG}"
 echo "=== $(date) | adapter=$ADAPTER s=$S pool=$POOL exp=$EXP ==="

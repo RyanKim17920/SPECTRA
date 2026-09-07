@@ -29,13 +29,13 @@ if str(REPO / "src") not in sys.path:
 
 import torch  # noqa: E402
 
-from waivphaet.models.encoder import (  # noqa: E402
+from spectra.models.encoder import (  # noqa: E402
     BACKBONE_LOCAL_DIRS,
     BACKBONE_NORMALIZATION,
     IMAGENET_MEAN,
     IMAGENET_STD,
     EncoderConfig,
-    WaivEncoder,
+    SpectraEncoder,
     _hub_config,
     _timm_local_kwargs,
     is_timm_backbone,
@@ -49,7 +49,7 @@ from waivphaet.models.encoder import (  # noqa: E402
 def _strict_load_counts(backbone: str) -> dict:
     """Rebuild the timm model and report the RAW missing/unexpected key counts.
 
-    ``WaivEncoder`` already refuses a non-zero count, so this exists to print the number
+    ``SpectraEncoder`` already refuses a non-zero count, so this exists to print the number
     instead of inferring "it must have been zero because nothing raised".
     """
     import timm
@@ -110,7 +110,7 @@ def preflight(backbone: str) -> dict:
     }
 
     # 3-5. the built encoder ----------------------------------------------------------
-    enc = WaivEncoder(EncoderConfig(backbone=backbone, pooling="clsmean", use_lora=True))
+    enc = SpectraEncoder(EncoderConfig(backbone=backbone, pooling="clsmean", use_lora=True))
     hidden = int(enc.hidden_size)
     npx = int(enc.num_prefix_tokens)
     ck["geometry"] = {

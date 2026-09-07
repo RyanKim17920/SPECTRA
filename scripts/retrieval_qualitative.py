@@ -99,8 +99,8 @@ def pick_condition_pair(packed_dir: Path):
 
     Returns (cond_a, cond_b, n_total_cross_stain, n_clean). See module docstring.
     """
-    from waivphaet.data.conditions import make_split, available_conditions
-    from waivphaet.data.repack import present_filenames
+    from spectra.data.conditions import make_split, available_conditions
+    from spectra.data.repack import present_filenames
 
     split = make_split(HELDOUT_SCANNERS, HELDOUT_STAINS)
     present = present_filenames(packed_dir)
@@ -123,8 +123,8 @@ def embed_both(args, cond_a, cond_b, tiles):
 
     import torch
     import embed_probe as ep
-    from waivphaet.data.repack import open_slide
-    from waivphaet.models.encoder import build_encoder
+    from spectra.data.repack import open_slide
+    from spectra.models.encoder import build_encoder
 
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     if device.type != "cuda":
@@ -182,7 +182,7 @@ def render(args, cond_a, cond_b, tiles, examples, rank_base, rank_tuned,
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from waivphaet.data.repack import open_slide
+    from spectra.data.repack import open_slide
 
     plt.rcParams.update({"font.size": 9, "font.family": "serif", "mathtext.fontset": "stix",
                          "axes.edgecolor": INK, "pdf.fonttype": 42})
@@ -250,7 +250,7 @@ def main() -> int:
     if args.cache is None:
         args.cache = args.run / "retrieval_qualitative_cache.npz"
 
-    from waivphaet.data.conditions import NUM_TILES
+    from spectra.data.conditions import NUM_TILES
 
     cond_a, cond_b, n_pairs_total, n_pairs_clean = pick_condition_pair(args.packed_dir)
     rng = np.random.default_rng(args.seed)

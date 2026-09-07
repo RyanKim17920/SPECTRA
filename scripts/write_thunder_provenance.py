@@ -10,7 +10,7 @@ at ``outputs/res/<ds>/<run>/<task>/frozen/config.json`` carries exactly
     embedding_recomputing, model_retraining
 
 and not one of those names the model -- THUNDER only ever sees ``custom:<path>.py`` and
-``src/waivphaet/eval/thunder_model.py`` resolves WAIV_BACKBONE / WAIV_ADAPTER internally
+``src/spectra/eval/thunder_model.py`` resolves SPECTRA_BACKBONE / SPECTRA_ADAPTER internally
 from the environment at import time. So a finished THUNDER cell cannot be attributed to
 the checkpoint that produced it from its own artifacts: attribution otherwise rests on
 timing inference against the slurm log, which is not evidence.
@@ -167,7 +167,7 @@ def build(run_name: str, backbone: str, adapter: str, pooling_arg: str,
             "classification": "clsmean" if backbone in (
                 "kaiko-ai/midnight", "paige-ai/Virchow2") else "cls",
             "segmentation": "cls",
-            "note": "resolve_pooling() in src/waivphaet/eval/thunder_model.py: "
+            "note": "resolve_pooling() in src/spectra/eval/thunder_model.py: "
                     "clsmean backbones fall back to cls for segmentation.",
         },
         "adapter": {
@@ -190,12 +190,12 @@ def build(run_name: str, backbone: str, adapter: str, pooling_arg: str,
             "config_sha256": sha256_file(train_cfg_path),
         },
         "eval_env": {
-            "WAIV_BACKBONE": backbone,
-            "WAIV_ADAPTER": str(ad),
-            "WAIV_RUN_NAME": run_name,
-            "WAIV_LORA_RANK": str(cfg.get("r", 32)),
-            "WAIV_LORA_ALPHA": str(cfg.get("lora_alpha", 64)),
-            "WAIV_PROJ_OUT_DIM": "512",
+            "SPECTRA_BACKBONE": backbone,
+            "SPECTRA_ADAPTER": str(ad),
+            "SPECTRA_RUN_NAME": run_name,
+            "SPECTRA_LORA_RANK": str(cfg.get("r", 32)),
+            "SPECTRA_LORA_ALPHA": str(cfg.get("lora_alpha", 64)),
+            "SPECTRA_PROJ_OUT_DIM": "512",
         },
         "submitting_jobs": rows,
         "results_present": observed_results(run_name),

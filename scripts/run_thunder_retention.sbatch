@@ -18,7 +18,7 @@
 #
 # Full FT checkpoint (backbone.safetensors format). Positionals are
 # $1=RUN_NAME $2=ADAPTER $3=CKPT, so the adapter slot must be passed EMPTY -- a full-FT
-# checkpoint in $2 would set WAIV_ADAPTER and be loaded as a LoRA adapter dir:
+# checkpoint in $2 would set SPECTRA_ADAPTER and be loaded as a LoRA adapter dir:
 #   sbatch scripts/run_thunder_retention.sbatch full_ft_s1000 "" runs/full_ft/step_0000100
 #
 # Why a subset and not all 15: the full sweep is ~1.5M tiles of ViT-L inference and takes
@@ -37,7 +37,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -55,14 +55,14 @@ export PYTHONNOUSERSITE=1
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-export WAIV_POOLING="${WAIV_POOLING:-cls}"
-export WAIV_RUN_NAME="$RUN_NAME"
-if [ -n "$CKPT" ];    then export WAIV_CHECKPOINT="$CKPT"; fi
+export SPECTRA_POOLING="${SPECTRA_POOLING:-cls}"
+export SPECTRA_RUN_NAME="$RUN_NAME"
+if [ -n "$CKPT" ];    then export SPECTRA_CHECKPOINT="$CKPT"; fi
 if [ -n "$ADAPTER" ]; then
-  export WAIV_ADAPTER="$ADAPTER"
-  export WAIV_LORA_RANK="${WAIV_LORA_RANK:-32}"
-  export WAIV_LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
-  export WAIV_PROJ_OUT_DIM="${WAIV_PROJ_OUT_DIM:-512}"
+  export SPECTRA_ADAPTER="$ADAPTER"
+  export SPECTRA_LORA_RANK="${SPECTRA_LORA_RANK:-32}"
+  export SPECTRA_LORA_ALPHA="${SPECTRA_LORA_ALPHA:-64}"
+  export SPECTRA_PROJ_OUT_DIM="${SPECTRA_PROJ_OUT_DIM:-512}"
 fi
 
 MODEL="custom:${REPO}/src/waivphaet/eval/thunder_model.py"

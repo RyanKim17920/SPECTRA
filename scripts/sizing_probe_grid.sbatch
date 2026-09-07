@@ -17,12 +17,12 @@
 # ALLOC_CONF is a first-class variable here, not boilerplate: at these batch sizes the
 # ceiling is partly a FRAGMENTATION ceiling, and expandable_segments changes it. Pass it
 # explicitly so a row in the results table always says which allocator produced it.
-#     WAIV_ALLOC_CONF="" sbatch ... -> plain caching allocator
-#     WAIV_ALLOC_CONF=expandable_segments:True sbatch ...
+#     SPECTRA_ALLOC_CONF="" sbatch ... -> plain caching allocator
+#     SPECTRA_ALLOC_CONF=expandable_segments:True sbatch ...
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -35,13 +35,13 @@ export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
-export PYTORCH_CUDA_ALLOC_CONF="${WAIV_ALLOC_CONF-expandable_segments:True}"
+export PYTORCH_CUDA_ALLOC_CONF="${SPECTRA_ALLOC_CONF-expandable_segments:True}"
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} ==="
 echo "geoms='${GEOMS}' chunk=${CHUNK} steps=${STEPS} alloc='${PYTORCH_CUDA_ALLOC_CONF}'"
 nvidia-smi --query-gpu=index,name,memory.total,memory.used --format=csv || true
 
-TAG="${WAIV_TAG:-${SLURM_JOB_ID:-local}}"
+TAG="${SPECTRA_TAG:-${SLURM_JOB_ID:-local}}"
 srun --unbuffered "$REPO/.venv/bin/python" scripts/sizing_probe_grid.py \
   --geoms $GEOMS --chunk $CHUNK --steps "$STEPS" \
   --grad-checkpointing --loss-only $EXTRA \

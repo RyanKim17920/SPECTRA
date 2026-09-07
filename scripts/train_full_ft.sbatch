@@ -59,7 +59,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -70,10 +70,10 @@ export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 RUN_NAME="${SLURM_JOB_NAME:-waiv-fullft}-${SLURM_JOB_ID:-local}"
 # /data, not $REPO/runs: 11 checkpoints x ~3.4 GiB = ~34 GiB.
-OUT_DIR="${WAIV_RUNS_DIR:-$SPECTRA_RUNS}/$RUN_NAME"
+OUT_DIR="${SPECTRA_RUNS_DIR:-$SPECTRA_RUNS}/$RUN_NAME"
 mkdir -p "$OUT_DIR"
 PY="$REPO/.venv/bin/python"
 
@@ -88,7 +88,7 @@ PROJ_OUT_DIM=512
 # Backbone knob. UNSET => nothing is passed and train_lora.py's own default
 # (owkin/phikon-v2) applies, i.e. byte-identical to the A/B arm this file was written for
 # (control runs/waiv-real-369043) and to every run submitted before this knob existed.
-# Set WAIV_BACKBONE=kaiko-ai/midnight (or any HF id) to full-FT something else; the same
+# Set SPECTRA_BACKBONE=kaiko-ai/midnight (or any HF id) to full-FT something else; the same
 # value is threaded into the BEFORE probe and the Tier-2 eval follower below.
 #
 # SWITCHING THE BACKBONE ALMOST CERTAINLY MEANS RE-SIZING THE BATCH. N_GROUPS/GROUP_SIZE
@@ -99,14 +99,14 @@ PROJ_OUT_DIM=512
 # first with
 #     sbatch scripts/sizing_probe.sbatch kaiko-ai/midnight
 # and edit N_GROUPS/GROUP_SIZE (or pass --n-groups/--group-size through "$@") from what it
-# reports. WAIV_BACKBONE deliberately does NOT change the batch defaults, and it also does
+# reports. SPECTRA_BACKBONE deliberately does NOT change the batch defaults, and it also does
 # NOT change --lr 1e-5 / --weight-decay 0.02, which were chosen for a 303M ViT-L.
 #
 # NOTE: probe_follow.py (Tier 1, below) takes no --backbone. It does not need one -- it
 # always passes --checkpoint/--adapter, and embed_probe.py derives the backbone from the
 # checkpoint's own run config.json. Only the BEFORE probe, which has no checkpoint to read,
 # needs to be told.
-BACKBONE="${WAIV_BACKBONE:-}"
+BACKBONE="${SPECTRA_BACKBONE:-}"
 BACKBONE_ARGS=()
 if [ -n "$BACKBONE" ]; then BACKBONE_ARGS=(--backbone "$BACKBONE"); fi
 

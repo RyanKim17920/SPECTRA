@@ -21,10 +21,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _config import REPO  # noqa: E402
 
 REPO = str(REPO)
-TOTAL_LANES = int(os.environ.get("WAIV_LANES", "16"))
-FAST_LANES  = int(os.environ.get("WAIV_FAST_LANES", "4"))
+TOTAL_LANES = int(os.environ.get("SPECTRA_LANES", "16"))
+FAST_LANES  = int(os.environ.get("SPECTRA_FAST_LANES", "4"))
 SLOW_LANES  = TOTAL_LANES - FAST_LANES
-DRY = os.environ.get("WAIV_DRY", "0") == "1"
+DRY = os.environ.get("SPECTRA_DRY", "0") == "1"
 
 BACKBONE = {"phikon": "owkin/phikon-v2", "midnight": "kaiko-ai/midnight",
             "virchow2": "paige-ai/Virchow2"}
@@ -47,7 +47,7 @@ for run in miss["hest"]:
     fast.append((5, f"hest-f5_{run}_s0000500",
                  ["sbatch", "--parsable", "--account=max", "--qos=high",
                   f"--job-name=hest-f5_{run}_s0000500",
-                  f"--export=ALL,WAIV_RUN={run},WAIV_STEP=0000500",
+                  f"--export=ALL,SPECTRA_RUN={run},SPECTRA_STEP=0000500",
                   "--cpus-per-task=4", f"{REPO}/scripts/hest_final5.sbatch"]))
 
 for run, ds, kind in miss["thunder"]:
@@ -55,7 +55,7 @@ for run, ds, kind in miss["thunder"]:
     tasks = "segmentation" if kind == "seg" else "knn linear_probing simple_shot"
     argv = ["sbatch", "--parsable", "--account=max", "--qos=high",
             f"--job-name=thd-{tag}-{ds}",
-            f"--export=ALL,WAIV_BACKBONE={BACKBONE[arm_of(run)]}",
+            f"--export=ALL,SPECTRA_BACKBONE={BACKBONE[arm_of(run)]}",
             "--cpus-per-task=4", f"{REPO}/scripts/run_thunder.sbatch",
             ds, tasks, "auto", tag, "", f"{REPO}/runs/{run}/step_0000500"]
     d = DUR.get(ds, 30)

@@ -13,9 +13,9 @@
 # 6-GPU job, so a node failure or a preemption on one arm does not take the other two
 # with it.
 #
-#   WAIV_ARM=ctrl    --n-groups 6 --group-size 200      2400 img/step  199 neg/row  R=1,200
-#   WAIV_ARM=grid24  --grid -C 24 -T 100                2400 img/step   99 neg/row  R=55,200
-#   WAIV_ARM=grid49  --grid -C 49 -T 49                 2401 img/step   48 neg/row  R=115,248
+#   SPECTRA_ARM=ctrl    --n-groups 6 --group-size 200      2400 img/step  199 neg/row  R=1,200
+#   SPECTRA_ARM=grid24  --grid -C 24 -T 100                2400 img/step   99 neg/row  R=55,200
+#   SPECTRA_ARM=grid49  --grid -C 49 -T 49                 2401 img/step   48 neg/row  R=115,248
 #
 # CTRL is the control and is NOT optional: it is the existing sampler at the SAME
 # images/step, the same 1500 steps, the same backbone and the same seed. Without it, any
@@ -29,11 +29,11 @@
 #
 # Budget: 1500 x 5.85 s = 2.44 h of training plus the follower draining behind it.
 #
-#   WAIV_ARM=ctrl   sbatch --job-name=waiv-gridcmp-ctrl   scripts/gridcmp.sbatch
+#   SPECTRA_ARM=ctrl   sbatch --job-name=waiv-gridcmp-ctrl   scripts/gridcmp.sbatch
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -49,8 +49,8 @@ export PYTHONUNBUFFERED=1
 # segments and OOMed. expandable_segments hands that back.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-ARM="${WAIV_ARM:?set WAIV_ARM to ctrl | grid24 | grid49}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM to ctrl | grid24 | grid49}"
 # SLURM_RESTART_COUNT is set (and increments) only on a REQUEUE. Including it means a
 # preempted-and-requeued attempt writes to a FRESH dir instead of restarting from step 0
 # on top of the previous attempt's checkpoints and ri_curve.json. Without this, the
@@ -71,7 +71,7 @@ case "$ARM" in
   # C*T embeddings); 2400 images in a single forward OOMs an 80 GiB H100.
   grid24) SAMPLER_ARGS=(--grid --grid-conditions 24 --grid-tiles 100 --grid-forward-chunk 600) ;;
   grid49) SAMPLER_ARGS=(--grid --grid-conditions 49 --grid-tiles 49 --grid-forward-chunk 600) ;;
-  *) echo "unknown WAIV_ARM=$ARM (want ctrl | grid24 | grid49)" >&2; exit 2 ;;
+  *) echo "unknown SPECTRA_ARM=$ARM (want ctrl | grid24 | grid49)" >&2; exit 2 ;;
 esac
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} | run $RUN_NAME ==="

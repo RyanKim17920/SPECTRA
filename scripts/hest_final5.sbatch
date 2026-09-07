@@ -28,15 +28,15 @@
 #
 # EXP_CODE must be unique per (run, step) or results collide silently on disk.
 #
-#   WAIV_RUN=final5-virchow2-s0-t900-XXXX WAIV_STEP=0000500 sbatch scripts/hest_final5.sbatch
+#   SPECTRA_RUN=final5-virchow2-s0-t900-XXXX SPECTRA_STEP=0000500 sbatch scripts/hest_final5.sbatch
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
-RUN="${WAIV_RUN:?set WAIV_RUN (run dir name under runs/)}"
-STEP="${WAIV_STEP:?set WAIV_STEP e.g. 0000500}"
+RUN="${SPECTRA_RUN:?set SPECTRA_RUN (run dir name under runs/)}"
+STEP="${SPECTRA_STEP:?set SPECTRA_STEP e.g. 0000500}"
 
 # ARM is derived from the run name so pooling cannot drift from the checkpoint.
 case "$RUN" in
@@ -64,7 +64,7 @@ case "$RUN" in
 esac
 
 ADAPTER="$REPO/runs/$RUN/step_$STEP"
-EXP_CODE="${WAIV_EXP_CODE:-f5_${RUN}_s${STEP}_${POOLING}}"
+EXP_CODE="${SPECTRA_EXP_CODE:-f5_${RUN}_s${STEP}_${POOLING}}"
 
 export HF_HOME="${HF_HOME:-$SPECTRA_HF_HOME}"
 export HF_HUB_ENABLE_HF_TRANSFER=1

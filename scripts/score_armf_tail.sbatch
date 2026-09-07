@@ -25,7 +25,7 @@
 #   * job 383342 itself inherits the follower's `--max-wait-s` default of 8h (see
 #     eval_checkpoints.py). It runs ~38 s/step, so step 1500 lands ~8.2 h in -- AFTER
 #     the follower has already printed "max wait exceeded" and exited. gridcmp3.sbatch
-#     now passes an explicit WAIV_EVAL_MAX_WAIT_S (default 20 h), but 383342 was
+#     now passes an explicit SPECTRA_EVAL_MAX_WAIT_S (default 20 h), but 383342 was
 #     submitted before that edit and runs from the read-only pin, so the fix does not
 #     reach it. This script is the safety net for its tail.
 #
@@ -43,7 +43,7 @@
 #
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -59,7 +59,7 @@ case "$RUN_DIR" in /*) ;; *) RUN_DIR="$REPO/$RUN_DIR" ;; esac
 # which is exactly where arm F's steps 250 and 500 already live. Running the working-tree
 # copy instead would score into a DIFFERENT PathoROB tree against a DIFFERENT source
 # snapshot, and the resulting number would not be comparable with the points it joins.
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/gridcmp3-f-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/gridcmp3-f-pinned}"
 [ -d "$PIN/src/waivphaet" ]        || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -d "$PIN/third_party/PathoROB" ] || { echo "pin missing third_party/PathoROB: $PIN" >&2; exit 3; }
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
@@ -72,7 +72,7 @@ export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
 
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
 PY="$REPO/.venv/bin/python"
 
 # Identical to gridcmp3.sbatch. These are the values arm F was TRAINED and SCORED with;

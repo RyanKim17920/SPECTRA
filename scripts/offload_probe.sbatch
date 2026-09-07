@@ -38,7 +38,7 @@
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -47,7 +47,7 @@ export TOKENIZERS_PARALLELISM=false
 export PYTHONNOUSERSITE=1
 export OMP_NUM_THREADS=8
 export PYTHONUNBUFFERED=1
-export PYTORCH_CUDA_ALLOC_CONF="${WAIV_ALLOC_CONF-expandable_segments:True}"
+export PYTORCH_CUDA_ALLOC_CONF="${SPECTRA_ALLOC_CONF-expandable_segments:True}"
 
 PY="$REPO/.venv/bin/python"
 # The rungs are CxT pairs, not a B ladder, and that is the whole point. Memory is NOT a
@@ -63,21 +63,21 @@ PY="$REPO/.venv/bin/python"
 #   12x800   arm F preferred  B=9600   799 neg  12 cond   (arm a's conds, 2.7x its negs)
 #   12x1000  headroom, to say where the new ceiling actually is rather than just clearing
 #            the target
-GEOMS="${WAIV_GEOMS:-2x1975 12x600 12x800 12x1000}"
-CHUNK="${WAIV_CHUNK:-150}"
-STEPS="${WAIV_STEPS:-3}"
-TAG="${WAIV_TAG:-offload-${SLURM_JOB_ID:-local}}"
+GEOMS="${SPECTRA_GEOMS:-2x1975 12x600 12x800 12x1000}"
+CHUNK="${SPECTRA_CHUNK:-150}"
+STEPS="${SPECTRA_STEPS:-3}"
+TAG="${SPECTRA_TAG:-offload-${SLURM_JOB_ID:-local}}"
 
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} ==="
 echo "geoms='${GEOMS}' chunk=${CHUNK} steps=${STEPS} alloc='${PYTORCH_CUDA_ALLOC_CONF}'"
 nvidia-smi --query-gpu=index,name,memory.total,memory.used --format=csv || true
 free -g | head -2 || true
 
-if [ "${WAIV_SKIP_BITCHECK:-0}" = "1" ]; then
+if [ "${SPECTRA_SKIP_BITCHECK:-0}" = "1" ]; then
   # Skippable ONLY because it already passed on this exact source (job 382004:
   # |dloss| = 0.0, worst |dgrad| = 0.0 over 294 gradients). It is not skippable
   # because it is optional -- if src/ changes again, run it again.
-  echo "=== PHASE 1: bitcheck SKIPPED (WAIV_SKIP_BITCHECK=1) ==="
+  echo "=== PHASE 1: bitcheck SKIPPED (SPECTRA_SKIP_BITCHECK=1) ==="
 else
   echo "=== PHASE 1: exactness bitcheck (gate) ==="
   "$PY" scripts/offload_bitcheck.py --n-cond 2 --n-tiles 64 --chunk 16

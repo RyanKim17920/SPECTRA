@@ -25,13 +25,13 @@ from pathlib import Path
 
 import torch
 
-from waivphaet.data.conditions import all_conditions, available_conditions, make_split
-from waivphaet.data.grid import build_grid_loader
-from waivphaet.data.pairs import build_pair_loader
-from waivphaet.data.repack import present_filenames
-from waivphaet.models.encoder import DEFAULT_BACKBONE, build_encoder
-from waivphaet.models.pooling import POOL_HEAD_NAMES
-from waivphaet.train.contrastive import (
+from spectra.data.conditions import all_conditions, available_conditions, make_split
+from spectra.data.grid import build_grid_loader
+from spectra.data.pairs import build_pair_loader
+from spectra.data.repack import present_filenames
+from spectra.models.encoder import DEFAULT_BACKBONE, build_encoder
+from spectra.models.pooling import POOL_HEAD_NAMES
+from spectra.train.contrastive import (
     TrainConfig,
     build_split_head_names,
     find_prior_attempt_checkpoint,
@@ -78,7 +78,7 @@ def parse_args():
                     help="pair-sampler groups per batch (default 4). Not usable with --grid.")
     ap.add_argument("--group-size", type=int, default=None,
                     help="pair-sampler anchors per group (default 64). Not usable with --grid.")
-    # --- GRID sampler (waivphaet.data.grid) ---------------------------------------------
+    # --- GRID sampler (spectra.data.grid) ---------------------------------------------
     # The pair sampler spends half its forward compute on positives that appear in exactly
     # one row each. The grid shares ONE tile list across C distinct condition groups, so
     # every image is both an anchor in its own group and a query against every other group:
@@ -405,7 +405,7 @@ def main() -> int:
     print(f"[train] train conditions:   {sorted(c.key for c in train_conds)}")
     print(f"[train] heldout conditions: {sorted(c.key for c in heldout_conds)}")
     if len(train_conds) < 2:
-        raise SystemExit("need >=2 repacked training conditions; run `waiv-repack` first")
+        raise SystemExit("need >=2 repacked training conditions; run `spectra-repack` first")
 
     # PLAN.md 3 risk 3: held-out *conditions* are the only in-training check against
     # tile-identity memorisation, so prove the exclusion instead of trusting the split.

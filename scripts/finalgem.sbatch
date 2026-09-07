@@ -21,9 +21,9 @@
 # decisively (GEM +0.0163 at step 500, t=6.9). Mean GEM RI peaks at step 500
 # (250 .8163 | 500 .8226 | 750 .8212 | 1000 .8205 | 1500 .8181).
 #
-#   WAIV_ARM=phikon    owkin/phikon-v2   4000 steps, ckpt/eval every 500, 20 workers
-#   WAIV_ARM=midnight  kaiko-ai/midnight 1500 steps, ckpt/eval every 250, 16 workers
-#   WAIV_ARM=virchow2  paige-ai/Virchow2 1500 steps, ckpt/eval every 250, 20 workers
+#   SPECTRA_ARM=phikon    owkin/phikon-v2   4000 steps, ckpt/eval every 500, 20 workers
+#   SPECTRA_ARM=midnight  kaiko-ai/midnight 1500 steps, ckpt/eval every 250, 16 workers
+#   SPECTRA_ARM=virchow2  paige-ai/Virchow2 1500 steps, ckpt/eval every 250, 20 workers
 #
 # --- WHAT IT REPRODUCES, AND WHAT IT DELIBERATELY MOVES -------------------------------
 # The baseline is the PUBLISHED RECONSTRUCTION run for each backbone, NOT the mechanism
@@ -97,12 +97,12 @@
 # the live tree, which INCLUDES the pool-head inference fixes (106b437, 6d92ebf) and the
 # --max-wait-s idle-clock fix (fa1083c). The pin is read-only; do NOT edit it.
 #
-#   WAIV_ARM=phikon sbatch --account=max --qos=high \
+#   SPECTRA_ARM=phikon sbatch --account=max --qos=high \
 #     --job-name=waiv-finalgem-phikon scripts/finalgem.sbatch
 
 set -euo pipefail
 
-REPO="${SPECTRA_REPO:-${WAIV_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}}"
+REPO="${SPECTRA_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 . "$REPO/scripts/_env.sh"
 cd "$REPO"
 
@@ -116,14 +116,14 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PY="$REPO/.venv/bin/python"
-PIN="${WAIV_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
+PIN="${SPECTRA_PIN:-$SPECTRA_SNAPSHOTS/finalgem-pinned}"
 export PYTHONPATH="$PIN/src${PYTHONPATH:+:$PYTHONPATH}"
 [ -d "$PIN/src/waivphaet" ] || { echo "pin missing src/waivphaet: $PIN" >&2; exit 3; }
 [ -f "$PIN/scripts/train_lora.py" ] || { echo "pin missing train_lora.py: $PIN" >&2; exit 3; }
 
 # The corpus moved from $SPECTRA_PLISM to $SPECTRA_PLISM on 2026-08-09.
-PACKED_DIR="${WAIV_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
-ARM="${WAIV_ARM:?set WAIV_ARM to phikon | midnight | virchow2}"
+PACKED_DIR="${SPECTRA_PACKED_DIR:-$SPECTRA_PLISM_PACKED}"
+ARM="${SPECTRA_ARM:?set SPECTRA_ARM to phikon | midnight | virchow2}"
 # SLURM_RESTART_COUNT keeps a requeued attempt out of the previous attempt's run dir, so a
 # preemption cannot silently mix two training trajectories (commit af243c2).
 RUN_NAME="finalgem-${ARM}-${SLURM_JOB_ID:-local}${SLURM_RESTART_COUNT:+.r$SLURM_RESTART_COUNT}"
@@ -143,25 +143,25 @@ case "$ARM" in
   virchow2)
     BACKBONE="paige-ai/Virchow2"
     MAX_STEPS=1500; CKPT_EVERY=250; WORKERS=20; REF_RUN="runs/waiv-virchow2-375367" ;;
-  *) echo "unknown WAIV_ARM=$ARM (want phikon | midnight | virchow2)" >&2; exit 2 ;;
+  *) echo "unknown SPECTRA_ARM=$ARM (want phikon | midnight | virchow2)" >&2; exit 2 ;;
 esac
 BACKBONE_ARGS=()
 if [ -n "$BACKBONE" ]; then BACKBONE_ARGS=(--backbone "$BACKBONE"); fi
 
-LORA_RANK="${WAIV_LORA_RANK:-32}"
-LORA_ALPHA="${WAIV_LORA_ALPHA:-64}"
-N_GROUPS="${WAIV_N_GROUPS:-2}"
-GROUP_SIZE="${WAIV_GROUP_SIZE:-192}"
-LR="${WAIV_LR:-1e-4}"
-TEMPERATURE="${WAIV_TEMPERATURE:-0.07}"
-SEED="${WAIV_SEED:-0}"
+LORA_RANK="${SPECTRA_LORA_RANK:-32}"
+LORA_ALPHA="${SPECTRA_LORA_ALPHA:-64}"
+N_GROUPS="${SPECTRA_N_GROUPS:-2}"
+GROUP_SIZE="${SPECTRA_GROUP_SIZE:-192}"
+LR="${SPECTRA_LR:-1e-4}"
+TEMPERATURE="${SPECTRA_TEMPERATURE:-0.07}"
+SEED="${SPECTRA_SEED:-0}"
 
 # The pin POSTDATES fa1083c, so --max-wait-s here is a true IDLE timeout (the deadline is
 # reset by progress), not a cap on total follower runtime. Passed explicitly anyway: the
 # 8 h default is what stranded arm F's step_0000750 unscored under the old semantics, and
 # an explicit 20 h is unreachable inside a 10 h wall under EITHER reading -- the follower
 # then only ever exits via --stop-file (TRAIN_DONE) or a genuinely wedged trainer.
-EVAL_MAX_WAIT_S="${WAIV_EVAL_MAX_WAIT_S:-72000}"
+EVAL_MAX_WAIT_S="${SPECTRA_EVAL_MAX_WAIT_S:-72000}"
 
 # --- the ONE axis that differs from the published reconstruction runs ------------------
 HEAD_ARGS=(--split-heads --cls-weight 0.5 --mean-weight 0.5 --pool-head gem)

@@ -31,7 +31,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from waivphaet.eval.pathorob_adapter import (  # noqa: E402
+from spectra.eval.pathorob_adapter import (  # noqa: E402
     TARGETS,
     PathoRobPaths,
     read_results,
