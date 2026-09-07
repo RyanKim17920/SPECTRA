@@ -36,7 +36,7 @@ seed cells: c50-s0-step150, c50-s1-step100, c50-s3-step100
 | metric | base | tuned (mean +/- SD) | gain |
 |---|---|---|---|
 | PathoROB RI | 0.7589 | 0.9082 +/- 0.0024 (n=3) | +0.1493 = >10 SD |
-| HEST | 0.3952 | 0.4127 +/- 0.0007 (n=2) | +0.0175 = >10 SD |
+| HEST | 0.3952 | 0.4122 +/- 0.0011 (n=3) | +0.0170 = >10 SD |
 | THUNDER knn | 80.0 | 81.7667 +/- 0.3512 (n=3) | +1.7667 = 5.0 SD |
 | THUNDER linear_probing | 84.8 | 85.6333 +/- 0.1155 (n=3) | +0.8333 = 7.2 SD |
 | THUNDER simple_shot | 71.5 | 77.0000 +/- 0.1000 (n=3) | +5.5000 = >10 SD |
@@ -51,7 +51,7 @@ seed cells: c50-s0-step100, c50-s1-step150, c50-s3-step100
 | metric | base | tuned (mean +/- SD) | gain |
 |---|---|---|---|
 | PathoROB RI | 0.8610 | 0.9091 +/- 0.0037 (n=3) | +0.0481 = >10 SD |
-| HEST | 0.4033 | 0.4082 +/- 0.0018 (n=2) | +0.0050 = 2.8 SD |
+| HEST | 0.4033 | 0.4089 +/- 0.0017 (n=3) | +0.0056 = 3.3 SD |
 | THUNDER knn | 82.9 | 83.0667 +/- 0.1155 (n=3) | +0.1667 = 1.4 SD |
 | THUNDER linear_probing | 84.7 | 85.4667 +/- 0.2309 (n=3) | +0.7667 = 3.3 SD |
 | THUNDER simple_shot | 74.0 | 78.0667 +/- 0.3215 (n=3) | +4.0667 = >10 SD |
@@ -95,14 +95,14 @@ seed cells: c50-s0-step150, c50-s1-step150, c50-s2-step150
 
 | metric | base | tuned (mean +/- SD) | gain |
 |---|---|---|---|
-| PathoROB RI | -- | -- | -- |
+| PathoROB RI | 0.6182 | 0.8794 +/- 0.0033 (n=3) | +0.2612 = >10 SD |
 | HEST | 0.3902 | 0.4048 +/- 0.0007 (n=3) | +0.0146 = >10 SD |
-| THUNDER knn | -- | -- | -- |
-| THUNDER linear_probing | -- | -- | -- |
-| THUNDER simple_shot | -- | -- | -- |
-| THUNDER segmentation | -- | -- | -- |
-| THUNDER calibration | -- | -- | -- |
-| THUNDER adversarial_attack | -- | -- | -- |
+| THUNDER knn | 79.3 | 80.8333 +/- 0.1528 (n=3) | +1.5333 = >10 SD |
+| THUNDER linear_probing | 84.8 | 85.0333 +/- 0.3055 (n=3) | +0.2333 = 0.8 SD |
+| THUNDER simple_shot | 43.6 | 65.9000 +/- 1.7059 (n=3) | +22.3000 = >10 SD |
+| THUNDER segmentation | 69.2 | 68.9333 +/- 0.2082 (n=3) | -0.2667 = 1.3 SD |
+| THUNDER calibration | 5.3 | 4.0667 +/- 0.3786 (n=3) | -1.2333 = 3.3 SD |
+| THUNDER adversarial_attack | 38.4 | 28.0333 +/- 1.0693 (n=3) | -10.3667 = 9.7 SD |
 
 ## virchow1
 
@@ -110,14 +110,44 @@ seed cells: c50-s0-step150, c50-s1-step150, c50-s2-step150
 
 | metric | base | tuned (mean +/- SD) | gain |
 |---|---|---|---|
-| PathoROB RI | 0.8147 | -- | -- |
-| HEST | 0.4061 | -- | -- |
-| THUNDER knn | 77.4 | -- | -- |
-| THUNDER linear_probing | 82.8 | -- | -- |
-| THUNDER simple_shot | 71.8 | -- | -- |
-| THUNDER segmentation | 69.2 | -- | -- |
-| THUNDER calibration | 4.5 | -- | -- |
-| THUNDER adversarial_attack | 29.9 | -- | -- |
+| PathoROB RI | 0.8147 | 0.8904 +/- 0.0018 (n=3) | +0.0757 = >10 SD |
+| HEST | 0.4061 | 0.4083 +/- 0.0018 (n=3) | +0.0022 = 1.2 SD |
+| THUNDER knn | 77.4 | 78.9333 +/- 0.3055 (n=3) | +1.5333 = 5.0 SD |
+| THUNDER linear_probing | 82.8 | 83.4000 +/- 0.2000 (n=3) | +0.6000 = 3.0 SD |
+| THUNDER simple_shot | 71.8 | 73.6667 +/- 0.2082 (n=3) | +1.8667 = 9.0 SD |
+| THUNDER segmentation | 69.2 | 68.8667 +/- 0.1155 (n=3) | -0.3333 = 2.9 SD |
+| THUNDER calibration | 4.5 | 4.0000 +/- 0.2646 (n=3) | -0.5000 = 1.9 SD |
+| THUNDER adversarial_attack | 38.4 | 30.3333 +/- 0.4933 (n=3) | -8.0667 = >10 SD |
+
+## phikon2f
+
+seed cells: c50-s0-step200, c50-s1-step200, c50-s2-step200
+
+| metric | base | tuned (mean +/- SD) | gain |
+|---|---|---|---|
+| PathoROB RI | 0.4686 | -- | -- |
+| HEST | 0.3747 | 0.3906 +/- 0.0003 (n=3) | +0.0159 = >10 SD |
+| THUNDER knn | 73.9 | 77.4333 +/- 0.2309 (n=3) | +3.5333 = >10 SD |
+| THUNDER linear_probing | 79.7 | 81.3333 +/- 0.1155 (n=3) | +1.6333 = >10 SD |
+| THUNDER simple_shot | 71.8 | 72.5000 +/- 0.0000 (n=3) | +0.7000 (SD=0 across seeds) |
+| THUNDER segmentation | -- | -- | -- |
+| THUNDER calibration | 3.7 | 3.9667 +/- 0.1155 (n=3) | +0.2667 = 2.3 SD |
+| THUNDER adversarial_attack | 43.6 | 34.8333 +/- 0.8622 (n=3) | -8.7667 = >10 SD |
+
+## midnightf
+
+seed cells: c50-s0-step150, c50-s1-step100, c50-s3-step100
+
+| metric | base | tuned (mean +/- SD) | gain |
+|---|---|---|---|
+| PathoROB RI | 0.7589 | -- | -- |
+| HEST | 0.3952 | 0.4122 +/- 0.0011 (n=3) | +0.0170 = >10 SD |
+| THUNDER knn | 80.0 | 81.7333 +/- 0.4041 (n=3) | +1.7333 = 4.3 SD |
+| THUNDER linear_probing | 84.7 | 85.6667 +/- 0.1528 (n=3) | +0.9667 = 6.3 SD |
+| THUNDER simple_shot | 71.5 | 77.0333 +/- 0.0577 (n=3) | +5.5333 = >10 SD |
+| THUNDER segmentation | -- | -- | -- |
+| THUNDER calibration | 2.9 | 3.8667 +/- 0.2309 (n=3) | +0.9667 = 4.2 SD |
+| THUNDER adversarial_attack | 37.2 | 29.1333 +/- 2.7154 (n=3) | -8.0667 = 3.0 SD |
 
 ## virchow2f
 
@@ -126,10 +156,40 @@ seed cells: c50-s0-step100, c50-s1-step150, c50-s3-step100
 | metric | base | tuned (mean +/- SD) | gain |
 |---|---|---|---|
 | PathoROB RI | 0.8610 | -- | -- |
-| HEST | 0.4033 | 0.4082 +/- 0.0018 (n=2) | +0.0050 = 2.8 SD |
-| THUNDER knn | 82.9 | -- | -- |
-| THUNDER linear_probing | 84.7 | -- | -- |
-| THUNDER simple_shot | 73.9 | -- | -- |
+| HEST | 0.4033 | 0.4089 +/- 0.0017 (n=3) | +0.0056 = 3.3 SD |
+| THUNDER knn | 82.9 | 83.0667 +/- 0.1155 (n=3) | +0.1667 = 1.4 SD |
+| THUNDER linear_probing | 84.7 | 85.4333 +/- 0.2082 (n=3) | +0.7333 = 3.5 SD |
+| THUNDER simple_shot | 73.9 | 78.0667 +/- 0.3215 (n=3) | +4.1667 = >10 SD |
 | THUNDER segmentation | 69.4 | -- | -- |
-| THUNDER calibration | 4.0 | -- | -- |
-| THUNDER adversarial_attack | -- | -- | -- |
+| THUNDER calibration | 4.0 | 4.6000 +/- 0.1732 (n=3) | +0.6000 = 3.5 SD |
+| THUNDER adversarial_attack | 31.3 | 25.3667 +/- 0.3215 (n=3) | -5.9333 = >10 SD |
+
+## hoptimus0f
+
+seed cells: c50-s0-step100, c50-s1-step100, c50-s3-step100
+
+| metric | base | tuned (mean +/- SD) | gain |
+|---|---|---|---|
+| PathoROB RI | 0.8117 | -- | -- |
+| HEST | 0.4150 | 0.4225 +/- 0.0009 (n=3) | +0.0075 = 8.2 SD |
+| THUNDER knn | 81.4 | 81.5000 +/- 0.2646 (n=3) | +0.1000 = 0.4 SD |
+| THUNDER linear_probing | 83.8 | 84.1333 +/- 0.1155 (n=3) | +0.3333 = 2.9 SD |
+| THUNDER simple_shot | 76.2 | 77.0333 +/- 0.0577 (n=3) | +0.8333 = >10 SD |
+| THUNDER segmentation | -- | -- | -- |
+| THUNDER calibration | 3.9 | 3.6000 +/- 0.2000 (n=3) | -0.3000 = 1.5 SD |
+| THUNDER adversarial_attack | 44.1 | 37.6667 +/- 0.4163 (n=3) | -6.4333 = >10 SD |
+
+## uni2hf
+
+seed cells: c50-s0-step100, c50-s1-step150, c50-s2-step100
+
+| metric | base | tuned (mean +/- SD) | gain |
+|---|---|---|---|
+| PathoROB RI | 0.7567 | -- | -- |
+| HEST | 0.4138 | 0.4238 +/- 0.0029 (n=3) | +0.0099 = 3.5 SD |
+| THUNDER knn | 83.3 | 82.9667 +/- 0.4163 (n=3) | -0.3333 = 0.8 SD |
+| THUNDER linear_probing | 85.8 | 85.7667 +/- 0.3055 (n=3) | -0.0333 = 0.1 SD |
+| THUNDER simple_shot | 79.8 | 78.8000 +/- 0.4583 (n=3) | -1.0000 = 2.2 SD |
+| THUNDER segmentation | -- | -- | -- |
+| THUNDER calibration | 3.8 | 4.5333 +/- 0.1528 (n=3) | +0.7333 = 4.8 SD |
+| THUNDER adversarial_attack | 31.6 | 24.9000 +/- 0.7810 (n=3) | -6.7000 = 8.6 SD |

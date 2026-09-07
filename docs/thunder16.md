@@ -68,46 +68,107 @@ Classification datasets scored for this backbone: 16/16.
 
 ## uni2h
 
-| task | base | b00-s0-step100 | base-ctrl-rep2 | bm3-s0-step100 | c3s-s0-step125 | c3s-s1-step125 | c50-s0-step100 | c50-s0-step150 | c50-s0-step50 | c50-s1-step150 | c50-s2-step100 | delta (c50-s0-step100) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| knn | 83.3 | 83.5 | 83.3 | 83.3 | 83.0 | 82.8 | 83.3 | 82.5 | 83.0 | 82.5 | 83.1 | +0.0 (flat) |
-| linear_probing | 85.7 | 86.3 | 85.7 | 86.0 | 86.1 | 86.2 | 86.1 | 85.9 | 85.7 | 85.5 | 85.8 | +0.4 (better) |
-| simple_shot | 79.8 | 79.7 | 79.8 | 79.1 | 78.8 | 78.7 | 79.2 | 78.7 | 80.0 | 78.2 | 78.9 | -0.6 (worse) |
-| segmentation | 69.2 | 69.0 | 69.0 | 69.1 | 68.7 | 68.4 | 69.0 | 69.3 | 69.0 | 69.0 | 69.4 | -0.2 (worse) |
-| calibration | 3.9 | 3.0 | 3.9 | 3.4 | 4.3 | 4.1 | 4.6 | 4.2 | 3.7 | 4.4 | 4.5 | +0.7 (worse) |
-| adversarial_attack | 26.8 | 22.5 | 26.8 | 21.2 | 19.5 | 19.0 | 22.0 | -- | 27.8 | 20.5 | 20.5 | -4.8 (better) |
+| task | base | b00-s0-step100 | base-ctrl-rep2 | bm3-s0-step100 | c3s-s0-step125 | c3s-s1-step125 | c50-s0-step100 | c50-s0-step150 | c50-s0-step50 | c50-s1-step150 | c50-s2-step100 | detprobe | delta (c50-s0-step100) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| knn | 83.3 | 83.5 | 83.3 | 83.3 | 83.0 | 82.8 | 83.3 | 82.5 | 83.0 | 82.5 | 83.1 | 83.3 | +0.0 (flat) |
+| linear_probing | 85.7 | 86.3 | 85.7 | 86.0 | 86.1 | 86.2 | 86.1 | 85.9 | 85.7 | 85.5 | 85.8 | 85.7 | +0.4 (better) |
+| simple_shot | 79.8 | 79.7 | 79.8 | 79.1 | 78.8 | 78.7 | 79.2 | 78.7 | 80.0 | 78.2 | 78.9 | 79.8 | -0.6 (worse) |
+| segmentation | 69.2 | 69.0 | 69.0 | 69.1 | 68.7 | 68.4 | 69.0 | 69.3 | 69.0 | 69.0 | 69.4 | -- | -0.2 (worse) |
+| calibration | 3.9 | 3.0 | 3.9 | 3.4 | 4.3 | 4.1 | 4.6 | 4.2 | 3.7 | 4.4 | 4.5 | 3.9 | +0.7 (worse) |
+| adversarial_attack | 26.8 | 22.5 | 26.8 | 21.2 | 19.5 | 19.0 | 22.0 | -- | 27.8 | 20.5 | 20.5 | -- | -4.8 (better) |
 
 Classification datasets scored for this backbone: 16/16.
 
 ## openmidnightsq
 
-TODO: no base-control on disk -- no delta can be expressed for this backbone.
+| task | base | c50-s0-step150 | c50-s1-step150 | c50-s2-step150 | delta (c50-s0-step150) |
+|---|---|---|---|---|---|
+| knn | 79.3 | 81.0 | 80.8 | 80.7 | +1.7 (better) |
+| linear_probing | 84.8 | 84.7 | 85.3 | 85.1 | -0.1 (worse) |
+| simple_shot | 43.6 | 67.3 | 66.4 | 64.0 | +23.7 (better) |
+| segmentation | 69.2 | 69.1 | 68.7 | 69.0 | -0.1 (worse) |
+| calibration | 5.3 | 3.9 | 4.5 | 3.8 | -1.4 (better) |
+| adversarial_attack | 38.4 | 27.1 | 29.2 | 27.8 | -11.3 (better) |
+
+Classification datasets scored for this backbone: 16/16.
 
 ## virchow1
 
-| task | base | c50-s0-step150 | c50-s1-step150 | delta (c50-s0-step150) |
-|---|---|---|---|---|
-| knn | 77.4 | -- | -- | -- |
-| linear_probing | 82.8 | -- | -- | -- |
-| simple_shot | 71.8 | -- | -- | -- |
-| segmentation | 69.2 | -- | -- | -- |
-| calibration | 4.5 | -- | -- | -- |
-| adversarial_attack | 29.9 | -- | -- | -- |
+| task | base | c50-s0-step150 | c50-s1-step150 | c50-s2-step150 | delta (c50-s0-step150) |
+|---|---|---|---|---|---|
+| knn | 77.4 | 79.2 | 79.0 | 78.6 | +1.8 (better) |
+| linear_probing | 82.8 | 83.6 | 83.4 | 83.2 | +0.8 (better) |
+| simple_shot | 71.8 | 73.6 | 73.9 | 73.5 | +1.8 (better) |
+| segmentation | 69.2 | 69.0 | 68.8 | 68.8 | -0.2 (worse) |
+| calibration | 4.5 | 3.9 | 3.8 | 4.3 | -0.6 (better) |
+| adversarial_attack | 38.4 | 30.0 | 30.9 | 30.1 | -8.4 (better) |
 
-Classification datasets scored for this backbone: 1/16.
+Classification datasets scored for this backbone: 16/16.
+
+## phikon2f
+
+| task | base | c50-s0-step200 | c50-s1-step200 | c50-s2-step200 | delta (c50-s0-step200) |
+|---|---|---|---|---|---|
+| knn | 73.9 | 77.3 | 77.7 | 77.3 | +3.4 (better) |
+| linear_probing | 79.7 | 81.4 | 81.2 | 81.4 | +1.7 (better) |
+| simple_shot | 71.8 | 72.5 | 72.5 | 72.5 | +0.7 (better) |
+| segmentation | MISSING | -- | -- | -- | MISSING |
+| calibration | 3.7 | 3.9 | 3.9 | 4.1 | +0.2 (worse) |
+| adversarial_attack | 43.6 | 35.6 | 35.0 | 33.9 | -8.0 (better) |
+
+Classification datasets scored for this backbone: 16/16.
+
+## midnightf
+
+| task | base | c50-s0-step150 | c50-s1-step100 | c50-s3-step100 | delta (c50-s0-step150) |
+|---|---|---|---|---|---|
+| knn | 80.0 | 81.3 | 82.1 | 81.8 | +1.3 (better) |
+| linear_probing | 84.7 | 85.8 | 85.5 | 85.7 | +1.1 (better) |
+| simple_shot | 71.5 | 77.0 | 77.1 | 77.0 | +5.5 (better) |
+| segmentation | MISSING | -- | -- | -- | MISSING |
+| calibration | 2.9 | 3.6 | 4.0 | 4.0 | +0.7 (worse) |
+| adversarial_attack | 37.2 | 26.0 | 30.6 | 30.8 | -11.2 (better) |
+
+Classification datasets scored for this backbone: 16/16.
 
 ## virchow2f
 
-| task | base |  | delta (c50-s0-step100) |
-|---|---|---|
-| knn | 82.9 |  | -- |
-| linear_probing | 84.7 |  | -- |
-| simple_shot | 73.9 |  | -- |
-| segmentation | 69.4 |  | -- |
-| calibration | 4.0 |  | -- |
-| adversarial_attack | MISSING |  | MISSING |
+| task | base | c50-s0-step100 | c50-s1-step150 | c50-s3-step100 | delta (c50-s0-step100) |
+|---|---|---|---|---|---|
+| knn | 82.9 | 83.0 | 83.0 | 83.2 | +0.1 (better) |
+| linear_probing | 84.7 | 85.2 | 85.5 | 85.6 | +0.5 (better) |
+| simple_shot | 73.9 | 78.2 | 77.7 | 78.3 | +4.3 (better) |
+| segmentation | 69.4 | -- | -- | -- | -- |
+| calibration | 4.0 | 4.8 | 4.5 | 4.5 | +0.8 (worse) |
+| adversarial_attack | 31.3 | 25.6 | 25.5 | 25.0 | -5.7 (better) |
 
-Classification datasets scored for this backbone: 0/16.
+Classification datasets scored for this backbone: 16/16.
+
+## hoptimus0f
+
+| task | base | c50-s0-step100 | c50-s1-step100 | c50-s3-step100 | delta (c50-s0-step100) |
+|---|---|---|---|---|---|
+| knn | 81.4 | 81.6 | 81.2 | 81.7 | +0.2 (better) |
+| linear_probing | 83.8 | 84.2 | 84.0 | 84.2 | +0.4 (better) |
+| simple_shot | 76.2 | 77.0 | 77.0 | 77.1 | +0.8 (better) |
+| segmentation | MISSING | -- | -- | -- | MISSING |
+| calibration | 3.9 | 3.6 | 3.8 | 3.4 | -0.3 (better) |
+| adversarial_attack | 44.1 | 38.0 | 37.2 | 37.8 | -6.1 (better) |
+
+Classification datasets scored for this backbone: 16/16.
+
+## uni2hf
+
+| task | base | c50-s0-step100 | c50-s1-step150 | c50-s2-step100 | delta (c50-s0-step100) |
+|---|---|---|---|---|---|
+| knn | 83.3 | 83.3 | 82.5 | 83.1 | +0.0 (flat) |
+| linear_probing | 85.8 | 86.1 | 85.5 | 85.7 | +0.3 (better) |
+| simple_shot | 79.8 | 79.2 | 78.3 | 78.9 | -0.6 (worse) |
+| segmentation | MISSING | -- | -- | -- | MISSING |
+| calibration | 3.8 | 4.7 | 4.4 | 4.5 | +0.9 (worse) |
+| adversarial_attack | 31.6 | 25.8 | 24.5 | 24.4 | -5.8 (better) |
+
+Classification datasets scored for this backbone: 16/16.
 
 ## Notes
 

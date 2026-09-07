@@ -26,31 +26,43 @@ steps are sensitivity points, not substitutes for it.
 | `hoptimus0-c50-s0-step50` | hoptimus0 | 50 | done | done | done | done | done | 5/5 |
 | `hoptimus0-c50-s1-step100` | hoptimus0 | **100 (op)** | done | done | done | done | done | 5/5 |
 | `hoptimus0-c50-s3-step100` | hoptimus0 | **100 (op)** | done | done | done | done | done | 5/5 |
+| `hoptimus0f-c50-s0-step100` | hoptimus0f | 100 | done | -- | -- | -- | done | 2/5 |
+| `hoptimus0f-c50-s1-step100` | hoptimus0f | 100 | done | -- | -- | -- | done | 2/5 |
+| `hoptimus0f-c50-s3-step100` | hoptimus0f | 100 | done | -- | -- | -- | done | 2/5 |
 | `midnight-c50-s0-step150` | midnight | **150 (op)** | done | done | done | done | done | 5/5 |
 | `midnight-c50-s1-step100` | midnight | 100 | done | done | done | done | done | 5/5 |
 | `midnight-c50-s1-step150` | midnight | **150 (op)** | done | done | done | done | done | 5/5 |
 | `midnight-c50-s3-step100` | midnight | 100 | done | done | done | done | -- | 4/5 |
-| `openmidnightsq-c50-s0-step150` | openmidnightsq | 150 | -- | -- | -- | -- | done | 1/5 |
-| `openmidnightsq-c50-s1-step150` | openmidnightsq | 150 | -- | -- | -- | -- | done | 1/5 |
-| `openmidnightsq-c50-s2-step150` | openmidnightsq | 150 | -- | -- | -- | -- | done | 1/5 |
+| `midnightf-c50-s0-step150` | midnightf | 150 | done | -- | -- | -- | done | 2/5 |
+| `midnightf-c50-s1-step100` | midnightf | 100 | done | -- | -- | -- | done | 2/5 |
+| `midnightf-c50-s3-step100` | midnightf | 100 | done | -- | -- | -- | -- | 1/5 |
+| `openmidnightsq-c50-s0-step150` | openmidnightsq | 150 | done | done | done | done | done | 5/5 |
+| `openmidnightsq-c50-s1-step150` | openmidnightsq | 150 | done | done | done | done | done | 5/5 |
+| `openmidnightsq-c50-s2-step150` | openmidnightsq | 150 | done | done | done | done | done | 5/5 |
 | `phikon2-c50-s0-step200` | phikon2 | **200 (op)** | done | done | done | done | done | 5/5 |
 | `phikon2-c50-s1-step200` | phikon2 | **200 (op)** | done | done | done | done | done | 5/5 |
 | `phikon2-c50-s2-step200` | phikon2 | **200 (op)** | done | done | done | done | done | 5/5 |
+| `phikon2f-c50-s0-step200` | phikon2f | 200 | done | -- | -- | -- | done | 2/5 |
+| `phikon2f-c50-s1-step200` | phikon2f | 200 | done | -- | -- | -- | done | 2/5 |
+| `phikon2f-c50-s2-step200` | phikon2f | 200 | done | -- | -- | -- | done | 2/5 |
 | `uni2h-c50-s0-step100` | uni2h | **100 (op)** | done | done | done | done | done | 5/5 |
 | `uni2h-c50-s0-step150` | uni2h | **150 (op)** | done | done | done | done | done | 5/5 |
 | `uni2h-c50-s0-step50` | uni2h | 50 | done | done | done | done | done | 5/5 |
 | `uni2h-c50-s1-step150` | uni2h | **150 (op)** | done | done | done | done | done | 5/5 |
 | `uni2h-c50-s2-step100` | uni2h | **100 (op)** | done | done | done | done | done | 5/5 |
-| `virchow1-c50-s0-step150` | virchow1 | 150 | -- | -- | -- | -- | done | 1/5 |
-| `virchow1-c50-s1-step150` | virchow1 | 150 | -- | -- | -- | -- | done | 1/5 |
-| `virchow1-c50-s2-step150` | virchow1 | 150 | -- | -- | -- | -- | -- | 0/5 |
+| `uni2hf-c50-s0-step100` | uni2hf | 100 | done | -- | -- | -- | done | 2/5 |
+| `uni2hf-c50-s1-step150` | uni2hf | 150 | done | -- | -- | -- | done | 2/5 |
+| `uni2hf-c50-s2-step100` | uni2hf | 100 | done | -- | -- | -- | done | 2/5 |
+| `virchow1-c50-s0-step150` | virchow1 | 150 | done | done | done | done | done | 5/5 |
+| `virchow1-c50-s1-step150` | virchow1 | 150 | done | done | done | done | done | 5/5 |
+| `virchow1-c50-s2-step150` | virchow1 | 150 | done | done | done | done | done | 5/5 |
 | `virchow2-c50-s0-step100` | virchow2 | **100 (op)** | done | done | done | done | done | 5/5 |
 | `virchow2-c50-s1-step100` | virchow2 | **100 (op)** | done | done | done | done | done | 5/5 |
-| `virchow2-c50-s1-step150` | virchow2 | 150 | done | done | done | done | -- | 4/5 |
+| `virchow2-c50-s1-step150` | virchow2 | 150 | done | done | done | done | done | 5/5 |
 | `virchow2-c50-s3-step100` | virchow2 | **100 (op)** | done | done | done | done | done | 5/5 |
-| `virchow2f-c50-s0-step100` | virchow2f | 100 | -- | -- | -- | -- | done | 1/5 |
-| `virchow2f-c50-s1-step150` | virchow2f | 150 | -- | -- | -- | -- | -- | 0/5 |
-| `virchow2f-c50-s3-step100` | virchow2f | 100 | -- | -- | -- | -- | done | 1/5 |
+| `virchow2f-c50-s0-step100` | virchow2f | 100 | done | -- | -- | -- | done | 2/5 |
+| `virchow2f-c50-s1-step150` | virchow2f | 150 | done | -- | -- | -- | done | 2/5 |
+| `virchow2f-c50-s3-step100` | virchow2f | 100 | done | -- | -- | -- | done | 2/5 |
 
 ## b00 -- ABLATION: bias 0/0 -- arithmetically identical to no same-core masking
 
@@ -74,11 +86,15 @@ steps are sensitivity points, not substitutes for it.
 | cell | backbone | step | thunder | online | pathorob | cptac | hest | complete |
 |---|---|---|---|---|---|---|---|---|
 | `hoptimus0-base-control` | hoptimus0 | base | done | done | done | done | done | 5/5 |
+| `hoptimus0f-base-control` | hoptimus0f | base | done | -- | -- | -- | done | 2/5 |
 | `midnight-base-control` | midnight | base | done | done | done | done | done | 5/5 |
-| `openmidnightsq-base-control` | openmidnightsq | base | -- | -- | -- | -- | done | 1/5 |
+| `midnightf-base-control` | midnightf | base | done | -- | -- | -- | done | 2/5 |
+| `openmidnightsq-base-control` | openmidnightsq | base | done | done | done | done | done | 5/5 |
 | `phikon2-base-control` | phikon2 | base | done | done | done | done | done | 5/5 |
+| `phikon2f-base-control` | phikon2f | base | done | -- | -- | -- | done | 2/5 |
 | `uni2h-base-control` | uni2h | base | done | done | done | done | done | 5/5 |
-| `virchow1-base-control` | virchow1 | base | -- | -- | -- | -- | done | 1/5 |
+| `uni2hf-base-control` | uni2hf | base | done | -- | -- | -- | done | 2/5 |
+| `virchow1-base-control` | virchow1 | base | done | done | done | done | done | 5/5 |
 | `virchow2-base-control` | virchow2 | base | done | done | done | done | done | 5/5 |
 
 ## c3s -- SUPERSEDED generation (kept for the three-generation comparison)
@@ -101,16 +117,17 @@ steps are sensitivity points, not substitutes for it.
 | cell | backbone | step | thunder | online | pathorob | cptac | hest | complete |
 |---|---|---|---|---|---|---|---|---|
 | `uni2h-base-ctrl-rep2` | uni2h | base | done | done | done | done | done | 5/5 |
-| `virchow2-basectrl-fp32adv` | virchow2 | base | done | done | done | -- | done | 4/5 |
+| `uni2h-detprobe` | uni2h | base | done | -- | -- | -- | done | 2/5 |
+| `virchow2-basectrl-fp32adv` | virchow2 | base | done | done | done | done | done | 5/5 |
 
 ## Totals
 
 | suite | done | cells | remaining |
 |---|---|---|---|
-| thunder | 45 | 56 | 11 |
-| online | 45 | 56 | 11 |
-| pathorob | 45 | 56 | 11 |
-| cptac | 44 | 56 | 12 |
-| hest | 52 | 56 | 4 |
+| thunder | 73 | 73 | 0 |
+| online | 53 | 73 | 20 |
+| pathorob | 53 | 73 | 20 |
+| cptac | 53 | 73 | 20 |
+| hest | 71 | 73 | 2 |
 
-**231 of 280 cell x suite pairs complete (49 remaining).**
+**303 of 365 cell x suite pairs complete (62 remaining).**
