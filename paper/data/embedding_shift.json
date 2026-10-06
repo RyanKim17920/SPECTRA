@@ -1,0 +1,104 @@
+{
+  "backbone_order": [
+    "phikon2",
+    "midnight",
+    "virchow2"
+  ],
+  "report": {
+    "conditions": [
+      "GIVH_AT2",
+      "GIV_GT450",
+      "GMH_P",
+      "GM_S210",
+      "GVH_S360",
+      "GV_S60",
+      "HRH_SQ",
+      "HR_AT2",
+      "KRH_AT2",
+      "KR_AT2"
+    ],
+    "n_conditions": 10,
+    "n_tiles": 400,
+    "seed": 1234,
+    "step": null,
+    "sampling": "10 acquisition conditions x 400 registered tile locations, same locations reused across every condition and backbone (np.random.default_rng(seed).choice(NUM_TILES, n_tiles, replace=False))",
+    "pseudo_tissue_source": "runs/.plism_core_labels.npy",
+    "backbones": {
+      "phikon2": {
+        "run": "runs/genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165",
+        "backbone": "owkin/phikon-v2",
+        "silhouette_condition": {
+          "base": 0.22857294976711273,
+          "tuned": 0.0021118216682225466
+        },
+        "silhouette_tissue": {
+          "base": 0.17613516747951508,
+          "tuned": 0.23969729244709015
+        }
+      },
+      "midnight": {
+        "run": "runs/genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166",
+        "backbone": "kaiko-ai/midnight",
+        "silhouette_condition": {
+          "base": 0.01825951412320137,
+          "tuned": -0.00943759549409151
+        },
+        "silhouette_tissue": {
+          "base": 0.2055564522743225,
+          "tuned": 0.2915757894515991
+        }
+      },
+      "virchow2": {
+        "run": "runs/genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167",
+        "backbone": "paige-ai/Virchow2",
+        "silhouette_condition": {
+          "base": 0.03579333424568176,
+          "tuned": -0.006831094156950712
+        },
+        "silhouette_tissue": {
+          "base": 0.26717400550842285,
+          "tuned": 0.3025154173374176
+        }
+      }
+    },
+    "projection_method": "PCA(50)->UMAP(2)"
+  },
+  "provenance": {
+    "source": "recovered from vector PDF",
+    "pdf": "embedding_shift.pdf",
+    "report_json": "embedding_shift_report.json",
+    "why": "umap-learn not installed (UMAP layout not recomputable); Midnight run dir (and its embedding_shift_cache.npz) deleted",
+    "method": "replayed /Pn Do marker placements; axes-fraction coords min-max rescaled to [0,1] per column (affine; autoscale 5% margins restore the original limits); un-permuted with default_rng(0).permutation(N)",
+    "check_row0_row1_max_abs_diff_axes_frac": 2.237654506132003e-12,
+    "check_marker_rgb_vs_labels_max_abs_err": 4.952549481629376e-11,
+    "labels": "cond_labels = repeat(arange(n_conditions), n_tiles); tissue_labels = core_labels[tiles] tiled, tiles = sort(default_rng(seed).choice(NUM_TILES, n_tiles))",
+    "silhouettes": "copied from embedding_shift_report.json (cosine, on PCA-50 features); phikon2/virchow2 re-verified bit-exact from their embedding caches 2026-10-06 (midnight cache deleted, not re-verifiable)",
+    "step_title": "paper shows 'TUNED (step ?)': step is only recorded when embeddings are computed, and the paper run hit the caches; selected steps were phikon2 200, midnight 150, virchow2 100"
+  },
+  "backbones": {
+    "phikon2": {
+      "label": "Phikon-v2",
+      "step": null,
+      "base_sil_cond": 0.22857294976711273,
+      "base_sil_tissue": 0.17613516747951508,
+      "tuned_sil_cond": 0.0021118216682225466,
+      "tuned_sil_tissue": 0.23969729244709015
+    },
+    "midnight": {
+      "label": "Midnight-12k",
+      "step": null,
+      "base_sil_cond": 0.01825951412320137,
+      "base_sil_tissue": 0.2055564522743225,
+      "tuned_sil_cond": -0.00943759549409151,
+      "tuned_sil_tissue": 0.2915757894515991
+    },
+    "virchow2": {
+      "label": "Virchow2",
+      "step": null,
+      "base_sil_cond": 0.03579333424568176,
+      "base_sil_tissue": 0.26717400550842285,
+      "tuned_sil_cond": -0.006831094156950712,
+      "tuned_sil_tissue": 0.3025154173374176
+    }
+  }
+}

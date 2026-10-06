@@ -5,8 +5,11 @@ venv/
 *.egg-info/
 .ipynb_checkpoints/
 
-# never commit data or weights
-/data/
+# never commit data or weights -- except the three transcribed public leaderboards
+/data/*
+!/data/pathorob_leaderboard.tsv
+!/data/hest_leaderboard_9task.tsv
+!/data/thunder_leaderboard_16ds.tsv
 *.h5
 *.safetensors
 *.bin
@@ -54,3 +57,7 @@ results_backup/
 
 # machine-local path roots (see .env.example, tracked)
 .env
+
+# generated paper outputs (paper/make_all.sh); scripts and extracted inputs stay tracked
+/paper/figures/
+/paper/tables/

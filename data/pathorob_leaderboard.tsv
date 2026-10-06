@@ -1,0 +1,32 @@
+# PathoROB Robustness Index leaderboard (23 models).
+# Source: https://github.com/bifold-pathomics/PathoROB README.md, section 'Leaderboard: Robustness Index',
+#   pinned at commit 7e1ee0bd2f3ddd383b39d37c30d58bea466e0880 (2026-04-01, 'added some results from GenBio paper'),
+#   which is still the latest README commit on main at retrieval.
+# Retrieved 2026-10-06 via raw.githubusercontent.com; markdown table parsed mechanically (values copied verbatim).
+# validated_by_authors=no marks the 3 rows carrying a <sup>[N]</sup> citation (Atlas 2, GenBio-PathFM,
+#   H-optimus-1): per the README these were taken from external publications and not validated by the PathoROB authors.
+# Recreated 2026-10-06; reproduces docs/pathorob_ranks.md and docs/overall_ranks.md byte-for-byte.
+rank	model	ri_tcga2x2	ri_camelyon	ri_tolkach_esca	ri_average	validated_by_authors
+1	Atlas 2	0.879	0.940	0.964	0.928	no
+2	GenBio-PathFM	0.838	0.865	0.960	0.888	no
+3	Virchow2	0.822	0.806	0.955	0.861	yes
+4	CONCHv1.5	0.832	0.774	0.951	0.852	yes
+5	Atlas	0.826	0.785	0.938	0.850	yes
+6	Virchow	0.761	0.751	0.932	0.815	yes
+7	H0-mini	0.794	0.718	0.932	0.815	yes
+8	H-optimus-1	0.853	0.645	0.944	0.814	no
+9	Conch	0.824	0.662	0.951	0.812	yes
+10	H-optimus-0	0.812	0.705	0.918	0.812	yes
+11	UNI2-h	0.803	0.544	0.923	0.757	yes
+12	MUSK	0.727	0.467	0.928	0.707	yes
+13	HIPT	0.614	0.649	0.726	0.663	yes
+14	Prov-GigaPath	0.738	0.399	0.754	0.630	yes
+15	Kaiko ViT-B/8	0.763	0.147	0.896	0.602	yes
+16	UNI	0.747	0.145	0.902	0.598	yes
+17	RETCCL	0.593	0.318	0.878	0.596	yes
+18	CTransPath	0.652	0.106	0.872	0.543	yes
+19	Kang-DINO	0.661	0.043	0.832	0.512	yes
+20	RudolfV	0.587	0.184	0.695	0.489	yes
+21	Phikon	0.623	0.011	0.795	0.476	yes
+22	Phikon-v2	0.619	0.019	0.768	0.469	yes
+23	Ciga	0.511	0.135	0.693	0.446	yes

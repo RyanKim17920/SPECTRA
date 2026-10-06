@@ -33,9 +33,11 @@ own seeds on THAT dataset, not against a floor imported from another arm or pane
 12-dataset floor in docs/thunder_seed_floor_12ds.json is measured on the older final5 runs
 at a fixed step 500 and does not transfer to this 16-dataset c50 panel.)
 
-    ./.venv-hest/bin/python scripts/thunder_per_ds.py
-      -> waiv-asci/figures/thunder_per_ds.pdf (+ .png)
+    python3 scripts/thunder_per_ds.py [--extract]
+      -> $SPECTRA_PAPER/figures/thunder_per_ds.pdf (+ .png)
       -> docs/thunder_per_ds.md
+      -> paper/data/thunder_per_ds.json   (with --extract)
+    python3 scripts/thunder_per_ds.py --from-extract   # figure only, from the frozen JSON
 """
 import sys
 from pathlib import Path
@@ -286,9 +288,48 @@ def _assert_panels_populated(data):
                              f"(task, metric, setting) key: {panel[0]!r}/{panel[1]!r}/{panel[2]!r}")
 
 
+EXTRACT = Path(__file__).resolve().parent.parent / "paper/data/thunder_per_ds.json"
+
+
+def dump(data, datasets, path=EXTRACT):
+    """Freeze collect()'s output so render() can run without the eval outputs."""
+    import json
+    import math
+    cells = {f"{bb}|{p}|{d}": [b, t, None if math.isnan(sd) else sd, n]
+             for (bb, p, d), (b, t, sd, n) in sorted(data.items())}
+    path.write_text(json.dumps({"_about": "scripts/thunder_per_ds.py collect(): "
+                                "'<backbone>|<panel index>|<dataset>' -> [base, tuned mean, "
+                                "tuned sample SD, n seeds]; panels = PANELS order",
+                                "datasets": datasets, "cells": cells}, indent=0) + "\n")
+    print(f"wrote {path}")
+
+
+def load(path=EXTRACT):
+    import json
+    doc = json.loads(Path(path).read_text())
+    data = {}
+    for k, (b, t, sd, n) in doc["cells"].items():
+        bb, p, d = k.split("|")
+        data[(bb, int(p), d)] = (b, t, float("nan") if sd is None else sd, n)
+    return data, doc["datasets"]
+
+
 if __name__ == "__main__":
+    # (no args)              collect from the eval outputs, render, write docs/thunder_per_ds.md
+    # --extract              collect and freeze to paper/data/thunder_per_ds.json, then render
+    # --from-extract [PATH]  render only, from the frozen JSON (no /data needed)
+    if "--from-extract" in sys.argv:
+        i = sys.argv.index("--from-extract")
+        path = Path(sys.argv[i + 1]) if len(sys.argv) > i + 1 else EXTRACT
+        data, datasets = load(path)
+        _assert_panels_populated(data)
+        render(data, datasets)
+        print(f"rendered thunder_per_ds from {path}")
+        raise SystemExit(0)
     data, datasets = collect()
     _assert_panels_populated(data)
+    if "--extract" in sys.argv:
+        dump(data, datasets)
     print(f"{len(data)} (backbone, panel, dataset) cells over {len(datasets)} datasets")
     render(data, datasets)
     markdown(data, datasets)

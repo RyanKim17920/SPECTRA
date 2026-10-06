@@ -37,10 +37,25 @@ n_tiles=256 -- see plism_base_probe_4bb.sbatch's header note), tuned step-200 to
 0.8960 (probe_step_0000200.json) -- this is the "0.696 -> 0.897" the figure is meant to
 make legible tile-by-tile.
 
-    ./.venv-hest/bin/python scripts/retrieval_qualitative.py
-      -> waiv-asci/figures/retrieval_examples.{pdf,png}
+    ./.venv-hest/bin/python scripts/retrieval_qualitative.py [--dump-extract]
+      -> $SPECTRA_PAPER/figures/retrieval_examples.{pdf,png} + retrieval_examples_report.json
       -> caches embeddings at --cache (default: alongside the run) so a re-render
          after a style tweak does not need the GPU again.
+      -> with --dump-extract: paper/data/retrieval_examples.{json,webp}
+
+Render-only (no GPU, no /data, no checkpoints)
+-----------------------------------------------
+``render()`` needs only the condition keys, the 256 pool tile ids, both rank/top-k
+arrays, the chosen examples and the PIXELS of the handful of tiles it shows. Those are
+frozen in ``paper/data/retrieval_examples.json`` (report, ranks, indices) + ``.webp`` (a
+lossless strip of only the displayed 224x224 tiles):
+
+    python3 scripts/retrieval_qualitative.py --from-extract   # -> $SPECTRA_PAPER/figures/
+
+Re-freeze (needs the cached embeddings at <run>/retrieval_qualitative_cache.npz and the
+repacked PLISM slides at $SPECTRA_PLISM_PACKED; no GPU when the cache exists):
+
+    SPECTRA_RUNS=... SPECTRA_PLISM_PACKED=... python3 scripts/retrieval_qualitative.py --dump-extract
 """
 from __future__ import annotations
 
@@ -52,7 +67,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _config import PLISM_PACKED, RUNS  # noqa: E402
+from _config import PAPER_FIGURES, PLISM_PACKED, RUNS  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
@@ -62,7 +77,8 @@ RUN = RUNS / "genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165"
 STEP = 200
 BACKBONE = "owkin/phikon-v2"
 PACKED_DIR = PLISM_PACKED
-OUT = REPO.parent / "waiv-asci" / "figures"
+OUT = PAPER_FIGURES
+EXTRACT = REPO / "paper" / "data" / "retrieval_examples.json"   # + .webp tile strip (lossless)
 HELDOUT_SCANNERS = ["GT450", "S210"]
 HELDOUT_STAINS = ["HRH", "KR", "MY"]
 N_TILES = 256
@@ -91,6 +107,10 @@ def parse_args():
     ap.add_argument("--topk", type=int, default=TOPK)
     ap.add_argument("--batch-size", type=int, default=64)
     ap.add_argument("--device", default=None)
+    ap.add_argument("--from-extract", nargs="?", const=EXTRACT, default=None, type=Path,
+                     metavar="JSON", help=f"render only, from a frozen extract (default {EXTRACT})")
+    ap.add_argument("--dump-extract", nargs="?", const=EXTRACT, default=None, type=Path,
+                     metavar="JSON", help="after computing, also freeze what render() consumes")
     return ap.parse_args()
 
 
@@ -178,17 +198,21 @@ def pick_examples(rank_base: np.ndarray, rank_tuned: np.ndarray, n_examples: int
 
 
 def render(args, cond_a, cond_b, tiles, examples, rank_base, rank_tuned,
-           topk_base, topk_tuned):
+           topk_base, topk_tuned, slide_a=None, slide_b=None):
+    """``slide_a``/``slide_b``: anything indexable by tile id -> (224,224,3) uint8; default
+    opens the repacked PLISM slides. ``cond_a``/``cond_b``: Condition objects or keys."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from spectra.data.repack import open_slide
 
     plt.rcParams.update({"font.size": 9, "font.family": "serif", "mathtext.fontset": "stix",
                          "axes.edgecolor": INK, "pdf.fonttype": 42})
 
-    slide_a = open_slide(args.packed_dir, cond_a.slide_id.replace(".tif", ""))
-    slide_b = open_slide(args.packed_dir, cond_b.slide_id.replace(".tif", ""))
+    if slide_a is None or slide_b is None:
+        from spectra.data.repack import open_slide
+        slide_a = open_slide(args.packed_dir, cond_a.slide_id.replace(".tif", ""))
+        slide_b = open_slide(args.packed_dir, cond_b.slide_id.replace(".tif", ""))
+    key_a, key_b = getattr(cond_a, "key", cond_a), getattr(cond_b, "key", cond_b)
 
     n_ex = len(examples)
     k = args.topk
@@ -236,7 +260,7 @@ def render(args, cond_a, cond_b, tiles, examples, rank_base, rank_tuned,
                  ha="left", va="center", fontsize=7, color=MUTED)
 
     fig.suptitle(
-        f"query condition $c_a$={cond_a.key}   candidate pool $c_b$={cond_b.key}"
+        f"query condition $c_a$={key_a}   candidate pool $c_b$={key_b}"
         f"  (256 held-out registered locations, cosine on CLS+mean, no head)",
         fontsize=8, y=1.0 + 0.012 * n_ex,
     )
@@ -245,8 +269,79 @@ def render(args, cond_a, cond_b, tiles, examples, rank_base, rank_tuned,
     fig.savefig(args.out_dir / "retrieval_examples.png", dpi=200, bbox_inches="tight")
 
 
+def displayed_tiles(tiles, examples, topk_base, topk_tuned):
+    """(slide 'a'|'b', tile_id) pairs render() actually draws, in first-use order."""
+    need = []
+    for i in examples:
+        need.append(("a", int(tiles[i])))
+        for topk in (topk_base, topk_tuned):
+            need += [("b", int(tiles[j])) for j in topk[i]]
+    return list(dict.fromkeys(need))
+
+
+def save_extract(path: Path, slide_a, slide_b, tiles, examples, rank_base, rank_tuned,
+                 topk_base, topk_tuned, report: dict) -> None:
+    """``path`` = the .json; the displayed tiles go beside it as ONE lossless WebP strip
+    (tile k at columns [224k, 224k+224)), listed in json['images'] as [slide, tile_id]."""
+    from PIL import Image
+
+    need = displayed_tiles(tiles, examples, topk_base, topk_tuned)
+    imgs = [np.asarray((slide_a if s == "a" else slide_b)[t], np.uint8) for s, t in need]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    strip = np.concatenate(imgs, axis=1)
+    Image.fromarray(strip).save(path.with_suffix(".webp"), lossless=True, quality=100, method=6)
+    if not np.array_equal(np.asarray(Image.open(path.with_suffix(".webp")).convert("RGB")), strip):
+        raise SystemExit("lossless WebP round-trip is not exact")
+    meta = {
+        "report": report, "topk": int(topk_base.shape[1]),
+        "images": [[s, t] for s, t in need],
+        "tiles": [int(t) for t in tiles], "examples": [int(i) for i in examples],
+        "rank_base": [int(r) for r in rank_base], "rank_tuned": [int(r) for r in rank_tuned],
+        "topk_base": np.asarray(topk_base).tolist(), "topk_tuned": np.asarray(topk_tuned).tolist(),
+        "provenance": {
+            "source": "computed from <run>/retrieval_qualitative_cache.npz (cosine retrieval, "
+                      "0-indexed ranks over the 256-location pool) + repacked PLISM tiles",
+            "images": f"{path.with_suffix('.webp').name}: horizontal strip of the {len(need)} "
+                      "224x224 RGB tiles render() draws, pixels copied verbatim (lossless); "
+                      "'a' = query condition c_a, 'b' = candidate pool c_b",
+        },
+    }
+    path.write_text(json.dumps(meta, separators=(",", ":")) + "\n")
+    print(f"[retrieval_qualitative] wrote extract {path} (+ {len(need)}-tile .webp)", flush=True)
+
+
+class _TileBank:
+    """Indexable by tile id, like a repacked slide memmap, over the extract's few tiles."""
+
+    def __init__(self, by_id: dict):
+        self._by_id = by_id
+
+    def __getitem__(self, tile_id):
+        return self._by_id[int(tile_id)]
+
+
+def render_from_extract(args, path: Path) -> None:
+    from PIL import Image
+
+    meta = json.loads(Path(path).read_text())
+    strip = np.asarray(Image.open(Path(path).with_suffix(".webp")).convert("RGB"))
+    banks = {"a": {}, "b": {}}
+    for k, (s, t) in enumerate(meta["images"]):
+        banks[s][int(t)] = strip[:, 224 * k:224 * (k + 1)]
+    args.topk = meta["topk"]
+    rep = meta["report"]
+    arr = lambda k: np.asarray(meta[k], dtype=int)  # noqa: E731
+    render(args, rep["cond_a"], rep["cond_b"], arr("tiles"), meta["examples"],
+           arr("rank_base"), arr("rank_tuned"), arr("topk_base"), arr("topk_tuned"),
+           _TileBank(banks["a"]), _TileBank(banks["b"]))
+    print(f"[retrieval_qualitative] rendered from {path} -> {args.out_dir}", flush=True)
+
+
 def main() -> int:
     args = parse_args()
+    if args.from_extract is not None:
+        render_from_extract(args, args.from_extract)
+        return 0
     if args.cache is None:
         args.cache = args.run / "retrieval_qualitative_cache.npz"
 
@@ -280,6 +375,12 @@ def main() -> int:
                               "rank_base": int(rank_base[i]) + 1, "rank_tuned": int(rank_tuned[i]) + 1}
                              for i in examples],
     }
+    if args.dump_extract is not None:
+        from spectra.data.repack import open_slide
+        save_extract(args.dump_extract,
+                     open_slide(args.packed_dir, cond_a.slide_id.replace(".tif", "")),
+                     open_slide(args.packed_dir, cond_b.slide_id.replace(".tif", "")),
+                     tiles, examples, rank_base, rank_tuned, topk_base, topk_tuned, report)
     print(json.dumps(report, indent=2))
     (args.out_dir / "retrieval_examples_report.json").write_text(json.dumps(report, indent=2))
     return 0

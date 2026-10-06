@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
-"""Two figures for the workshop paper: the grid-batch method diagram and base->tuned dots.
+"""Left panel of Figure 1 (grid_batch): three PLISM conditions x six registered locations.
 
-    ./.venv-hest/bin/python scripts/paper_figures.py
-      -> waiv-asci/figures/{grid_batch,base_to_tuned}.pdf (+ .png previews, same stems)
+    python3 scripts/paper_figures.py
+      -> $SPECTRA_PAPER/figures/grid_batch_left.{pdf,png}
+    python3 paper/scripts/annotate_grid_batch.py
+      -> $SPECTRA_PAPER/figures/grid_batch.{pdf,png}   (the figure in the paper)
+
+Reads the PLISM corpus when SPECTRA_PLISM_PACKED has it, else the 18 frozen tiles in
+paper/data/grid_batch_tiles.webp. paper/make_all.sh runs both steps.
+
+base_to_tuned() below is the SUPERSEDED two-panel version (it reproduces
+figures/unused/base_to_tuned.old.pdf). The paper's Figure 2 is
+paper/scripts/make_base_to_tuned.py.
 """
 import re
 import sys
@@ -23,6 +32,7 @@ plt.rcParams.update({"font.size": 9, "font.family": "serif", "mathtext.fontset":
 
 
 PLISM = PLISM_PACKED
+TILES = REPO / "paper/data/grid_batch_tiles.webp"
 # Three acquisition conditions of one PLISM tissue-microarray design. Rows differ in
 # scanner and/or stain; columns are registered tissue locations, so column i is the SAME
 # physical location in every row. Locations chosen for tissue content (>0.9 non-white).
@@ -43,15 +53,24 @@ def grid_batch():
     figures/grid_batch.schematic.bak-*.{pdf,png}.
     """
     import numpy as np
-    arrs = [np.load(PLISM / f"{c}.npy", mmap_mode="r") for c, _ in CONDITIONS]
     nrow, ncol = len(CONDITIONS), len(LOCATIONS)
+    if (PLISM / f"{CONDITIONS[0][0]}.npy").exists():
+        arrs = [np.load(PLISM / f"{c}.npy", mmap_mode="r") for c, _ in CONDITIONS]
+        arrs = [[np.asarray(a[loc]) for loc in LOCATIONS] for a in arrs]
+    else:
+        # No corpus on this machine: use the 18 tiles frozen by
+        # paper/scripts/extract_grid_batch.py (lossless 3 x 6 mosaic of 224 px tiles).
+        from PIL import Image
+        mos = np.asarray(Image.open(TILES).convert("RGB"))
+        arrs = [[mos[r * 224:(r + 1) * 224, c * 224:(c + 1) * 224] for c in range(ncol)]
+                for r in range(nrow)]
 
     fig, axes = plt.subplots(nrow, ncol, figsize=(6.6, 3.15),
                              gridspec_kw={"wspace": 0.06, "hspace": 0.06})
     for r, (arr, (_code, label)) in enumerate(zip(arrs, CONDITIONS)):
         for c, loc in enumerate(LOCATIONS):
             ax = axes[r, c]
-            ax.imshow(np.asarray(arr[loc]))
+            ax.imshow(arr[c])
             ax.set_xticks([]); ax.set_yticks([])
             for sp in ax.spines.values():
                 sp.set_linewidth(0.6); sp.set_edgecolor(MUTED)
@@ -93,7 +112,8 @@ def grid_batch():
 
     fig.text(0.5, 1.03, "columns: corresponding registered locations",
              ha="center", va="bottom", fontsize=7.5, color=INK)
-    fig.savefig(OUT / "grid_batch.pdf", bbox_inches="tight")
+    OUT.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUT / "grid_batch_left.pdf", bbox_inches="tight")
     # 1050 dpi (was 700, originally 200): this PNG is not just a preview --
     # annotate_grid_batch.py composites it as the left panel of the final figure, so its
     # pixel count sets the embedded raster resolution in grid_batch.pdf. 200 dpi here
@@ -101,7 +121,7 @@ def grid_batch():
     # asked for 600 ppi, so this scales proportionally (700 * 600/400 = 1050) and keeps
     # the source comfortably above the final embed resolution.
     # The PLISM tiles themselves are 224x224 native and are drawn undownsampled.
-    fig.savefig(OUT / "grid_batch.png", dpi=1050, bbox_inches="tight")
+    fig.savefig(OUT / "grid_batch_left.png", dpi=1050, bbox_inches="tight")
 
 
 def base_to_tuned():
@@ -156,9 +176,9 @@ def base_to_tuned():
 
 if __name__ == "__main__":
     # base_to_tuned() is NO LONGER RUN from here. figures/base_to_tuned.pdf is owned by
-    # waiv-asci/scripts/make_base_to_tuned.py, which draws all FOUR benchmarks (PathoROB,
+    # paper/scripts/make_base_to_tuned.py, which draws all FOUR benchmarks (PathoROB,
     # HEST, CPTAC, and the six THUNDER tasks) by parsing the generated tables. The two-panel
     # version below is superseded; running it overwrites the four-panel figure with a
     # strictly worse one, which is exactly what happened once. Kept for reference only.
-    grid_batch(); print("wrote grid_batch (left panel);"
-                        " now run waiv-asci/scripts/annotate_grid_batch.py to composite")
+    grid_batch(); print("wrote grid_batch_left (left panel);"
+                        " now run paper/scripts/annotate_grid_batch.py to composite")

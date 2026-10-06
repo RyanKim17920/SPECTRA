@@ -1,0 +1,31 @@
+% Hand-written. Values transcribed from the prose of Appendix "Additional ablation
+% details" (pseudo-tissue reweighting, batch composition, adapter rank). No new
+% measurements: this file only tabulates numbers already stated in the text.
+% The dagger rule uses the paper's own RI tolerance epsilon = 0.007.
+% One tabular, three row blocks (a)-(c); the float, caption and label live in appendix.tex.
+\begin{tabular}{lcccccc}
+\toprule
+\multicolumn{7}{l}{\emph{(a) Pseudo-tissue reweighting}} \\
+Backbone & $\Delta$RI & $\Delta$HEST & Tuned HEST $2$\,SD & & & \\
+\cmidrule(lr){1-4}
+Phikon-v2    & $+0.0091$          & $+0.0044$ & $0.0006$ & & & \\
+Midnight-12k & $-0.0002^\dagger$  & $+0.0016$ & $0.0014$ & & & \\
+Virchow2     & $+0.0030^\dagger$  & $-0.0005$ & $0.0034$ & & & \\
+H-optimus-0  & $+0.0003^\dagger$  & $+0.0020$ & $0.0018$ & & & \\
+UNI2-h       & $+0.0004^\dagger$  & $-0.0007$ & $0.0058$ & & & \\
+\midrule
+\multicolumn{7}{l}{\emph{(b) Batch composition}} \\
+$C$ & RI @750 & & Change at fixed $C$ & $\Delta$RI @750 & @1000 & @1250 \\
+\cmidrule(lr){1-2}\cmidrule(lr){4-7}
+24 & 0.802          & & $C{=}24$, $T$ 100$\to$150 & $-0.0002$ & $-0.0033$ & $-0.0063$ \\
+12 & 0.809          & & $C{=}12$, $T$ 200$\to$300 & $+0.0060$ & $+0.0036$ & $+0.0026$ \\
+6  & 0.814          & & & & & \\
+2  & \textbf{0.824} & & & & & \\
+\midrule
+\multicolumn{7}{l}{\emph{(c) Adapter rank}} \\
+Backbone & Steps & $r{=}8$ & $r{=}16$ & $r{=}32$ & $r{=}64$ & $r{=}128$ \\
+\cmidrule(lr){1-7}
+Phikon-v2 & $\ge1500$ & 0.7998 & 0.8019 & \textbf{0.8029} & 0.7969 & 0.8009 \\
+Virchow2  & $\ge750$  & --     & --     & \textbf{0.9006} & 0.8983 & 0.8735 \\
+\bottomrule
+\end{tabular}

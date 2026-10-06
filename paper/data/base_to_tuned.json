@@ -1,0 +1,347 @@
+{
+ "_about": "Figure 2 inputs: [base, fine-tuned mean, 2 sample SDs (null = no spread)] per backbone. Extracted by paper/scripts/extract_base_to_tuned.py from the generated tables pathorob_ranks.tex, hest_ranks.tex, thunder_ranks_full.tex, cptac.tex.",
+ "order": [
+  "Phikon-v2",
+  "OpenMidnight",
+  "UNI2-h",
+  "Midnight-12k",
+  "H-optimus-0",
+  "Virchow",
+  "Virchow2"
+ ],
+ "panels": {
+  "pathorob_ri": {
+   "Phikon-v2": [
+    0.47,
+    0.836,
+    0.014
+   ],
+   "OpenMidnight": [
+    0.618,
+    0.879,
+    0.007
+   ],
+   "UNI2-h": [
+    0.757,
+    0.907,
+    0.007
+   ],
+   "Midnight-12k": [
+    0.759,
+    0.908,
+    0.005
+   ],
+   "H-optimus-0": [
+    0.8,
+    0.906,
+    0.004
+   ],
+   "Virchow": [
+    0.815,
+    0.89,
+    0.004
+   ],
+   "Virchow2": [
+    0.861,
+    0.909,
+    0.007
+   ]
+  },
+  "hest_r": {
+   "Phikon-v2": [
+    0.3747,
+    0.3906,
+    0.0006
+   ],
+   "OpenMidnight": [
+    0.3902,
+    0.4048,
+    0.0014
+   ],
+   "UNI2-h": [
+    0.4138,
+    0.4238,
+    0.0058
+   ],
+   "Midnight-12k": [
+    0.3952,
+    0.4122,
+    0.0022
+   ],
+   "H-optimus-0": [
+    0.415,
+    0.4226,
+    0.0018
+   ],
+   "Virchow": [
+    0.4061,
+    0.4083,
+    0.0036
+   ],
+   "Virchow2": [
+    0.4032,
+    0.4089,
+    0.0034
+   ]
+  },
+  "cptac_auc": {
+   "Phikon-v2": [
+    0.6491,
+    0.687,
+    0.0024
+   ],
+   "OpenMidnight": [
+    0.6561,
+    0.6844,
+    0.0022
+   ],
+   "UNI2-h": [
+    0.675,
+    0.698,
+    0.0062
+   ],
+   "Midnight-12k": [
+    0.6643,
+    0.6898,
+    0.0016
+   ],
+   "H-optimus-0": [
+    0.6728,
+    0.6895,
+    0.0004
+   ],
+   "Virchow": [
+    0.6608,
+    0.6839,
+    0.0026
+   ],
+   "Virchow2": [
+    0.6789,
+    0.6879,
+    0.0016
+   ]
+  },
+  "thunder_knn": {
+   "Phikon-v2": [
+    73.9,
+    77.4,
+    0.5
+   ],
+   "OpenMidnight": [
+    79.3,
+    80.8,
+    0.3
+   ],
+   "UNI2-h": [
+    83.3,
+    83.0,
+    0.8
+   ],
+   "Midnight-12k": [
+    80.0,
+    81.8,
+    0.7
+   ],
+   "H-optimus-0": [
+    81.4,
+    81.5,
+    0.5
+   ],
+   "Virchow": [
+    77.4,
+    78.9,
+    0.6
+   ],
+   "Virchow2": [
+    82.9,
+    83.1,
+    0.2
+   ]
+  },
+  "thunder_lp": {
+   "Phikon-v2": [
+    79.7,
+    81.4,
+    0.3
+   ],
+   "OpenMidnight": [
+    84.8,
+    85.0,
+    0.6
+   ],
+   "UNI2-h": [
+    85.7,
+    85.8,
+    0.6
+   ],
+   "Midnight-12k": [
+    84.8,
+    85.6,
+    0.2
+   ],
+   "H-optimus-0": [
+    83.8,
+    84.2,
+    0.2
+   ],
+   "Virchow": [
+    82.8,
+    83.4,
+    0.4
+   ],
+   "Virchow2": [
+    84.7,
+    85.5,
+    0.5
+   ]
+  },
+  "thunder_fewshot": {
+   "Phikon-v2": [
+    71.8,
+    72.5,
+    0.0
+   ],
+   "OpenMidnight": [
+    43.6,
+    65.9,
+    3.4
+   ],
+   "UNI2-h": [
+    79.8,
+    78.8,
+    1.0
+   ],
+   "Midnight-12k": [
+    71.5,
+    77.0,
+    0.2
+   ],
+   "H-optimus-0": [
+    76.1,
+    77.0,
+    0.1
+   ],
+   "Virchow": [
+    71.8,
+    73.7,
+    0.4
+   ],
+   "Virchow2": [
+    74.0,
+    78.1,
+    0.6
+   ]
+  },
+  "thunder_seg": {
+   "Phikon-v2": [
+    67.3,
+    67.3,
+    0.5
+   ],
+   "OpenMidnight": [
+    69.2,
+    68.9,
+    0.4
+   ],
+   "UNI2-h": [
+    69.2,
+    69.1,
+    0.5
+   ],
+   "Midnight-12k": [
+    68.0,
+    68.7,
+    1.0
+   ],
+   "H-optimus-0": [
+    64.6,
+    65.0,
+    0.9
+   ],
+   "Virchow": [
+    69.2,
+    68.9,
+    0.2
+   ],
+   "Virchow2": [
+    69.0,
+    69.0,
+    0.4
+   ]
+  },
+  "thunder_ece": {
+   "Phikon-v2": [
+    3.8,
+    3.9,
+    0.2
+   ],
+   "OpenMidnight": [
+    5.3,
+    4.1,
+    0.8
+   ],
+   "UNI2-h": [
+    3.9,
+    4.5,
+    0.2
+   ],
+   "Midnight-12k": [
+    2.9,
+    3.8,
+    0.5
+   ],
+   "H-optimus-0": [
+    4.0,
+    3.5,
+    0.2
+   ],
+   "Virchow": [
+    4.5,
+    4.0,
+    0.5
+   ],
+   "Virchow2": [
+    4.0,
+    4.5,
+    0.4
+   ]
+  },
+  "thunder_adv": {
+   "Phikon-v2": [
+    43.6,
+    34.8,
+    1.7
+   ],
+   "OpenMidnight": [
+    38.4,
+    28.0,
+    2.1
+   ],
+   "UNI2-h": [
+    31.6,
+    24.9,
+    1.6
+   ],
+   "Midnight-12k": [
+    37.2,
+    29.1,
+    5.4
+   ],
+   "H-optimus-0": [
+    44.1,
+    37.7,
+    0.8
+   ],
+   "Virchow": [
+    38.4,
+    30.3,
+    1.0
+   ],
+   "Virchow2": [
+    31.3,
+    25.4,
+    0.6
+   ]
+  }
+ }
+}

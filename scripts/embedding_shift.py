@@ -76,10 +76,31 @@ row, computed on the 50-d PCA features (NOT the 2-D UMAP layout, whose distances
 faithful) -- this is the number the visual "collapses into one blob" / "becomes
 structured" claim is graded against, not eyeballing.
 
-    ./.venv-hest/bin/python scripts/embedding_shift.py
-      -> waiv-asci/figures/embedding_shift.{pdf,png}
-      -> waiv-asci/figures/embedding_shift_report.json
+    ./.venv-hest/bin/python scripts/embedding_shift.py [--dump-extract]
+      -> $SPECTRA_PAPER/figures/embedding_shift.{pdf,png}
+      -> $SPECTRA_PAPER/figures/embedding_shift_report.json
       -> caches embeddings per backbone at <run>/embedding_shift_cache.npz
+      -> with --dump-extract: paper/data/embedding_shift.{npz,json}
+
+Render-only (no GPU, no /data, no checkpoints -- what the paper build uses)
+-----------------------------------------------------------------------------
+``render()`` consumes only 2-D layouts, two label arrays, condition names and the
+silhouette numbers. Those are frozen in ``paper/data/embedding_shift.{npz,json}``:
+
+    python3 scripts/embedding_shift.py --from-extract      # -> $SPECTRA_PAPER/figures/
+
+The committed extract was RECOVERED FROM THE PAPER'S VECTOR PDF, not recomputed:
+umap-learn is not installed here (UMAP is not reproducible without it) and the Midnight
+run dir holding its embedding cache was deleted. Every scatter marker in the PDF is a
+``/Pn Do`` path-XObject placed by cumulative ``1 0 0 1 dx dy cm`` translations, so its
+position is stored to ~1e-10 pt; it is mapped back to axes coordinates and min-max
+rescaled to [0,1] (autoscale's 5% margin then reproduces the original limits exactly --
+absolute UMAP coordinates are meaningless anyway, see Projection above). Draw order is
+``default_rng(0).permutation(N)`` and every recovered marker colour was checked against
+the condition / pseudo-tissue label it must carry. Recover again with
+
+    python3 scripts/embedding_shift.py --extract-from-pdf <paper>/figures/embedding_shift.pdf \
+        --report-json <paper>/figures/embedding_shift_report.json   # needs PyMuPDF + RUNS core labels
 """
 from __future__ import annotations
 
@@ -91,15 +112,16 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _config import CELLS, PLISM_PACKED  # noqa: E402
+from _config import CELLS, PAPER_FIGURES, PLISM_PACKED, RUNS  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 sys.path.insert(0, str(REPO / "src"))
 
 PACKED_DIR = PLISM_PACKED
-OUT = REPO.parent / "waiv-asci" / "figures"
-CORE_LABELS_PATH = REPO / "runs" / ".plism_core_labels.npy"
+OUT = PAPER_FIGURES
+CORE_LABELS_PATH = RUNS / ".plism_core_labels.npy"
+EXTRACT = REPO / "paper" / "data" / "embedding_shift.npz"   # + .json sidecar
 
 HELDOUT_SCANNERS = ["GT450", "S210"]
 HELDOUT_STAINS = ["HRH", "KR", "MY"]
@@ -109,13 +131,13 @@ HELDOUT_STAINS = ["HRH", "KR", "MY"]
 # retrieval_qualitative.py uses for phikon-v2 (0.696 -> 0.897 top-1).
 BACKBONES = {
     "phikon2": dict(backbone="owkin/phikon-v2",
-                    run=REPO / "runs" / "genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165",
+                    run=RUNS / "genMASK-c50-lr1e-4-kl0-ms500-phikon-s0-t900-399165",
                     label="Phikon-v2"),
     "midnight": dict(backbone="kaiko-ai/midnight",
-                      run=REPO / "runs" / "genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166",
+                      run=RUNS / "genMASK-c50-lr1e-4-kl0-ms500-midnight-s0-t900-399166",
                       label="Midnight-12k"),
     "virchow2": dict(backbone="paige-ai/Virchow2",
-                      run=REPO / "runs" / "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167",
+                      run=RUNS / "genMASK-c50-lr1e-4-kl0-ms500-virchow2-s0-t900-399167",
                       label="Virchow2"),
 }
 # Each backbone's seed-0 checkpoint is its OWN 1-SE selected step, resolved from the same
@@ -152,6 +174,15 @@ def parse_args():
                      help="subset of {phikon2, midnight, virchow2} to run")
     ap.add_argument("--force-tsne", action="store_true",
                      help="use TSNE fallback even if umap-learn is importable (debugging)")
+    ap.add_argument("--from-extract", nargs="?", const=EXTRACT, default=None, type=Path,
+                     metavar="NPZ", help=f"render only, from a frozen extract (default {EXTRACT})")
+    ap.add_argument("--dump-extract", nargs="?", const=EXTRACT, default=None, type=Path,
+                     metavar="NPZ", help="after computing, also freeze what render() consumes")
+    ap.add_argument("--extract-from-pdf", type=Path, default=None, metavar="PDF",
+                     help="recover the extract from the paper's vector PDF (writes --dump-extract "
+                          "or the default extract path), then render")
+    ap.add_argument("--report-json", type=Path, default=None,
+                     help="with --extract-from-pdf: the embedding_shift_report.json written with that PDF")
     return ap.parse_args()
 
 
@@ -316,7 +347,8 @@ def render(args, results, report):
             ax0.xaxis.set_label_position("bottom")
             if bi == 0 and ci == 0:
                 ax0.set_ylabel("by acquisition\ncondition", fontsize=6.8, color=INK)
-            ax0.set_title("BASE" if ci == 0 else f"TUNED (step {cfg.get('step', '?')})",
+            step = r.get("step", cfg.get("step"))
+            ax0.set_title("BASE" if ci == 0 else f"TUNED (step {'?' if step is None else step})",
                           fontsize=6.8, color=INK)
 
             ax1 = axes[1, col]
@@ -331,7 +363,7 @@ def render(args, results, report):
 
         # backbone label spanning its 2 columns
         mid = axes[0, 2 * bi].get_position().x0 * 0.5 + axes[0, 2 * bi + 1].get_position().x1 * 0.5
-        fig.text(mid, 0.995, cfg["label"], ha="center", va="top", fontsize=8.2, weight="bold", color=INK)
+        fig.text(mid, 0.995, r.get("label", cfg["label"]), ha="center", va="top", fontsize=8.2, weight="bold", color=INK)
         if bi > 0:
             x0 = axes[0, 2 * bi].get_position().x0 - 0.006
             fig.add_artist(plt.Line2D([x0, x0], [0.04, 0.9], transform=fig.transFigure,
@@ -353,8 +385,173 @@ def render(args, results, report):
     fig.savefig(args.out_dir / "embedding_shift.png", dpi=220, bbox_inches="tight")
 
 
+def save_extract(path: Path, results: dict, report: dict, provenance: dict) -> None:
+    """Freeze exactly what render() consumes: npz (arrays) + json sidecar (report, sils)."""
+    names = list(results)
+    first = results[names[0]]
+    arrays = {"cond_labels": np.asarray(first["cond_labels"], np.int16),
+              "tissue_labels": np.asarray(first["tissue_labels"], np.int16)}
+    meta = {"backbone_order": names, "report": report, "provenance": provenance, "backbones": {}}
+    for name in names:
+        r = results[name]
+        for tag in ("base", "tuned"):
+            arrays[f"{name}__{tag}_xy"] = np.asarray(r[f"{tag}_xy"], np.float64)
+        meta["backbones"][name] = {
+            "label": r.get("label", BACKBONES[name]["label"]),
+            "step": r.get("step", BACKBONES[name].get("step")),
+            **{f"{tag}_sil_{k}": r[f"{tag}_sil_{k}"] for tag in ("base", "tuned") for k in ("cond", "tissue")},
+        }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, **arrays)
+    path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
+    print(f"[embedding_shift] wrote extract {path} (+ .json)", flush=True)
+
+
+def load_extract(path: Path):
+    """-> (results, report) in the exact shape main() hands to render()."""
+    meta = json.loads(Path(path).with_suffix(".json").read_text())
+    z = np.load(path)
+    results = {}
+    for name in meta["backbone_order"]:
+        b = meta["backbones"][name]
+        r = {"cond_labels": z["cond_labels"].astype(int), "tissue_labels": z["tissue_labels"].astype(int),
+             "label": b["label"], "step": b["step"]}
+        for tag in ("base", "tuned"):
+            r[f"{tag}_xy"] = z[f"{name}__{tag}_xy"]
+            r[f"{tag}_sil_cond"] = b[f"{tag}_sil_cond"]
+            r[f"{tag}_sil_tissue"] = b[f"{tag}_sil_tissue"]
+        results[name] = r
+    return results, meta["report"]
+
+
+def _pdf_markers(pdf: Path):
+    """Every path-collection marker in page 1 -> list of (clip_rect, x_pt, y_pt, rgb).
+
+    matplotlib's PDF backend draws a scatter as ``q <clip> re W n`` followed by, per
+    point, a fill colour and ``1 0 0 1 dx dy cm /Pn Do`` -- translations that ACCUMULATE
+    until the enclosing ``Q``. Replaying the operators recovers each marker centre.
+    """
+    import fitz  # PyMuPDF
+    toks = fitz.open(pdf)[0].read_contents().decode("latin-1").split()
+    stack, tx, ty, clip, pend, fill, nums, prev, out = [], 0.0, 0.0, None, None, None, [], "", []
+    for t in toks:
+        if t == "q":
+            stack.append((tx, ty, clip)); nums = []
+        elif t == "Q":
+            tx, ty, clip = stack.pop(); nums = []
+        elif t == "re":
+            pend = tuple(nums[-4:]); nums = []
+        elif t == "W":
+            clip = pend
+        elif t == "rg":
+            fill = tuple(nums[-3:]); nums = []
+        elif t == "g":
+            fill = (nums[-1],) * 3; nums = []
+        elif t == "cm":
+            a = nums[-6:]
+            if a[:4] == [1, 0, 0, 1] and tx is not None:
+                tx += a[4]; ty += a[5]
+            else:
+                tx = ty = None
+            nums = []
+        elif t == "Do":
+            if tx is not None and prev.startswith("/P"):
+                out.append((clip, tx, ty, fill))
+            nums = []
+        else:
+            try:
+                nums.append(float(t))
+            except ValueError:
+                if not t.startswith("/"):
+                    nums = []
+        prev = t
+    return out
+
+
+def extract_from_pdf(pdf: Path, report: dict, core_labels: np.ndarray):
+    """Rebuild render()'s inputs from the paper PDF + its report json (see module doc)."""
+    import matplotlib
+    from spectra.data.conditions import NUM_TILES
+
+    marks = _pdf_markers(pdf)
+    rects = sorted({m[0] for m in marks}, key=lambda r: (-r[1], r[0]))  # row 0 (top) first, then x
+    names = list(report["backbones"])
+    ncol = 2 * len(names)
+    if len(rects) != 2 * ncol:
+        raise SystemExit(f"expected {2 * ncol} scatter panels in {pdf}, found {len(rects)}")
+
+    n_cond, n_tiles = report["n_conditions"], report["n_tiles"]
+    tiles = np.sort(np.random.default_rng(report["seed"]).choice(NUM_TILES, size=n_tiles, replace=False))
+    cond_labels = np.repeat(np.arange(n_cond), n_tiles)
+    tissue_labels = np.tile(core_labels[tiles], n_cond)
+    n = cond_labels.size
+    order = np.random.default_rng(0).permutation(n)   # render()'s draw order
+    inv = np.argsort(order)
+    tab, ncar = matplotlib.colormaps["tab10"], matplotlib.colormaps["gist_ncar"]
+    exp_rgb = (np.array([tab(i % 10)[:3] for i in cond_labels[order]]),
+               ncar(np.clip(tissue_labels[order] / 45, 0, 1))[:, :3])
+
+    results, max_pos, max_col = {}, 0.0, 0.0
+    for col in range(ncol):
+        fr = []
+        for row in (0, 1):
+            rect = rects[row * ncol + col]
+            m = [x for x in marks if x[0] == rect]
+            if len(m) != n:
+                raise SystemExit(f"panel {row},{col}: {len(m)} markers, expected {n}")
+            xy = np.array([(x[1], x[2]) for x in m])
+            max_col = max(max_col, float(np.abs(np.array([x[3] for x in m]) - exp_rgb[row]).max()))
+            fr.append((xy - np.array(rect[:2])) / np.array(rect[2:]))
+        max_pos = max(max_pos, float(np.abs(fr[0] - fr[1]).max()))
+        f = fr[0]
+        xy01 = (f - f.min(0)) / (f.max(0) - f.min(0))       # min-max -> [0,1], drawn order
+        name, tag = names[col // 2], ("base", "tuned")[col % 2]
+        b = report["backbones"][name]
+        r = results.setdefault(name, {"cond_labels": cond_labels, "tissue_labels": tissue_labels,
+                                       "label": BACKBONES[name]["label"], "step": report.get("step")})
+        r[f"{tag}_xy"] = xy01[inv]                           # back to (condition, tile) order
+        r[f"{tag}_sil_cond"] = b["silhouette_condition"][tag]
+        r[f"{tag}_sil_tissue"] = b["silhouette_tissue"][tag]
+    print(f"[embedding_shift] recovered {ncol} x {n} points; row0-vs-row1 position mismatch "
+          f"{max_pos:.2e} (axes frac), max marker-colour error vs expected labels {max_col:.2e}", flush=True)
+    if max_pos > 1e-6 or max_col > 1e-6:
+        raise SystemExit("recovered markers do not match the expected labels/draw order -- refusing")
+    prov = {
+        "source": "recovered from vector PDF",
+        "pdf": pdf.name, "report_json": "embedding_shift_report.json",
+        "why": "umap-learn not installed (UMAP layout not recomputable); Midnight run dir "
+               "(and its embedding_shift_cache.npz) deleted",
+        "method": "replayed /Pn Do marker placements; axes-fraction coords min-max rescaled to "
+                  "[0,1] per column (affine; autoscale 5% margins restore the original limits); "
+                  "un-permuted with default_rng(0).permutation(N)",
+        "check_row0_row1_max_abs_diff_axes_frac": max_pos,
+        "check_marker_rgb_vs_labels_max_abs_err": max_col,
+        "labels": "cond_labels = repeat(arange(n_conditions), n_tiles); tissue_labels = "
+                  "core_labels[tiles] tiled, tiles = sort(default_rng(seed).choice(NUM_TILES, n_tiles))",
+        "silhouettes": "copied from embedding_shift_report.json (cosine, on PCA-50 features); "
+                       "phikon2/virchow2 re-verified bit-exact from their embedding caches "
+                       "2026-10-06 (midnight cache deleted, not re-verifiable)",
+        "step_title": "paper shows 'TUNED (step ?)': step is only recorded when embeddings are "
+                      "computed, and the paper run hit the caches; selected steps were "
+                      "phikon2 200, midnight 150, virchow2 100",
+    }
+    return results, prov
+
+
 def main() -> int:
     args = parse_args()
+    if args.from_extract is not None:
+        results, report = load_extract(args.from_extract)
+        render(args, results, report)
+        print(f"[embedding_shift] rendered from {args.from_extract} -> {args.out_dir}", flush=True)
+        return 0
+    if args.extract_from_pdf is not None:
+        report_path = args.report_json or args.extract_from_pdf.with_name("embedding_shift_report.json")
+        report = json.loads(report_path.read_text())
+        results, prov = extract_from_pdf(args.extract_from_pdf, report, np.load(args.core_labels))
+        save_extract(args.dump_extract or EXTRACT, results, report, prov)
+        render(args, results, report)
+        return 0
     if not args.core_labels.exists():
         raise SystemExit(
             f"pseudo-tissue label file not found at {args.core_labels}; STOPPING rather than "
@@ -424,6 +621,9 @@ def main() -> int:
         }
 
     render(args, results, report)
+    if args.dump_extract is not None:
+        save_extract(args.dump_extract, results, report,
+                     {"source": "computed", "projection_method": report.get("projection_method")})
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / "embedding_shift_report.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))

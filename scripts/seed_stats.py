@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _config import CELLS, EVALS, HEST_WORK  # noqa: E402
+from _config import CELLS, EVALS, HEST_WORK, RUNS  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = EVALS
@@ -71,6 +71,29 @@ THUNDER_TASKS = [("benchmark_knn", "knn", "f1", ""),
                  ("benchmark_adversarial_attack", "adversarial_attack", "f1", "drop")]
 
 
+_RECORDED = None
+
+
+def _recorded_selection():
+    """{cell names} listed on the "seed cells:" lines of the committed docs/seed_stats.md.
+
+    Only consulted for runs whose ri_curve.json is no longer on disk (see rule_selected).
+    """
+    global _RECORDED
+    if _RECORDED is None:
+        _RECORDED, bb = set(), None
+        f = REPO / "docs/seed_stats.md"
+        for line in (f.read_text().splitlines() if f.exists() else []):
+            if line.startswith("## "):
+                bb = line[3:].strip()
+            elif bb and line.startswith("seed cells:"):
+                for c in line.split(":", 1)[1].split(","):
+                    c = c.strip()
+                    if c and c != "none":
+                        _RECORDED.add(f"{bb}-{c}")
+    return _RECORDED
+
+
 def rule_selected(cell):
     """True when this cell sits at ITS OWN run's 1-SE-selected checkpoint.
 
@@ -83,9 +106,12 @@ def rule_selected(cell):
     text = (CELLS / cell / "model.py").read_text()
     run = re.search(r'^RUN = "(.*)"$', text, re.M).group(1)
     step = int(re.search(r'^STEP = "(.*)"$', text, re.M).group(1).replace("step_", ""))
-    run_dir = REPO / "runs" / run
+    run_dir = RUNS / run
     if not (run_dir / "ri_curve.json").exists():
-        return False
+        # The run directory (and its ri_curve.json) has been deleted from scratch. Fall
+        # back to the selection this script itself recorded when the curve was on disk:
+        # the "seed cells:" line of the committed docs/seed_stats.md.
+        return cell in _recorded_selection()
     import final_recipe_report as frr
     return frr.select_step_1se(run_dir, 0.007)[0] == step
 

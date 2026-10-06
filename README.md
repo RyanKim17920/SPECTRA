@@ -187,6 +187,52 @@ arm.
 
 Set `SPECTRA_PAPER` to write the LaTeX copies somewhere other than `<repo>/paper`.
 
+## Reproducing the paper figures and tables
+
+One entry point regenerates every figure into `$SPECTRA_PAPER/figures` (default
+`paper/figures`, gitignored) from the repo alone, with no `/data`, GPU or checkpoints:
+
+```bash
+paper/make_all.sh            # all figures, from the frozen extracts in paper/data/
+paper/make_all.sh --tables   # also every \input table (needs the eval outputs, see below)
+```
+
+Requires `python3` with numpy, matplotlib (the paper used 3.11.x) and Pillow with WebP.
+Each figure renders from a small extract committed under `paper/data/`; the extract script
+named below rebuilds it from the raw data when that is available.
+
+| Figure | Renderer | Frozen input (`paper/data/`) | Rebuilt from raw data by |
+|---|---|---|---|
+| Fig 1 `grid_batch` | `scripts/paper_figures.py` + `paper/scripts/annotate_grid_batch.py` | `grid_batch_tiles.webp` (18 PLISM tiles, lossless) | `paper/scripts/extract_grid_batch.py` (`SPECTRA_PLISM_PACKED`) |
+| Fig 2 `base_to_tuned` | `paper/scripts/make_base_to_tuned.py` | `base_to_tuned.json` | `paper/scripts/extract_base_to_tuned.py` (parses the generated `pathorob_ranks`, `hest_ranks`, `thunder_ranks_full`, `cptac` tables) |
+| `ri_vs_step` (appendix) | `paper/scripts/ri_vs_step.py` | `ri_vs_step.json` | `paper/scripts/extract_ri_vs_step.py` (`runs/<run>/ri_curve.json`) |
+| `thunder_per_ds` (appendix) | `scripts/thunder_per_ds.py --from-extract` | `thunder_per_ds.json` | `scripts/thunder_per_ds.py --extract` (THUNDER cell outputs) |
+| `embedding_shift` | `scripts/embedding_shift.py --from-extract` | `embedding_shift.{npz,json}` | `scripts/embedding_shift.py --dump-extract` (GPU or cached embeddings, umap-learn) |
+| `retrieval_examples` | `scripts/retrieval_qualitative.py --from-extract` | `retrieval_examples.{json,webp}` | `scripts/retrieval_qualitative.py --dump-extract` (cached embeddings + PLISM) |
+| `plism_traj` | `paper/scripts/plism_traj.py` | `plism_traj.json` | `paper/scripts/extract_plism_traj.py` (`probe_step_*.json` in the run dirs) |
+| `pipeline`, `split` | `paper/scripts/make_pipeline.py`, `make_split.py` | none (drawn) | n/a |
+
+Some raw inputs are gone from scratch storage: the run directories for the
+Midnight-12k s3, H-optimus-0 s3, Virchow and OpenMidnight seeds, every run behind
+`plism_traj`, and the Midnight-12k embedding cache. For those entries the extract was
+recovered from the vector paths of the published PDF (`paper/scripts/_pdfvec.py`, or
+`--extract-from-pdf` for `embedding_shift`). The recovery reproduces the surviving
+`ri_curve.json` files to about 1e-9. Each extract records the source of every row.
+`scripts/seed_stats.py` falls back to the
+`seed cells:` lines of `docs/seed_stats.md` when a run's `ri_curve.json` is missing, so the
+table generators still select the same checkpoints.
+
+`paper/make_tables.sh` runs the table generators in dependency order and writes every table
+the paper `\input`s into `$SPECTRA_PAPER/tables`. It needs `SPECTRA_EVALS`, `SPECTRA_CELLS`,
+`SPECTRA_RUNS` and `SPECTRA_HEST_WORK` (or `SPECTRA_DATA`). `ablations.tex` is hand-written
+and is copied from `paper/data/tables/`.
+
+The published leaderboards the rank tables compare against are transcribed into
+`data/pathorob_leaderboard.tsv` (PathoROB README, commit `7e1ee0b`),
+`data/hest_leaderboard_9task.tsv` (HEST README, commit `2f82fea`) and
+`data/thunder_leaderboard_16ds.tsv` (mics-lab.github.io/thunder/leaderboards). Each file
+records its source URL and retrieval date in a `#` header.
+
 Published comparison targets are transcribed **once**, in
 [`docs/reference_published.json`](docs/reference_published.json), which carries its own
 `_source` citation; every comparison script loads them from there rather than restating them.

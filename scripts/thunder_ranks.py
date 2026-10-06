@@ -202,15 +202,15 @@ def ranksum_and_position(bb, vals, our):
 
 def main():
     vals, ranksum = leaderboard()
-    n = validate(vals, ranksum)
+    n_validated = validate(vals, ranksum)
     tuned = tuned_means()
 
     md = ["# THUNDER leaderboard rank, base vs fine-tuned", "",
           "**Generated file -- do not hand-edit.**  Regenerate with",
           "`./.venv/bin/python scripts/thunder_ranks.py`.", "",
-          f"Rank is position in the {n}-model 16-dataset panel (histopathology AND",
+          f"Rank is position in the {n_validated}-model 16-dataset panel (histopathology AND",
           "natural-image models), using DENSE ranking, the leaderboard's own convention.",
-          f"The rule is validated against all {n} published per-task ranks and rank sums",
+          f"The rule is validated against all {n_validated} published per-task ranks and rank sums",
           "before use. To rank one of our models we replace that backbone's published row.",
           "ECE and adversarial drop are lower-is-better; adversarial uses fp32-attack cells.",
           "", "| backbone | task | base | rank | fine-tuned | rank | move |",
@@ -321,7 +321,7 @@ def main():
     TEX_OUT.parent.mkdir(parents=True, exist_ok=True)
     TEX_OUT.write_text("\n".join(tex) + "\n")
     TEX_FULL_OUT.write_text("\n".join(tex_full) + "\n")
-    print(f"validated rank rule against all {n} published rows; wrote docs/thunder_ranks.md")
+    print(f"validated rank rule against all {n_validated} published rows; wrote docs/thunder_ranks.md")
 
 
 if __name__ == "__main__":
