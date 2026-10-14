@@ -55,10 +55,11 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--adapter", default=None)
     ap.add_argument("--datasets", nargs="*", default=list(DATASETS))
-    ap.add_argument("--readout", default="export", choices=["export", "clsmean"],
+    ap.add_argument("--readout", default="export", choices=["export", "clsmean", "both"],
                     help="export = encode_image(proj_contrast=False) 512-d (default, what downstream "
                          "tools read); clsmean = cat(trunk CLS, mean trunk patch tokens) 1536-d, the "
-                         "canonical SPECTRA/PathoROB readout. Use a distinct --name per readout.")
+                         "canonical SPECTRA/PathoROB readout; both = one trunk pass, scored as <name> "
+                         "(export) and <name>_clsmean. Use a distinct --name per readout.")
     a = ap.parse_args()
     from conch.open_clip_custom import create_model_from_pretrained
     from spectra.models.conch_visual import ConchVisual, conch_weights_path
@@ -76,20 +77,32 @@ def main():
     vis = vis.cuda().eval()
     feats_dir = OUT / "features"
     dm = FeatureDataManager(features_dir=str(feats_dir), metadata_dir=str(PR / "data" / "metadata"))
+    ros = ["export", "clsmean"] if a.readout == "both" else [a.readout]
+    names = {ro: (a.name + "_clsmean" if (a.readout == "both" and ro == "clsmean") else a.name) for ro in ros}
+
+    def feats(x):
+        t = vis.trunk_tokens(x)
+        out = {}
+        if "export" in ros:
+            out["export"] = vis.ln_contrast(vis.attn_pool_contrast(t)[:, 0])
+        if "clsmean" in ros:
+            out["clsmean"] = torch.cat([t[:, 0], t[:, 1:].mean(dim=1)], dim=1)
+        return out
     for ds in a.datasets:
-        if (feats_dir / a.name / ds).exists():
+        if all((feats_dir / names[ro] / ds).exists() for ro in ros):
             continue
         dl = torch.utils.data.DataLoader(PQ(sorted(glob.glob(str(DATA / ds / "data" / "*.parquet"))), preprocess),
                                          batch_size=256, num_workers=16, collate_fn=collate)
-        F_, M = [], {}
+        F_, M = {ro: [] for ro in ros}, {}
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             for x, meta in dl:
-                f = vis.pooled if a.readout == "export" else vis.clsmean
-                F_.append(f(x.cuda(non_blocking=True)).float().cpu())
+                for ro, f in feats(x.cuda(non_blocking=True)).items():
+                    F_[ro].append(f.float().cpu())
                 for k, v in meta.items():
                     M.setdefault(k, []).extend(v)
-        dm.save_features(a.name, ds, torch.cat(F_), pd.DataFrame(M))
-        print("extracted", a.name, ds, flush=True)
+        for ro in ros:
+            dm.save_features(names[ro], ds, torch.cat(F_[ro]), pd.DataFrame(M))
+            print("extracted", names[ro], ds, flush=True)
     res = {}
     captured = {}
     _rs = RI.results_summary
@@ -99,15 +112,17 @@ def main():
         captured["r"] = r
         return r
     RI.results_summary = grab
-    for ds in a.datasets:
-        rm = RI.compute(model=a.name, dataset=ds, features_dir=str(feats_dir), metadata_dir=str(PR / "data" / "metadata"),
-                   results_dir=str(OUT / "results"), figures_subdir=str(OUT / "results" / "fig"), num_workers=16)
-        res[ds] = {"robustness_metrics": rm, "summary": captured.pop("r", None)}
-        print("RI", a.name, ds, res[ds], flush=True)
     p = OUT / "ri_summary.json"
-    allr = json.loads(p.read_text()) if p.exists() else {}
-    allr[a.name] = res
-    p.write_text(json.dumps(allr, indent=1, default=str))
+    for nm in names.values():
+        res = {}
+        for ds in a.datasets:
+            rm = RI.compute(model=nm, dataset=ds, features_dir=str(feats_dir), metadata_dir=str(PR / "data" / "metadata"),
+                       results_dir=str(OUT / "results"), figures_subdir=str(OUT / "results" / "fig"), num_workers=int(os.environ.get("PATHOROB_WORKERS", "16")))
+            res[ds] = {"robustness_metrics": rm, "summary": captured.pop("r", None)}
+            print("RI", nm, ds, res[ds], flush=True)
+        allr = json.loads(p.read_text()) if p.exists() else {}
+        allr[nm] = res
+        p.write_text(json.dumps(allr, indent=1, default=str))
     print("PATHOROB DONE", flush=True)
 
 
