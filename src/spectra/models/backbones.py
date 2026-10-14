@@ -290,6 +290,30 @@ BACKBONES: dict[str, Backbone] = {
         notes="Virchow **v1**: NO register tokens (1 prefix token / 257 tokens), against "
               "Virchow2's 5 / 261. GATED, hence the local binding.",
     ),
+    # ----------------------------------------------------------------------- conch ---
+    "MahmoodLab/conch": Backbone(
+        repo_id="MahmoodLab/conch",
+        # NOT timm-hub and NOT AutoModel: a CoCa model from the `conch` package
+        # (conch.open_clip_custom). encoder.is_conch_backbone dispatches on this id BEFORE
+        # any hub lookup (the hub repo is gated and would misroute it), and
+        # models/conch_visual.py builds the visual tower from SPECTRA_CONCH_WEIGHTS.
+        loader="conch",
+        weights_file="pytorch_model.bin",
+        # CONCH's own create_model_from_pretrained preprocess: OpenAI CLIP stats.
+        normalization=((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+        thunder_readout=None,            # not scored under the THUNDER protocol here
+        # LoRA on the visual TRUNK only (timm ViT-B/16 leaves). The attentional pooler,
+        # ln_contrast, proj_contrast and the whole text tower stay frozen/unloaded.
+        lora_target_suffixes=_TIMM_VIT,
+        # embed_dim is the EXPORT width: encode_image(proj_contrast=False,
+        # normalize=False), the 512-d attentional-pooler output SlideChat/the SAE read.
+        # The trunk itself is 768-d. The encoder presents that one vector as a 1-token
+        # sequence, hence num_prefix_tokens=1 and pooling='cls' (enforced).
+        embed_dim=512, num_prefix_tokens=1, num_blocks=12, patch_size=16,
+        notes="CONCH v1 ViT-B/16 @ 448px (PLISM 224px tiles are bicubic-upsampled). "
+              "Readout = attentional-pooler output, not a CLS/GeM head on the trunk; "
+              "see models/conch_visual.py.",
+    ),
 }
 
 

@@ -63,6 +63,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel
 
+from spectra.models.conch_visual import (
+    CONCH_MEAN,
+    CONCH_STD,
+    build_conch_visual,
+    is_conch_backbone,
+)
+
 from spectra.models import backbones as _bb
 from spectra.models.pooling import POOL_HEAD_NAMES, build_pool_head
 
@@ -435,6 +442,9 @@ def normalization_for(backbone: str | None) -> tuple[tuple[float, ...], tuple[fl
     SLURM log. So there is no fallback any more: either we know the stats or we stop.
     """
     backbone = backbone or DEFAULT_BACKBONE
+    # CONCH is neither timm-hub nor HF: its stats are CONCH's own preprocess (OpenAI CLIP).
+    if is_conch_backbone(backbone):
+        return (CONCH_MEAN, CONCH_STD)
     # The override wins, unconditionally and FIRST. Both published backbones are in it,
     # so nothing added below can ever be reached for them -- not even a hub lookup.
     if backbone in BACKBONE_NORMALIZATION:
@@ -729,8 +739,28 @@ class SpectraEncoder(nn.Module):
     def __init__(self, cfg: EncoderConfig | None = None):
         super().__init__()
         self.cfg = cfg = cfg or EncoderConfig()
-        self.is_timm = is_timm_backbone(cfg.backbone)
-        if self.is_timm:
+        #: CONCH (MahmoodLab/conch) is a CoCa model from the ``conch`` package -- neither a
+        #: timm-hub nor an AutoModel checkpoint -- so it is dispatched BEFORE the hub lookup
+        #: (which would 403 on the gated repo and misroute it). See models/conch_visual.py.
+        self.is_conch = is_conch_backbone(cfg.backbone)
+        self.is_timm = (not self.is_conch) and is_timm_backbone(cfg.backbone)
+        if self.is_conch:
+            if cfg.pooling != "cls":
+                raise ValueError(
+                    f"backbone {cfg.backbone!r} exports ONE vector -- CONCH's "
+                    "encode_image(proj_contrast=False, normalize=False), the 512-d "
+                    "attentional-pooler output that SlideChat and the SAE read -- so it "
+                    f"requires pooling='cls' (got {cfg.pooling!r}). CLS/GeM heads over the "
+                    "trunk tokens would train a vector no consumer reads."
+                )
+            backbone = build_conch_visual()
+            self.hidden_size = int(backbone.embed_dim)        # 512, the EXPORT width
+            self.num_blocks = len(backbone.blocks)            # 12 trunk blocks (LoRA)
+            self.patch_size = int(backbone.patch_size)        # 16
+            self.config_image_size = int(backbone.image_size) # 448
+            self.model_type = "conch:ViT-B-16+attn_pool_contrast"
+            self.num_prefix_tokens = 1                        # the (B, 1, 512) pseudo-sequence
+        elif self.is_timm:
             import timm
 
             local_dir = local_backbone_dir(cfg.backbone)
@@ -867,8 +897,8 @@ class SpectraEncoder(nn.Module):
             # so the reentrant path silently produces *no* gradient for the early blocks.
             target = getattr(backbone, "base_model", backbone)
             target = getattr(target, "model", target)
-            if self.is_timm:
-                # timm has its own switch; it has no gradient_checkpointing_enable at all,
+            if self.is_timm or self.is_conch:
+                # timm has its own switch (ConchVisual forwards it to its timm trunk); it has no gradient_checkpointing_enable at all,
                 # so the HF call below would AttributeError. timm's blocks use
                 # torch.utils.checkpoint with use_reentrant=False internally.
                 target.set_grad_checkpointing(True)
@@ -1019,7 +1049,10 @@ class SpectraEncoder(nn.Module):
         """
         if images.dtype == torch.uint8 or images.shape[-1] == 3:
             images = normalize_uint8(images, self.norm_mean, self.norm_std)
-        if self.is_timm:
+        if getattr(self, "is_conch", False):
+            # (B, 1, 512) == encode_image(proj_contrast=False, normalize=False)[:, None]
+            tokens = self.backbone(images)
+        elif self.is_timm:
             # Built with global_pool="" and num_classes=0 (config.json model_args), so the
             # head is a no-op and forward() returns the raw token sequence. Going through
             # forward() rather than forward_features() keeps the PEFT wrapper in the path.
@@ -1119,7 +1152,7 @@ class SpectraEncoder(nn.Module):
             "embed_dim": self.embed_dim,
             "patch_size": self.patch_size,
             "num_prefix_tokens": self.num_prefix_tokens,
-            "loader": "timm" if self.is_timm else "transformers.AutoModel",
+            "loader": "conch" if getattr(self, "is_conch", False) else ("timm" if self.is_timm else "transformers.AutoModel"),
             "total": total,
             "trainable": trainable,
             "trainable_pct": 100.0 * trainable / max(total, 1),
