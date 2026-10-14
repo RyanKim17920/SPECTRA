@@ -46,6 +46,7 @@ ZS = {'ADI': ['adipose tissue', 'fat cells', 'adipocytes'], 'BACK': ['background
       'NORM': ['normal colonic mucosa', 'normal colon glands'], 'STR': ['cancer-associated stroma', 'fibrous stroma'],
       'TUM': ['colorectal adenocarcinoma epithelium', 'tumor epithelium', 'adenocarcinoma']}
 HELD_SC, HELD_ST = {"GT450", "S210"}, {"HRH", "KR", "MY"}
+READOUT = "export"  # set by --readout; "clsmean" = cat(trunk CLS, mean trunk patches), no zero-shot
 
 
 def load_models():
@@ -78,14 +79,14 @@ STD = torch.tensor((0.26862954, 0.26130258, 0.27577711)).view(1, 3, 1, 1)
 
 @torch.no_grad()
 def embed(model, arr, bs=256):
-    """arr: (N,224,224,3) uint8 (np / memmap) -> (N,512) float32 CPU."""
+    """arr: (N,224,224,3) uint8 (np / memmap) -> (N,512) float32 CPU (READOUT=clsmean: (N,1536))."""
     m, s = MEAN.to(dev), STD.to(dev)
     out = []
     for b in range(0, len(arr), bs):
         x = torch.from_numpy(np.ascontiguousarray(arr[b:b + bs])).to(dev, non_blocking=True)
         x = (x.permute(0, 3, 1, 2).float() / 255 - m) / s
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            f = model.pooled(x)
+            f = model.pooled(x) if READOUT == "export" else model.clsmean(x)
         out.append(f.float().cpu())
     return torch.cat(out)
 
@@ -134,10 +135,12 @@ def evaluate(model, data, T, base_ref=None, probe=True):
         r["drift_cos"] = float(F.cosine_similarity(Ec[data.drift_idx], base_ref["crc"][data.drift_idx], dim=-1).mean())
         r["drift_cos_p05"] = float(torch.quantile(F.cosine_similarity(Ec[data.drift_idx], base_ref["crc"][data.drift_idx], dim=-1), 0.05))
         r["drift_cos_plism"] = float(F.cosine_similarity(Xp.reshape(C * L, -1), base_ref["plism"].reshape(C * L, -1), dim=-1).mean())
-    with torch.no_grad():
-        P = F.normalize(model.project(Ec.to(dev)), dim=-1).float().cpu()
-    pr = (P @ T.T).argmax(1).numpy(); y = data.crc_y
-    r["zs_acc"] = float((pr == y).mean()); m = data.crc_split == 0; r["zs_acc_val7k"] = float((pr[m] == y[m]).mean())
+    y = data.crc_y; m = data.crc_split == 0
+    if READOUT == "export":  # zero-shot is only defined on the export (proj_contrast input)
+        with torch.no_grad():
+            P = F.normalize(model.project(Ec.to(dev)), dim=-1).float().cpu()
+        pr = (P @ T.T).argmax(1).numpy()
+        r["zs_acc"] = float((pr == y).mean()); r["zs_acc_val7k"] = float((pr[m] == y[m]).mean())
     if probe:
         Xn = embed(model, data.nct).numpy()
         mu, sd = Xn.mean(0), Xn.std(0) + 1e-6
@@ -154,14 +157,18 @@ def main():
     ap.add_argument("--base", action="store_true", help="also evaluate base CONCH (step 0)")
     ap.add_argument("--steps", default="", help="comma list; default all complete step_* dirs")
     ap.add_argument("--no-probe", action="store_true")
+    ap.add_argument("--readout", default="export", choices=["export", "clsmean"])
     a = ap.parse_args()
+    global READOUT
+    READOUT = a.readout
+    sfx = "" if a.readout == "export" else "_" + a.readout
     from peft import PeftModel
     data = Data(); full, base = load_models(); T = text_classifier(full, data.classes)
     # text_classifier parks `full` on CPU, and base SHARES full.visual's modules -- move after.
     base = base.to(dev).eval()
-    out_p = a.run_dir / "conch_eval.json"
+    out_p = a.run_dir / f"conch_eval{sfx}.json"
     res = json.loads(out_p.read_text()) if out_p.exists() else {}
-    base_cache = a.run_dir / "base_ref.pt"
+    base_cache = a.run_dir / f"base_ref{sfx}.pt"
     if base_cache.exists() and not a.base:
         base_ref = torch.load(base_cache)
     else:

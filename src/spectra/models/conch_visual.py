@@ -51,8 +51,22 @@ CONCH_IMAGE_SIZE = 448
 DEFAULT_CONCH_WEIGHTS = "/data/ryan.kim/ashby/weights/conch/pytorch_model.bin"
 
 
+#: Backbone id that selects the TRUNK-TOKEN mode (conch-split pin): ConchVisual returns the
+#: timm trunk's full ``(B, 1+784, 768)`` token sequence instead of the 512-d export, so the
+#: paper's split CLS / GeM heads (and the canonical ``clsmean`` RI readout) see trunk tokens.
+#: Same weights, same LoRA target names -- an adapter trained in either mode loads in both.
+CONCH_TRUNK_ID = "MahmoodLab/conch-trunk"
+
+
+def is_conch_trunk_backbone(backbone: str | None) -> bool:
+    return bool(backbone) and backbone.lower() in {CONCH_TRUNK_ID.lower(), "conch-trunk"}
+
+
 def is_conch_backbone(backbone: str | None) -> bool:
-    return bool(backbone) and backbone.lower() in {CONCH_REPO_ID.lower(), "conch", "conch_vit-b-16"}
+    return bool(backbone) and (
+        backbone.lower() in {CONCH_REPO_ID.lower(), "conch", "conch_vit-b-16"}
+        or is_conch_trunk_backbone(backbone)
+    )
 
 
 def conch_weights_path() -> str:
@@ -84,8 +98,13 @@ class ConchVisual(nn.Module):
     bit-identical to ``coca.visual.forward_no_head`` on the same input.
     """
 
-    def __init__(self, visual: nn.Module, image_size: int = CONCH_IMAGE_SIZE):
+    def __init__(self, visual: nn.Module, image_size: int = CONCH_IMAGE_SIZE, mode: str = "export"):
         super().__init__()
+        if mode not in ("export", "trunk"):
+            raise ValueError(f"ConchVisual mode must be 'export' or 'trunk', got {mode!r}")
+        #: "export" -> forward() = (B, 1, 512) export pseudo-sequence (conch-anchor pin);
+        #: "trunk"  -> forward() = (B, 1+784, 768) trunk tokens (conch-split pin).
+        self.mode = mode
         if not getattr(visual, "use_attentional_pool_contrast", False):
             raise RuntimeError("expected a CONCH VisualModel with attentional contrastive pooling")
         self.trunk = visual.trunk
@@ -120,29 +139,41 @@ class ConchVisual(nn.Module):
             x = F.interpolate(x, size=(self.image_size, self.image_size), mode="bicubic", align_corners=False)
         return x
 
+    def trunk_tokens(self, x: torch.Tensor) -> torch.Tensor:
+        """Normalised NCHW float -> ``(B, 1+784, 768)``: the (final-LN'd) trunk tokens the
+        attentional pooler reads. Token 0 is CLS; CONCH's trunk has no register tokens."""
+        return self.trunk(self._resize(x), **self.trunk_kwargs)
+
     def pooled(self, x: torch.Tensor) -> torch.Tensor:
         """Normalised NCHW float -> ``(B, 512)``, == ``encode_image(proj_contrast=False, normalize=False)``."""
-        x = self._resize(x)
-        t = self.trunk(x, **self.trunk_kwargs)
+        t = self.trunk_tokens(x)
         p = self.attn_pool_contrast(t)[:, 0]
         return self.ln_contrast(p)
+
+    def clsmean(self, x: torch.Tensor) -> torch.Tensor:
+        """Normalised NCHW float -> ``(B, 1536)`` = cat(trunk CLS, mean of trunk patch tokens):
+        the canonical SPECTRA/PathoROB ``clsmean`` readout, applied to CONCH's trunk."""
+        t = self.trunk_tokens(x)
+        return torch.cat([t[:, 0], t[:, 1:].mean(dim=1)], dim=1)
 
     def project(self, pooled: torch.Tensor) -> torch.Tensor:
         """The joint-space projection ``encode_image(proj_contrast=True)`` applies (un-normalised)."""
         return pooled @ self.proj_contrast
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.mode == "trunk":
+            return self.trunk_tokens(x)
         # (B, 1, 512): a one-token "sequence" so SpectraEncoder's pooling='cls' path returns
         # exactly the exported vector. See the module docstring.
         return self.pooled(x).unsqueeze(1)
 
 
-def build_conch_visual(weights: str | None = None) -> ConchVisual:
+def build_conch_visual(weights: str | None = None, mode: str = "export") -> ConchVisual:
     """Load CONCH, keep ONLY the visual tower (text tower dropped), wrap it."""
     full = load_conch_full(weights)
-    vis = ConchVisual(full.visual)
+    vis = ConchVisual(full.visual, mode=mode)
     n = sum(p.numel() for p in vis.parameters())
     print(f"[encoder] CONCH visual tower: trunk blocks={len(vis.blocks)} trunk_dim={vis.trunk_dim} "
-          f"export_dim={vis.embed_dim} patch={vis.patch_size} img={vis.image_size} params={n}", flush=True)
+          f"export_dim={vis.embed_dim} mode={vis.mode} patch={vis.patch_size} img={vis.image_size} params={n}", flush=True)
     del full
     return vis

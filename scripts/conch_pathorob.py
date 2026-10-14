@@ -7,6 +7,7 @@ robustness_index.compute (repo: $PATHOROB_REPO), on the three datasets (tcga = p
 
     python scripts/conch_pathorob.py --name conch_base
     python scripts/conch_pathorob.py --name anc1_s150 --adapter <run>/step_0000150/adapter
+    python scripts/conch_pathorob.py --name conch_base_clsmean --readout clsmean
 """
 import argparse
 import glob
@@ -54,6 +55,10 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--adapter", default=None)
     ap.add_argument("--datasets", nargs="*", default=list(DATASETS))
+    ap.add_argument("--readout", default="export", choices=["export", "clsmean"],
+                    help="export = encode_image(proj_contrast=False) 512-d (default, what downstream "
+                         "tools read); clsmean = cat(trunk CLS, mean trunk patch tokens) 1536-d, the "
+                         "canonical SPECTRA/PathoROB readout. Use a distinct --name per readout.")
     a = ap.parse_args()
     from conch.open_clip_custom import create_model_from_pretrained
     from spectra.models.conch_visual import ConchVisual, conch_weights_path
@@ -79,7 +84,8 @@ def main():
         F_, M = [], {}
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             for x, meta in dl:
-                F_.append(vis.pooled(x.cuda(non_blocking=True)).float().cpu())
+                f = vis.pooled if a.readout == "export" else vis.clsmean
+                F_.append(f(x.cuda(non_blocking=True)).float().cpu())
                 for k, v in meta.items():
                     M.setdefault(k, []).extend(v)
         dm.save_features(a.name, ds, torch.cat(F_), pd.DataFrame(M))
