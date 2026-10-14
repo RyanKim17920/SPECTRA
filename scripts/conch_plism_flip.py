@@ -48,7 +48,7 @@ def embed_model(name, adapter, base, out):
         return
     if adapter:
         from peft import PeftModel
-        m = PeftModel.from_pretrained(copy.deepcopy(base), adapter).merge_and_unload().to(dev).eval()
+        m = PeftModel.from_pretrained(copy.deepcopy(base), resolve_adapter(adapter)).merge_and_unload().to(dev).eval()
     else:
         m = base
     conds = json.load(open(PL / "conds.json")); loc = np.load(PL / "loc_idx.npy")
@@ -106,6 +106,17 @@ def flip_stats(P, conds, sel):
     r["loc_anyflip_cross_stain"] = float(anyflip(P, g_sc).mean())
     r["loc_anyflip_all_selected"] = float((P[sel] != P[sel[0]][None]).any(0).mean())
     return r
+
+
+def resolve_adapter(path):
+    """Accept a run step dir (<run>/step_N, containing adapter/) or the adapter dir itself."""
+    from pathlib import Path as _P
+    p = _P(path)
+    if (p / "adapter" / "adapter_config.json").exists():
+        return str(p / "adapter")
+    if (p / "adapter_config.json").exists():
+        return str(p)
+    raise FileNotFoundError(f"no PEFT adapter at {p} (expected {p}/adapter_config.json or {p}/adapter/)")
 
 
 def main():

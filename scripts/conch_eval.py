@@ -180,6 +180,9 @@ def main():
         m = PeftModel.from_pretrained(copy.deepcopy(base), str(d / "adapter")).merge_and_unload().to(dev).eval()
         r, _ = evaluate(m, data, T, base_ref=base_ref, probe=not a.no_probe)
         res[st] = r; print("step", st, json.dumps(r), flush=True)
+        # merge-on-write: a concurrent eval of the same run dir may have added other steps
+        cur = json.loads(out_p.read_text()) if out_p.exists() else {}
+        res = {**cur, **res}
         out_p.write_text(json.dumps(res, indent=1))
         del m; torch.cuda.empty_cache()
     print("EVAL DONE", out_p, flush=True)

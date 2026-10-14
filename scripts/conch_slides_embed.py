@@ -72,6 +72,17 @@ class Tiles(torch.utils.data.Dataset):
         return self.pre(im), si
 
 
+def resolve_adapter(path):
+    """Accept a run step dir (<run>/step_N, containing adapter/) or the adapter dir itself."""
+    from pathlib import Path as _P
+    p = _P(path)
+    if (p / "adapter" / "adapter_config.json").exists():
+        return str(p / "adapter")
+    if (p / "adapter_config.json").exists():
+        return str(p)
+    raise FileNotFoundError(f"no PEFT adapter at {p} (expected {p}/adapter_config.json or {p}/adapter/)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--slides", type=Path, required=True, help="json list of manifest records")
@@ -94,7 +105,7 @@ def main():
         n, ad = (s.split("=", 1) + [None])[:2]
         if ad:
             from peft import PeftModel
-            models[n] = PeftModel.from_pretrained(copy.deepcopy(base), ad).merge_and_unload().cuda().eval()
+            models[n] = PeftModel.from_pretrained(copy.deepcopy(base), resolve_adapter(ad)).merge_and_unload().cuda().eval()
         else:
             models[n] = base
     base.cuda().eval()
