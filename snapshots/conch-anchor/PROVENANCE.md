@@ -84,3 +84,6 @@ Copied from `snapshots/falseneg-gated` on branch `conch-backbone`, then:
   single-head grid same-core mask (`batch["tile_idx"][0]` was a scalar, so that branch could
   never run -- production only ever used the split-head branch).
 * `scripts/train_lora.py`: `--anchor-cos-weight`.
+* `--anchor-space {export,proj_contrast}` (2026-10-14, sweep A): `proj_contrast` takes the anchor cosine
+  after both sides go through CONCH's frozen `proj_contrast` (the joint image-text space zero-shot
+  reads). Default `export` is bit-identical to the anc0/anc1 runs.

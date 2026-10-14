@@ -845,6 +845,10 @@ class TrainConfig:
     #: text tower stay compatible. The teacher is the adapter-disabled student (no second
     #: copy, no grad). 0.0 = OFF = no teacher forward at all.
     anchor_cos_weight: float = 0.0
+    #: Space the anchor cosine is taken in. "export" = the exported embedding (default,
+    #: the anc0/anc1 runs). "proj_contrast" = both sides mapped through the frozen CONCH
+    #: ``proj_contrast`` first, i.e. the joint image-text space zero-shot reads.
+    anchor_space: str = "export"
     #: Distillation temperature for the relational KL. Defaults to the CONTRASTIVE
     #: temperature rather than 1.0: the similarity matrix is cosine, so it lives in
     #: [-1, 1], and at tau=1 a softmax over ~30-60 candidates is nearly uniform -- the
@@ -1848,7 +1852,11 @@ def train(
                 n_images = int(anchor.shape[0]) * 2
             if teacher_emb is not None and use_anchor:
                 # Anchor on the exported embedding: lambda * (1 - cos(f_lora, f_base)).
-                _cos = F.cosine_similarity(anchor_emb.float(), teacher_emb.float(), dim=-1)
+                if getattr(cfg, "anchor_space", "export") == "proj_contrast":
+                    _Pc = model.backbone.proj_contrast.float()  # frozen (512, 512)
+                    _cos = F.cosine_similarity(anchor_emb.float() @ _Pc, teacher_emb.float() @ _Pc, dim=-1)
+                else:
+                    _cos = F.cosine_similarity(anchor_emb.float(), teacher_emb.float(), dim=-1)
                 anchor_loss = (1.0 - _cos).mean()
                 if "loss_infonce" not in metrics:
                     metrics["loss_infonce"] = metrics["loss"]

@@ -147,6 +147,9 @@ def parse_args():
                     help="lambda for the embedding anchor: total = infonce + lambda * "
                          "mean(1 - cos(f_lora(x), f_base(x))) on the exported embedding. "
                          "0.0 = off (no teacher forward). Requires LoRA.")
+    ap.add_argument("--anchor-space", default="export", choices=["export", "proj_contrast"],
+                    help="space for the anchor cosine: the exported embedding (default) or "
+                         "CONCH's frozen proj_contrast (joint image-text) space.")
     ap.add_argument("--retention-kl-weight", type=float, default=0.0,
                     help="lambda for the relational-KL retention term: "
                          "total = infonce + lambda * KL(P_base || P_lora) over the pairwise "
@@ -634,6 +637,7 @@ def main() -> int:
         weight_decay=args.weight_decay, log_every=args.log_every, symmetric=args.symmetric,
         retention_kl_weight=args.retention_kl_weight,
         anchor_cos_weight=args.anchor_cos_weight,
+        anchor_space=args.anchor_space,
         retention_kl_temperature=args.retention_kl_temperature,
         # Record the objective, not just the run name: config.json is the only place a
         # later reader can tell a split-head run from a concat-head one.

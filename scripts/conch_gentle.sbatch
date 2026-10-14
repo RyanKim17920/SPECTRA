@@ -60,7 +60,7 @@ export WAIV_RUNS="${WAIV_RUNS:-/data/SPECTRA-runs/runs}"
 
 mkdir -p "$OUT_DIR"
 echo "=== $(date) | node $(hostname) | job ${SLURM_JOB_ID:-none} restart ${SLURM_RESTART_COUNT:-0} ==="
-echo "arm $ARM anchor_lambda=$ANCHOR seed=$SEED T=$T steps=$MAX_STEPS ckpt=$CKPT_EVERY bcls=$BCLS"
+echo "arm $ARM anchor_lambda=$ANCHOR space=${CONCH_ANCHOR_SPACE:-export} sched=${SPECTRA_CKPT_SCHEDULE:-} seed=$SEED T=$T steps=$MAX_STEPS ckpt=$CKPT_EVERY bcls=$BCLS"
 echo "pin $PIN  out $OUT_DIR"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv || true
 
@@ -95,12 +95,12 @@ set +e
   --temperature 0.07 --lr 1e-4 --weight-decay 0.05 \
   --mask-same-core --core-labels-path "$CORE_LABELS" \
   --same-core-logit-bias="$BCLS" \
-  --anchor-cos-weight "$ANCHOR" \
+  --anchor-cos-weight "$ANCHOR" --anchor-space "${CONCH_ANCHOR_SPACE:-export}" \
   --max-steps "$MAX_STEPS" --warmup-steps "${SPECTRA_WARMUP:-200}" \
   --grid --grid-conditions 2 --grid-tiles "$T" --grid-forward-chunk "${SPECTRA_CHUNK:-600}" \
   --grad-checkpointing --activation-offload \
   --workers "${SPECTRA_WORKERS:-10}" --amp bfloat16 --log-every 10 \
-  --ckpt-every "$CKPT_EVERY" --eval-every "$CKPT_EVERY" \
+  --ckpt-every "$CKPT_EVERY" --eval-every "$CKPT_EVERY" ${SPECTRA_CKPT_SCHEDULE:+--ckpt-schedule "$SPECTRA_CKPT_SCHEDULE"} \
   --seed "$SEED" "${RESUME[@]}"
 RC=$?
 set -e
