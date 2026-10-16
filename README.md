@@ -227,6 +227,15 @@ the paper `\input`s into `$SPECTRA_PAPER/tables`. It needs `SPECTRA_EVALS`, `SPE
 `SPECTRA_RUNS` and `SPECTRA_HEST_WORK` (or `SPECTRA_DATA`). `ablations.tex` is hand-written
 and is copied from `paper/data/tables/`.
 
+The LaTeX source lives in `paper/` (`neurips_2026.tex`, which `\input`s `appendix.tex` and
+`checklist.tex`). Once the figures and tables are generated, build the PDF into the
+gitignored `paper/build/`:
+
+```bash
+cd paper && latexmk -pdf -outdir=build neurips_2026.tex
+python3 scripts/validate_citations.py   # check references against Crossref/arXiv (network)
+```
+
 The published leaderboards the rank tables compare against are transcribed into
 `data/pathorob_leaderboard.tsv` (PathoROB README, commit `7e1ee0b`),
 `data/hest_leaderboard_9task.tsv` (HEST README, commit `2f82fea`) and

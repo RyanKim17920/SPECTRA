@@ -61,3 +61,6 @@ results_backup/
 # generated paper outputs (paper/make_all.sh); scripts and extracted inputs stay tracked
 /paper/figures/
 /paper/tables/
+
+# LaTeX build output (cd paper && latexmk -pdf -outdir=build neurips_2026.tex)
+/paper/build/
