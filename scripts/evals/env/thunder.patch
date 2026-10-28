@@ -1,0 +1,1462 @@
+diff --git a/src/thunder/__init__.py b/src/thunder/__init__.py
+index abba8fb..8af4248 100644
+--- a/src/thunder/__init__.py
++++ b/src/thunder/__init__.py
+@@ -1,58 +1,16 @@
+-def _has_internet(timeout: float = 3.0) -> bool:
+-    # Inspired from https://github.com/mahmoodlab/TRIDENT/blob/ba52a930da19d7f43586223dcc2ebfbca2271fc3/trident/IO.py
+-    import os
+-    import socket
++def __getattr__(name):
++    if name in ("download_datasets", "generate_splits"):
++        from .datasets import download_datasets, generate_splits
+ 
+-    endpoint = os.environ.get("HF_ENDPOINT", "huggingface.co")
+-    if endpoint.startswith(("http://", "https://")):
+-        from urllib.parse import urlparse
++        return {"download_datasets": download_datasets, "generate_splits": generate_splits}[name]
++    if name == "download_models":
++        from .models import download_models
+ 
+-        endpoint = urlparse(endpoint).netloc
++        return download_models
++    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+ 
+-    try:
+-        with socket.create_connection((endpoint, 443), timeout=timeout):
+-            return True
+-    except OSError:
+-        pass
+-
+-    try:
+-        import requests
+-
+-        url = f"https://{endpoint}"
+-        return requests.head(url, timeout=timeout).status_code < 500
+-    except Exception:
+-        return False
+-
+-
+-def _configure_outdated_checks() -> None:
+-    import warnings
+-
+-    warnings.filterwarnings("ignore", message=r".*pkg_resources is deprecated.*")
+-
+-    if _has_internet():
+-        return
+-
+-    import os
+-
+-    os.environ.setdefault("OUTDATED_IGNORE", "1")
+-    try:
+-        import outdated.utils
+-
+-        outdated.utils.get_url = lambda *args, **kwargs: None
+-    except Exception:
+-        pass
+-    try:
+-        import outdated
+-
+-        outdated.check_outdated = lambda *args, **kwargs: (False, None)
+-        outdated.warn_if_outdated = lambda *args, **kwargs: None
+-    except Exception:
+-        pass
+-
+-
+-_configure_outdated_checks()
+ 
+ from .benchmark import benchmark
+-from .datasets import download_datasets, generate_splits
+-from .models import download_models
+ from .utils import gather_results
++
++__all__ = ["benchmark", "download_datasets", "download_models", "gather_results", "generate_splits"]
+diff --git a/src/thunder/benchmark.py b/src/thunder/benchmark.py
+index 01f0e58..10d6e63 100644
+--- a/src/thunder/benchmark.py
++++ b/src/thunder/benchmark.py
+@@ -46,7 +46,9 @@ def benchmark(
+     from .utils.config import get_config
+     from .utils.utils import print_task_hyperparams
+ 
+-    wandb_mode = "online" if online_wandb else "offline"
++    wandb_mode = os.environ.get(
++        "THUNDER_WANDB_MODE", "online" if online_wandb else "offline"
++    )
+     adaptation_type = "lora" if lora else "frozen"
+     ckpt_saving = "save_ckpts_all_epochs" if ckpt_save_all else "save_best_ckpt_only"
+     embedding_recomputing = "recomp_embs" if recomp_embs else "no_recomp_embs"
+@@ -88,12 +90,12 @@ def benchmark(
+     print_task_hyperparams(cfg, custom_name=custom_name)
+ 
+     if dataset and not is_dataset_available(dataset):
+-        from . import download_datasets
++        from .datasets import download_datasets
+ 
+         download_datasets(dataset, make_splits=True)
+ 
+     if model_name and not is_model_available(model_name):
+-        from . import download_models
++        from .models import download_models
+ 
+         download_models(model)
+ 
+@@ -122,19 +124,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+     import wandb
+     from omegaconf import OmegaConf
+ 
+-    from .tasks.adversarial_attack import adversarial_attack
+-    from .tasks.alignment_scoring import alignment_scoring
+-    from .tasks.image_retrieval import image_retrieval
+-    from .tasks.knn_classification import knn
+-    from .tasks.pre_computing_patch_embeddings import \
+-        pre_computing_patch_embeddings
+-    from .tasks.simple_shot import simple_shot
+-    from .tasks.train_eval_probe import eval_probe, train_probe
+-    from .tasks.transformation_invariance import transformation_invariance
+-    from .tasks.zero_shot_vlm import zero_shot_vlm
+     from .utils.constants import UtilsConstants
+     from .utils.data import get_data, h5_to_np, load_embeddings
+-    from .utils.dice_loss import multiclass_dice_loss
+     from .utils.utils import save_config, set_seed
+ 
+     # Getting device
+@@ -170,7 +161,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+     ), "We do not pre-load both images and embeddings."
+ 
+     # W&B login
+-    wandb.login()
++    if cfg.wandb.mode == "online":
++        wandb.login()
+ 
+     # W&B run
+     wandb.init(
+@@ -200,6 +192,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+     set_seed(UtilsConstants.DEFAULT_SEED.value)
+ 
+     if task_type in ["linear_probing", "segmentation"]:
++        from .tasks.train_eval_probe import eval_probe, train_probe
++
+         # Model checkpoints folder
+         ckpt_folder = os.path.join(
+             os.environ["THUNDER_BASE_DATA_FOLDER"],
+@@ -214,6 +208,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+         if task_type == "linear_probing":
+             criterion = torch.nn.CrossEntropyLoss()
+         elif task_type == "segmentation":
++            from .utils.dice_loss import multiclass_dice_loss
++
+             criterion = multiclass_dice_loss
+ 
+         # Loading data
+@@ -331,6 +327,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+             logging.info(emb_info_str)
+ 
+         if comp_embs:
++            from .tasks.pre_computing_patch_embeddings import pre_computing_patch_embeddings
++
+             pre_computing_patch_embeddings(
+                 cfg,
+                 embeddings_folder,
+@@ -359,6 +357,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+             embs, labels = load_embeddings(embeddings_folder, splits)
+ 
+             if task_type == "alignment_scoring":
++                from .tasks.alignment_scoring import alignment_scoring
++
+                 alignment_scoring(
+                     base_embeddings_folder,
+                     model_name,
+@@ -369,6 +369,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+                     wandb_base_folder,
+                 )
+             elif task_type == "image_retrieval":
++                from .tasks.image_retrieval import image_retrieval
++
+                 k_vals = cfg.task.k_vals
+                 image_retrieval(
+                     cfg,
+@@ -383,6 +385,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+                     wandb_base_folder,
+                 )
+             elif task_type == "knn":
++                from .tasks.knn_classification import knn
++
+                 k_vals = cfg.task.k_vals
+                 knn(
+                     embs,
+@@ -392,6 +396,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+                     wandb_base_folder,
+                 )
+             elif task_type == "simple_shot":
++                from .tasks.simple_shot import simple_shot
++
+                 simple_shot(
+                     cfg,
+                     dataset_name,
+@@ -403,6 +409,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+                     wandb_base_folder,
+                 )
+         elif task_type == "zero_shot_vlm":
++            from .tasks.zero_shot_vlm import zero_shot_vlm
++
+             # Loading image-text embeddings
+             image_embs = h5_to_np(
+                 h5py.File(
+@@ -427,6 +435,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+             )
+ 
+     if task_type == "transformation_invariance":
++        from .tasks.transformation_invariance import transformation_invariance
++
+         transformation_invariance(
+             cfg,
+             dataset_name,
+@@ -439,6 +449,8 @@ def run_benchmark(cfg: DictConfig, model_cls: Callable = None) -> None:
+             res_folder,
+         )
+     elif task_type == "adversarial_attack":
++        from .tasks.adversarial_attack import adversarial_attack
++
+         adversarial_attack(
+             cfg,
+             dataset_name,
+diff --git a/src/thunder/config/task/pre_computing_embeddings.yaml b/src/thunder/config/task/pre_computing_embeddings.yaml
+index 5c9b062..0f69e07 100644
+--- a/src/thunder/config/task/pre_computing_embeddings.yaml
++++ b/src/thunder/config/task/pre_computing_embeddings.yaml
+@@ -2,3 +2,4 @@ type: pre_computing_embeddings
+ compatible_adaptation_types: ["frozen"]
+ base_embeddings_folder: ${oc.env:THUNDER_BASE_DATA_FOLDER}/embeddings/
+ pre_comp_emb_batch_size: 128
++pre_comp_emb_num_workers: 16
+diff --git a/src/thunder/config/wandb/disabled.yaml b/src/thunder/config/wandb/disabled.yaml
+new file mode 100644
+index 0000000..f5b97e3
+--- /dev/null
++++ b/src/thunder/config/wandb/disabled.yaml
+@@ -0,0 +1 @@
++mode: disabled
+diff --git a/src/thunder/datasets/utils.py b/src/thunder/datasets/utils.py
+index 055ce54..5e2c817 100644
+--- a/src/thunder/datasets/utils.py
++++ b/src/thunder/datasets/utils.py
+@@ -77,5 +77,4 @@ def is_dataset_available(dataset_name: str) -> bool:
+     Returns:
+         bool: True if the dataset is available, False otherwise.
+     """
+-    datasets_dir = os.path.join(os.environ["THUNDER_BASE_DATA_FOLDER"], "datasets/")
+-    return os.path.exists(os.path.join(datasets_dir, dataset_name))
++    return os.path.exists(os.path.join(os.environ["THUNDER_DATA_FOLDER"], dataset_name))
+diff --git a/src/thunder/main.py b/src/thunder/main.py
+index 6648513..97073c4 100644
+--- a/src/thunder/main.py
++++ b/src/thunder/main.py
+@@ -10,7 +10,7 @@ app = typer.Typer()
+ @app.command()
+ def download_datasets(datasets: List[str], make_splits: bool = False):
+     """Download datasets for the benchmark."""
+-    from . import download_datasets
++    from .datasets import download_datasets
+ 
+     if "THUNDER_BASE_DATA_FOLDER" not in os.environ:
+         raise EnvironmentError(
+@@ -23,7 +23,7 @@ def download_datasets(datasets: List[str], make_splits: bool = False):
+ @app.command()
+ def generate_data_splits(datasets: List[str]):
+     """Generate data splits for the benchmark."""
+-    from . import generate_splits
++    from .datasets import generate_splits
+ 
+     if "THUNDER_BASE_DATA_FOLDER" not in os.environ:
+         raise EnvironmentError(
+@@ -36,7 +36,7 @@ def generate_data_splits(datasets: List[str]):
+ @app.command()
+ def download_models(models: List[str]):
+     """Download models for the benchmark."""
+-    from . import download_models
++    from .models import download_models
+ 
+     if "THUNDER_BASE_DATA_FOLDER" not in os.environ:
+         raise EnvironmentError(
+diff --git a/src/thunder/models/task_specific_models.py b/src/thunder/models/task_specific_models.py
+index 53e9c65..381bde2 100644
+--- a/src/thunder/models/task_specific_models.py
++++ b/src/thunder/models/task_specific_models.py
+@@ -2,6 +2,7 @@ import math
+ 
+ import torch
+ import torch.nn as nn
++import torch.nn.functional as F
+ from einops import rearrange
+ from timm.layers import DropPath, trunc_normal_
+ 
+@@ -55,7 +56,9 @@ class GridSearchClassificationHead(nn.Module):
+         :return classification prediction per head.
+         """
+         if type(src) == torch.Tensor:
+-            out = [self.heads[i](src) for i in range(self.nb_heads)]
++            weights = torch.stack([head.linear.weight for head in self.heads])
++            biases = torch.stack([head.linear.bias for head in self.heads])
++            out = list(torch.einsum("bd,hcd->hbc", src, weights).add_(biases[:, None]))
+         else:
+             assert type(src) == list
+             out = [self.heads[i](src[i]) for i in range(self.nb_heads)]
+@@ -250,7 +253,7 @@ class Attention(nn.Module):
+     def unwrapped(self):
+         return self
+ 
+-    def forward(self, x, mask=None):
++    def forward(self, x, mask=None, return_attention=False):
+         B, N, C = x.shape
+         qkv = (
+             self.qkv(x)
+@@ -263,11 +266,17 @@ class Attention(nn.Module):
+             qkv[2],
+         )
+ 
+-        attn = (q @ k.transpose(-2, -1)) * self.scale
+-        attn = attn.softmax(dim=-1)
+-        attn = self.attn_drop(attn)
+-
+-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
++        if return_attention:
++            attn = self.attn_drop(((q @ k.transpose(-2, -1)) * self.scale).softmax(dim=-1))
++            x = attn @ v
++        else:
++            attn = None
++            x = F.scaled_dot_product_attention(
++                q, k, v,
++                dropout_p=self.attn_drop.p if self.training else 0.0,
++                scale=self.scale,
++            )
++        x = x.transpose(1, 2).reshape(B, N, C)
+         x = self.proj(x)
+         x = self.proj_drop(x)
+ 
+@@ -284,7 +293,7 @@ class Block(nn.Module):
+         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+ 
+     def forward(self, x, mask=None, return_attention=False):
+-        y, attn = self.attn(self.norm1(x), mask)
++        y, attn = self.attn(self.norm1(x), mask, return_attention)
+         if return_attention:
+             return attn
+         x = x + self.drop_path(y)
+diff --git a/src/thunder/tasks/adversarial_attack.py b/src/thunder/tasks/adversarial_attack.py
+index 6a42e13..36ea579 100644
+--- a/src/thunder/tasks/adversarial_attack.py
++++ b/src/thunder/tasks/adversarial_attack.py
+@@ -194,8 +194,8 @@ def adversarial_attack(
+     all_labels = torch.cat(all_labels).cpu().numpy()
+ 
+     # Compute metrics before and after attack
+-    clean_metrics = compute_metrics(None, all_clean_preds, all_labels)
+-    adv_metrics = compute_metrics(None, all_adv_preds, all_labels)
++    clean_metrics = compute_metrics(None, all_clean_preds, all_labels, compute_ci=False)
++    adv_metrics = compute_metrics(None, all_adv_preds, all_labels, compute_ci=False)
+     metrics = {
+         "clean": clean_metrics,
+         "adversarial": adv_metrics,
+@@ -208,6 +208,7 @@ def adversarial_attack(
+         lambda y, y_pred: f1_score(y_true=y, y_pred=y_pred[:, 0], average="macro")
+         - f1_score(y_true=y, y_pred=y_pred[:, 1], average="macro"),
+         label_indices=np.arange(len(all_labels)),
++        compute_ci=False,
+     )
+     accuracy_drop = compute_metric(
+         all_labels,
+@@ -215,6 +216,7 @@ def adversarial_attack(
+         lambda y, y_pred: accuracy_score(y_true=y, y_pred=y_pred[:, 0])
+         - accuracy_score(y_true=y, y_pred=y_pred[:, 1]),
+         label_indices=np.arange(len(all_labels)),
++        compute_ci=False,
+     )
+     jaccard_drop = compute_metric(
+         all_labels,
+@@ -222,6 +224,7 @@ def adversarial_attack(
+         lambda y, y_pred: jaccard_score(y_true=y, y_pred=y_pred[:, 0], average="macro")
+         - jaccard_score(y_true=y, y_pred=y_pred[:, 1], average="macro"),
+         label_indices=np.arange(len(all_labels)),
++        compute_ci=False,
+     )
+     balanced_accuracy_drop = compute_metric(
+         all_labels,
+@@ -229,6 +232,7 @@ def adversarial_attack(
+         lambda y, y_pred: balanced_accuracy_score(y_true=y, y_pred=y_pred[:, 0])
+         - balanced_accuracy_score(y_true=y, y_pred=y_pred[:, 1]),
+         label_indices=np.arange(len(all_labels)),
++        compute_ci=False,
+     )
+ 
+     metrics["drop"] = {
+diff --git a/src/thunder/tasks/knn_classification.py b/src/thunder/tasks/knn_classification.py
+index 8e1a90a..35ae992 100644
+--- a/src/thunder/tasks/knn_classification.py
++++ b/src/thunder/tasks/knn_classification.py
+@@ -1,13 +1,30 @@
+-import json
+ import logging
+-import os
+ 
+ import numpy as np
++import torch
++import torch.nn.functional as F
+ 
+-from ..tasks.image_retrieval import topk_retrieval
++from ..utils.downstream_metrics import compute_metrics
+ from ..utils.utils import log_metrics, save_outputs
+ 
+ 
++def knn_predict(train_embs, train_labels, query_embs, k_vals):
++    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
++    train = F.normalize(torch.from_numpy(np.asarray(train_embs)).float(), dim=1).to(device)
++    query = F.normalize(torch.from_numpy(np.asarray(query_embs)).float(), dim=1).to(device)
++    labels = torch.as_tensor(np.asarray(train_labels)).long().to(device)
++    nb_classes = int(labels.max().item()) + 1
++    top = torch.empty(len(query), max(k_vals), dtype=torch.long, device=device)
++    for start in range(0, len(query), 1024):
++        top[start : start + 1024] = (
++            query[start : start + 1024] @ train.T
++        ).topk(max(k_vals), dim=1).indices
++    return {
++        k: F.one_hot(labels[top[:, :k]], nb_classes).sum(1).argmax(1).cpu().numpy()
++        for k in k_vals
++    }
++
++
+ def knn(
+     embs: dict,
+     labels: dict,
+@@ -25,17 +42,12 @@ def knn(
+     """
+     # Hyperparameter (k) search
+     logging.info("Hyperparameter (k) search")
+-    val_metrics, *_ = topk_retrieval(
+-        embs["train"],
+-        labels["train"],
+-        embs["val"],
+-        labels["val"],
+-        k_vals,
+-        compute_ci=False,
+-    )
++    val_preds = knn_predict(embs["train"], labels["train"], embs["val"], k_vals)
+ 
+     # Logging
++    val_metrics = {}
+     for k in k_vals:
++        val_metrics[k] = compute_metrics(None, val_preds[k], labels["val"], compute_ci=False)
+         log_metrics(wandb_base_folder, val_metrics[k], "val", step=k)
+ 
+     # Picking best k
+@@ -49,13 +61,10 @@ def knn(
+ 
+     # knn test
+     logging.info("Test")
+-    test_metrics, *_ = topk_retrieval(
+-        embs["train"],
+-        labels["train"],
+-        embs["test"],
+-        labels["test"],
+-        [best_k],
+-    )
++    test_preds = knn_predict(embs["train"], labels["train"], embs["test"], [best_k])
++    test_metrics = {
++        best_k: compute_metrics(None, test_preds[best_k], labels["test"], compute_ci=False)
++    }
+ 
+     # Logging
+     log_metrics(wandb_base_folder, test_metrics[best_k], "test", step=best_k)
+diff --git a/src/thunder/tasks/pre_computing_patch_embeddings.py b/src/thunder/tasks/pre_computing_patch_embeddings.py
+index c877621..006b3bb 100644
+--- a/src/thunder/tasks/pre_computing_patch_embeddings.py
++++ b/src/thunder/tasks/pre_computing_patch_embeddings.py
+@@ -1,4 +1,5 @@
+ import os
++import shutil
+ from collections.abc import Callable
+ from contextlib import nullcontext
+ 
+@@ -90,7 +91,10 @@ def pre_computing_patch_embeddings(
+             split_dataset,
+             batch_size=cfg.task.pre_comp_emb_batch_size,
+             shuffle=False,
+-            num_workers=1,
++            num_workers=cfg.task.pre_comp_emb_num_workers,
++            pin_memory=True,
++            prefetch_factor=1 if cfg.task.pre_comp_emb_batch_size >= 1024 else 2,
++            in_order=dataset_task_type != "segmentation",
+         )
+         pre_computing_patch_embeddings_split(
+             os.path.join(embeddings_folder, split),
+@@ -137,6 +141,11 @@ def pre_computing_patch_embeddings_split(
+     :param id2classnames: mapping from class ids to text labels.
+     :param div_patches: whether to divide image into patches (instead of using full image).
+     """
++    final_folder = embeddings_folder
++    if task_type == "linear_probing":
++        embeddings_folder = os.path.join("/tmp/thunder_emb", final_folder.lstrip("/"))
++        if os.path.exists(embeddings_folder):
++            shutil.rmtree(embeddings_folder)
+     os.makedirs(embeddings_folder, exist_ok=True)
+     emb_path = os.path.join(embeddings_folder, "embeddings.h5")
+     text_aligned_emb_path = os.path.join(
+@@ -146,15 +155,20 @@ def pre_computing_patch_embeddings_split(
+ 
+     # Open / create the files once.
+     with (
+-        h5py.File(emb_path, "a", libver="latest") as emb_h5,
+-        h5py.File(label_path, "a", libver="latest") as lab_h5,
++        h5py.File(emb_path, "w", libver="latest") as emb_h5,
++        h5py.File(label_path, "w", libver="latest") as lab_h5,
+         (
+             h5py.File(text_aligned_emb_path, "a", libver="latest")
+             if id2classnames is not None
+             else nullcontext()
+         ) as text_aligned_emb_h5,
+     ):
+-        next_idx = max((int(k) for k in emb_h5.keys()), default=-1) + 1
++        next_idx = 0
++        written = (
++            np.zeros(len(dataloader.dataset), dtype=bool)
++            if task_type == "segmentation"
++            else None
++        )
+ 
+         for batch in tqdm(dataloader, desc="Extracting patch embeddings"):
+             imgs = batch["image"].to(device, non_blocking=True)
+@@ -175,8 +189,17 @@ def pre_computing_patch_embeddings_split(
+                 masks = masks.repeat(1, 1, embeds.shape[-1])
+                 embeds = (masks * embeds).sum(dim=1) / masks.sum(dim=1)
+ 
+-            embeds = embeds.cpu().numpy().astype(np.float32, copy=False)
+-            labels = labels.cpu().numpy().astype(np.int64, copy=False)
++            labels = labels.cpu().numpy()
++            if task_type == "segmentation":
++                embeds = embeds.float()
++                scales = embeds.abs().amax(dim=-1, keepdim=True).clamp_min_(1e-12).div_(127)
++                embeds = torch.clamp(torch.round(embeds / scales), -127, 127).to(torch.int8).cpu().numpy()
++                scales = scales.to(torch.float16).cpu().numpy()
++                assert labels.min() >= -128 and labels.max() <= 127
++                labels = labels.astype(np.int8, copy=False)
++            else:
++                embeds = embeds.float().cpu().numpy()
++                labels = labels.astype(np.int64, copy=False)
+ 
+             # Text-aligned embeddings (VLM)
+             if text_aligned_emb_h5 is not None:
+@@ -191,28 +214,54 @@ def pre_computing_patch_embeddings_split(
+                 )
+ 
+             bs = embeds.shape[0]
+-            for i in range(bs):
+-                key = f"{next_idx + i}"
+-
++            if "data" not in emb_h5:
+                 emb_h5.create_dataset(
+-                    key,
+-                    data=embeds[i],
+-                    dtype="float32",
++                    "data",
++                    shape=(len(dataloader.dataset), *embeds.shape[1:]),
++                    dtype=embeds.dtype,
+                 )
+-                if text_aligned_emb_h5 is not None:
+-                    text_aligned_emb_h5.create_dataset(
+-                        key,
+-                        data=text_aligned_embeds[i],
+-                        dtype="float32",
+-                    )
+                 lab_h5.create_dataset(
+-                    key,
+-                    data=labels[i],
+-                    dtype="int64",
++                    "data",
++                    shape=(len(dataloader.dataset), *labels.shape[1:]),
++                    dtype=labels.dtype,
+                 )
+-
++                if task_type == "segmentation":
++                    emb_h5.create_dataset(
++                        "scales",
++                        shape=(len(dataloader.dataset), *scales.shape[1:]),
++                        dtype="float16",
++                    )
++            if task_type == "segmentation":
++                indices = batch["index"].numpy()
++                assert len(indices) == bs and np.array_equal(
++                    indices, np.arange(indices[0], indices[0] + bs)
++                )
++                start = int(indices[0])
++                stop = start + bs
++                assert not written[start:stop].any()
++                written[start:stop] = True
++                emb_h5["data"][start:stop] = embeds
++                lab_h5["data"][start:stop] = labels
++                emb_h5["scales"][start:stop] = scales
++            else:
++                stop = next_idx + bs
++                emb_h5["data"][next_idx:stop] = embeds
++                lab_h5["data"][next_idx:stop] = labels
++            if text_aligned_emb_h5 is not None:
++                for i in range(bs):
++                    text_aligned_emb_h5.create_dataset(
++                        str(next_idx + i), data=text_aligned_embeds[i], dtype="float32"
++                    )
+             next_idx += bs
+ 
++    assert next_idx == len(dataloader.dataset)
++    assert written is None or written.all()
++    if embeddings_folder != final_folder:
++        os.makedirs(final_folder, exist_ok=True)
++        for name in os.listdir(embeddings_folder):
++            shutil.move(os.path.join(embeddings_folder, name), os.path.join(final_folder, name))
++        shutil.rmtree(embeddings_folder)
++
+     # Zero-shot image-text embeddings
+     if id2classnames is not None:
+         from ..utils.constants import UtilsConstants
+diff --git a/src/thunder/tasks/simple_shot.py b/src/thunder/tasks/simple_shot.py
+index 0a410e6..f389020 100644
+--- a/src/thunder/tasks/simple_shot.py
++++ b/src/thunder/tasks/simple_shot.py
+@@ -1,14 +1,10 @@
+-import copy
+-import json
+ import logging
+-import os
+-from collections import defaultdict
+ 
+ import numpy as np
++import torch
++import torch.nn.functional as F
+ from omegaconf import DictConfig
+-from tqdm import tqdm
+ 
+-from ..tasks.image_retrieval import topk_retrieval
+ from ..utils.data import get_data
+ from ..utils.downstream_metrics import compute_metrics
+ from ..utils.utils import log_metrics, save_outputs
+@@ -46,64 +42,36 @@ def simple_shot(
+         base_data_folder,
+     )
+     few_shot_data = data["train_few_shot"]
+-    nb_shots = few_shot_data.keys()
++    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
++    train = torch.from_numpy(np.asarray(train_embs)).float().to(device)
++    test = torch.from_numpy(np.asarray(test_embs)).float().to(device)
+     simple_shot_metrics = {}
+-    for nb_shot in nb_shots:
++    for nb_shot in ["16"]:
+         nb_shot_data = few_shot_data[nb_shot]
+-        nb_shot_images = nb_shot_data["images"]
+-        nb_shot_labels = nb_shot_data["labels"]
+-        assert len(nb_shot_images) == len(nb_shot_labels) == 1000
+-        out_pred = []
++        support_idx = torch.as_tensor(np.array(nb_shot_data["images"]), device=device)
++        support_lab = torch.as_tensor(np.array(nb_shot_data["labels"]), device=device)
++        n_draws, n_support = support_idx.shape
++        assert n_draws == 1000 and support_lab.shape == (n_draws, n_support)
++        nb_classes = int(support_lab.max().item()) + 1
+         logging.info(f"{nb_shot}-shot classification")
+-        for i in tqdm(range(len(nb_shot_images))):
+-            # Selecting few shot samples
+-            support_images = nb_shot_images[i]
+-            support_embs = train_embs[support_images]
+-            support_labels = nb_shot_labels[i]
+-            assert len(support_embs) == len(support_labels)
+-            # Centering support embeddings
+-            mean_support_emb = support_embs.mean(axis=0)
+-            assert mean_support_emb.shape == (support_embs.shape[1],)
+-            support_embs -= mean_support_emb
+-
+-            # Simpleshot per-class mean
+-            label2embs = defaultdict(list)
+-            for j in range(len(support_labels)):
+-                label2embs[support_labels[j]].append(
+-                    np.expand_dims(support_embs[j], axis=0)
+-                )
+-
+-            simple_shot_embs, simple_shot_labels = [], []
+-            for label in label2embs.keys():
+-                simple_shot_labels.append(label)
+-                mean_class_embs = np.concatenate(label2embs[label], axis=0).mean(axis=0)
+-                simple_shot_embs.append(np.expand_dims(mean_class_embs, axis=0))
+-            simple_shot_embs = np.concatenate(simple_shot_embs, axis=0)
+-            simple_shot_labels = np.array(simple_shot_labels)
+-
+-            # Running knn
+-            metrics, *_ = topk_retrieval(
+-                simple_shot_embs,
+-                simple_shot_labels,
+-                test_embs - mean_support_emb,
+-                test_labels,
+-                [1],
+-                disable_progress_bar=True,
+-                compute_ci=False,
+-            )
+-
+-            # Logging
+-            out_pred.append(metrics[1]["per_sample_pred"])
+-
+-        # Few-shot-specific majority voting
+-        out_pred = np.array(out_pred)
+-        out_pred = np.array(
+-            [
+-                np.bincount(out_pred[:, i]).argmax().item()
+-                for i in range(out_pred.shape[1])
+-            ]
+-        )
+-        nb_shot_metrics = compute_metrics(None, out_pred, np.array(metrics[1]["label"]))
++        votes = torch.zeros(len(test), nb_classes, dtype=torch.int32, device=device)
++        chunk = max(1, min(32, int(6e9 // (len(test) * test.shape[1] * 4))))
++        test_rows = torch.arange(len(test), device=device)
++        for draws, draw_labels in zip(support_idx.split(chunk), support_lab.split(chunk)):
++            support = train[draws]
++            mean = support.mean(dim=1, keepdim=True)
++            support = support - mean
++            one_hot = F.one_hot(draw_labels, nb_classes).float()
++            prototypes = one_hot.transpose(1, 2) @ support
++            prototypes /= one_hot.sum(dim=1).unsqueeze(-1)
++            similarities = F.normalize(test - mean, dim=-1) @ F.normalize(
++                prototypes, dim=-1
++            ).transpose(1, 2)
++            predictions = similarities.argmax(dim=-1)
++            flat = test_rows.unsqueeze(0) * nb_classes + predictions
++            votes += torch.bincount(flat.flatten(), minlength=len(test) * nb_classes).reshape_as(votes)
++        final_pred = votes.argmax(dim=1).cpu().numpy()
++        nb_shot_metrics = compute_metrics(None, final_pred, test_labels, compute_ci=False)
+ 
+         # Logging
+         simple_shot_metrics[nb_shot] = nb_shot_metrics
+diff --git a/src/thunder/tasks/train_eval_probe.py b/src/thunder/tasks/train_eval_probe.py
+index 0305685..2d64fca 100644
+--- a/src/thunder/tasks/train_eval_probe.py
++++ b/src/thunder/tasks/train_eval_probe.py
+@@ -3,6 +3,7 @@ import os
+ from collections.abc import Callable
+ from operator import attrgetter
+ 
++import h5py
+ import numpy as np
+ import torch
+ import torch.nn as nn
+@@ -37,6 +38,124 @@ from ..utils.utils import (
+ )
+ 
+ 
++class GPUEmbeddingLoader:
++    def __init__(self, embeddings, labels, batch_size, shuffle, device):
++        self.embeddings = torch.as_tensor(np.asarray(embeddings)).float().to(device)
++        self.labels = torch.as_tensor(np.asarray(labels)).long().to(device)
++        self.batch_size = batch_size
++        self.shuffle = shuffle
++
++    def __len__(self):
++        return -(-len(self.embeddings) // self.batch_size)
++
++    def __iter__(self):
++        torch.empty((), dtype=torch.int64).random_()
++        if self.shuffle:
++            seed = int(torch.empty((), dtype=torch.int64).random_().item())
++            generator = torch.Generator().manual_seed(seed)
++            order = torch.randperm(len(self.embeddings), generator=generator).to(
++                self.embeddings.device
++            )
++        else:
++            order = torch.arange(len(self.embeddings), device=self.embeddings.device)
++        for start in range(0, len(order), self.batch_size):
++            index = order[start : start + self.batch_size]
++            yield {"emb": self.embeddings[index], "label": self.labels[index]}
++
++
++class GPUSegmentationLoader:
++    def __init__(self, dataset, batch_size, shuffle, device):
++        with h5py.File(dataset.embeddings_path) as embeddings:
++            data = embeddings["data"]
++            scales = embeddings["scales"]
++            assert data.chunks is None and data.compression is None
++            assert scales.chunks is None and scales.compression is None
++            self.embeddings = torch.from_numpy(np.memmap(
++                dataset.embeddings_path, mode="c", dtype=data.dtype,
++                offset=data.id.get_offset(), shape=data.shape,
++            )).to(device)
++            self.scales = torch.from_numpy(np.memmap(
++                dataset.embeddings_path, mode="c", dtype=scales.dtype,
++                offset=scales.id.get_offset(), shape=scales.shape,
++            )).to(device)
++        with h5py.File(dataset.labels_path) as labels:
++            data = labels["data"]
++            assert data.chunks is None and data.compression is None
++            self.labels = torch.from_numpy(np.memmap(
++                dataset.labels_path, mode="c", dtype=data.dtype,
++                offset=data.id.get_offset(), shape=data.shape,
++            ))
++        self.batch_size = batch_size
++        self.shuffle = shuffle
++
++    def __len__(self):
++        return -(-len(self.embeddings) // self.batch_size)
++
++    def __iter__(self):
++        torch.empty((), dtype=torch.int64).random_()
++        if self.shuffle:
++            seed = int(torch.empty((), dtype=torch.int64).random_().item())
++            order = torch.randperm(
++                len(self.embeddings), generator=torch.Generator().manual_seed(seed)
++            )
++        else:
++            order = torch.arange(len(self.embeddings))
++        for start in range(0, len(order), self.batch_size):
++            index = order[start : start + self.batch_size]
++            device_index = index.to(self.embeddings.device)
++            yield {
++                "emb": self.embeddings[device_index].float() * self.scales[device_index].float(),
++                "label": self.labels[index].long(),
++            }
++
++
++class CPUSegmentationLoader:
++    def __init__(self, dataset, batch_size, shuffle, device):
++        with h5py.File(dataset.embeddings_path) as embeddings:
++            data = embeddings["data"]
++            scales = embeddings["scales"]
++            assert data.chunks is None and data.compression is None
++            assert scales.chunks is None and scales.compression is None
++            self.embeddings = torch.from_numpy(np.memmap(
++                dataset.embeddings_path, mode="c", dtype=data.dtype,
++                offset=data.id.get_offset(), shape=data.shape,
++            ))
++            self.scales = torch.from_numpy(np.memmap(
++                dataset.embeddings_path, mode="c", dtype=scales.dtype,
++                offset=scales.id.get_offset(), shape=scales.shape,
++            ))
++        with h5py.File(dataset.labels_path) as labels:
++            data = labels["data"]
++            assert data.chunks is None and data.compression is None
++            self.labels = torch.from_numpy(np.memmap(
++                dataset.labels_path, mode="c", dtype=data.dtype,
++                offset=data.id.get_offset(), shape=data.shape,
++            ))
++        self.batch_size = batch_size
++        self.shuffle = shuffle
++        self.device = device
++
++    def __len__(self):
++        return -(-len(self.embeddings) // self.batch_size)
++
++    def __iter__(self):
++        torch.empty((), dtype=torch.int64).random_()
++        if self.shuffle:
++            seed = int(torch.empty((), dtype=torch.int64).random_().item())
++            order = torch.randperm(
++                len(self.embeddings), generator=torch.Generator().manual_seed(seed)
++            )
++        else:
++            order = torch.arange(len(self.embeddings))
++        for start in range(0, len(order), self.batch_size):
++            index = order[start : start + self.batch_size]
++            yield {
++                "emb": self.embeddings[index].to(self.device).float()
++                * self.scales[index].to(self.device).float(),
++                "label": self.labels[index].long(),
++            }
++
++
+ def train_probe(
+     cfg: DictConfig,
+     data: dict,
+@@ -168,16 +287,28 @@ def train_probe(
+ 
+     # Dataloaders
+     dataloaders = {}
++    segmentation_cached = task_type == "segmentation" and embedding_pre_loading
++    segmentation_cache_size = sum(
++        os.path.getsize(os.path.join(base_embeddings_folder, dataset_name, model_name, split, name))
++        for split in ("train", "val")
++        for name in ("embeddings.h5", "labels.h5")
++    ) if segmentation_cached else 0
++    segmentation_tokens = 0
++    if segmentation_cached:
++        with h5py.File(os.path.join(
++            base_embeddings_folder, dataset_name, model_name, "train", "embeddings.h5",
++        )) as embeddings:
++            segmentation_tokens = embeddings["data"].shape[1]
+     for split in ["train", "val"]:
+         split_dataset = PatchDataset(
+             (
+                 None
+-                if (embedding_pre_loading and task_type != "segmentation")
++                if embedding_pre_loading
+                 else data[split]["images"]
+             ),
+             (
+                 None
+-                if (embedding_pre_loading and task_type != "segmentation")
++                if embedding_pre_loading
+                 else data[split]["labels"]
+             ),
+             transform,
+@@ -191,11 +322,40 @@ def train_probe(
+                 cfg.dataset.h5_format if hasattr(cfg.dataset, "h5_format") else False
+             ),
+         )
+-        dataloaders[split] = DataLoader(
++        dataloaders[split] = (
++            GPUEmbeddingLoader(
++                split_dataset.embeddings,
++                split_dataset.labels,
++                cfg.adaptation.batch_size,
++                split == "train",
++                device,
++            )
++            if task_type == "linear_probing" and embedding_pre_loading
++            else GPUSegmentationLoader(
++                split_dataset,
++                cfg.adaptation.batch_size,
++                split == "train",
++                device,
++            )
++            if (
++                segmentation_cached and segmentation_tokens <= 256
++                and segmentation_cache_size < 45 * 1024**3
++            )
++            else CPUSegmentationLoader(
++                split_dataset,
++                cfg.adaptation.batch_size,
++                split == "train",
++                device,
++            )
++            if segmentation_cached
++            else DataLoader(
+             split_dataset,
+             batch_size=cfg.adaptation.batch_size,
+-            shuffle=True if split == "train" else False,
++                shuffle=split == "train",
+             num_workers=cfg.adaptation.num_workers,
++                pin_memory=True,
++                persistent_workers=cfg.adaptation.num_workers > 0,
++            )
+         )
+ 
+     # Hyperparameter search
+@@ -228,7 +388,7 @@ def train_probe(
+                 task_specific_model,
+                 optimizer,
+                 device,
+-                comp_metrics=(task_type == "linear_probing"),
++                comp_metrics=(task_type == "linear_probing" and split == "val"),
+             )
+ 
+             ckpt_epoch_dicts = {}
+@@ -242,7 +402,7 @@ def train_probe(
+                     split,
+                     epoch,
+                 )
+-                if task_type == "linear_probing":
++                if task_type == "linear_probing" and metrics is not None:
+                     log_metrics(
+                         wandb_base_folder,
+                         metrics[i],
+@@ -251,22 +411,27 @@ def train_probe(
+                     )
+ 
+                 if split == "val":
+-                    # Storing ckpt dict
+-                    ckpt_dict = {
+-                        "lr": hyperparams_dict[i]["lr"],
+-                        "weight_decay": hyperparams_dict[i]["weight_decay"],
+-                        "epoch": epoch,
+-                        "task_specific_model": {
+-                            k: v.cpu()
+-                            for k, v in task_specific_model.heads[i]
+-                            .state_dict()
+-                            .items()
+-                        },
+-                    }
+-                    if adaptation_type == "lora":
+-                        adapter_state_dicts = []
+-                        for block in attrgetter(block_name)(pretrained_model):
+-                            adapter_state_dicts.append(
++                    improved = (
++                        task_type == "linear_probing"
++                        and metrics[i]["f1"]["metric_score"] > best_val_perf
++                    ) or (
++                        task_type == "segmentation"
++                        and np.array(losses[i]).mean().item() < best_val_perf
++                    )
++                    if improved or not cfg.ckpt_saving.best_only:
++                        ckpt_dict = {
++                            "lr": hyperparams_dict[i]["lr"],
++                            "weight_decay": hyperparams_dict[i]["weight_decay"],
++                            "epoch": epoch,
++                            "task_specific_model": {
++                                k: v.cpu()
++                                for k, v in task_specific_model.heads[i]
++                                .state_dict()
++                                .items()
++                            },
++                        }
++                        if adaptation_type == "lora":
++                            ckpt_dict["adapters"] = [
+                                 {
+                                     k: v.cpu()
+                                     for k, v in attrgetter(qkv_name)(block)
+@@ -274,24 +439,17 @@ def train_probe(
+                                     .state_dict()
+                                     .items()
+                                 }
+-                            )
+-                        ckpt_dict["adapters"] = adapter_state_dicts
+-                    ckpt_epoch_dicts[i] = ckpt_dict
+-
+-                    # Updating best ckpt
+-                    if (
+-                        task_type == "linear_probing"
+-                        and metrics[i]["f1"]["metric_score"] > best_val_perf
+-                    ) or (
+-                        task_type == "segmentation"
+-                        and np.array(losses[i]).mean().item() < best_val_perf
+-                    ):
+-                        if task_type == "linear_probing":
+-                            best_val_perf = metrics[i]["f1"]["metric_score"]
+-                        elif task_type == "segmentation":
+-                            best_val_perf = np.array(losses[i]).mean().item()
+-                        best_ckpt_hyperparam_id = i
+-                        best_ckpt_dict = ckpt_epoch_dicts[best_ckpt_hyperparam_id]
++                                for block in attrgetter(block_name)(pretrained_model)
++                            ]
++                        if not cfg.ckpt_saving.best_only:
++                            ckpt_epoch_dicts[i] = ckpt_dict
++                        if improved:
++                            if task_type == "linear_probing":
++                                best_val_perf = metrics[i]["f1"]["metric_score"]
++                            elif task_type == "segmentation":
++                                best_val_perf = np.array(losses[i]).mean().item()
++                            best_ckpt_hyperparam_id = i
++                            best_ckpt_dict = ckpt_dict
+ 
+             if split == "val" and not cfg.ckpt_saving.best_only:
+                 torch.save(
+@@ -389,7 +547,7 @@ def eval_probe(
+     task_specific_model.load_state_dict(best_ckpt_dict["task_specific_model"])
+ 
+     with local_seed(UtilsConstants.DEFAULT_SEED.value):
+-        if not embedding_pre_loading or task_type == "segmentation":
++        if not embedding_pre_loading:
+             # Loading pretrained model
+             if model_cls is not None:
+                 pretrained_model = model_cls
+@@ -429,12 +587,12 @@ def eval_probe(
+     test_dataset = PatchDataset(
+         (
+             None
+-            if (embedding_pre_loading and task_type != "segmentation")
++            if embedding_pre_loading
+             else data["test"]["images"]
+         ),
+         (
+             None
+-            if (embedding_pre_loading and task_type != "segmentation")
++            if embedding_pre_loading
+             else data["test"]["labels"]
+         ),
+         transform,
+@@ -443,7 +601,7 @@ def eval_probe(
+         base_data_folder,
+         os.path.join(base_embeddings_folder, dataset_name, model_name, "test"),
+         image_pre_loading,
+-        embedding_pre_loading if task_type == "linear_probing" else False,
++        embedding_pre_loading,
+         h5_format=cfg.dataset.h5_format if hasattr(cfg.dataset, "h5_format") else False,
+     )
+     test_dataloader = DataLoader(
+@@ -451,6 +609,8 @@ def eval_probe(
+         batch_size=cfg.adaptation.batch_size,
+         shuffle=False,
+         num_workers=cfg.adaptation.num_workers,
++        pin_memory=True,
++        persistent_workers=cfg.adaptation.num_workers > 0,
+     )
+ 
+     # Test evaluation
+@@ -497,7 +657,7 @@ def eval_probe(
+         cfg.adaptation.epochs,
+     )
+ 
+-    if task_type == "segmentation":
++    if task_type == "segmentation" and test_viz_im is not None:
+         mask_list = wb_mask(
+             test_viz_im.permute((0, 2, 3, 1)).cpu().numpy(),
+             test_viz_pred.cpu().numpy(),
+@@ -555,16 +715,16 @@ def train_eval(
+     ):
+         # Batch data
+         if "emb" in batch.keys():
+-            emb = batch["emb"].to(device)
++            emb = batch["emb"].to(device, non_blocking=True).float()
+             compute_emb = False
+         else:
+-            image = batch["image"].to(device)
++            image = batch["image"].to(device, non_blocking=True)
+             compute_emb = True
+-        label = batch["label"].to(device)
++        label = batch["label"].to(device, non_blocking=True).long()
+ 
+         if run_type == "train":
+             # Zero the parameter gradients
+-            optimizer.zero_grad()
++            optimizer.zero_grad(set_to_none=True)
+ 
+         # Forward pass
+         with torch.set_grad_enabled(run_type == "train"):
+@@ -603,47 +763,58 @@ def train_eval(
+                 curr_loss = criterion(output, label, label != -1)
+ 
+                 if comp_metrics:
+-                    unmasked_label = [l != -1 for l in label]
+-                    label = [l[u] for l, u in zip(label, unmasked_label)]
+-                    out = []
+-                    for o, m in zip(output, unmasked_label):
+-                        out.append(
+-                            torch.cat(
+-                                [o[c][m].unsqueeze(-1) for c in range(o.shape[0])],
+-                                dim=-1,
+-                            )
++                    prediction = output.argmax(dim=1)
++                    valid = label != -1
++                    true_positives = []
++                    false_positives = []
++                    false_negatives = []
++                    for class_id in range(output.shape[1]):
++                        predicted_class = prediction == class_id
++                        true_class = label == class_id
++                        true_positives.append((predicted_class & true_class & valid).sum(dim=(1, 2)))
++                        false_positives.append((predicted_class & ~true_class & valid).sum(dim=(1, 2)))
++                        false_negatives.append((~predicted_class & true_class & valid).sum(dim=(1, 2)))
++                    true_positives = torch.stack(true_positives, dim=1).double()
++                    false_positives = torch.stack(false_positives, dim=1).double()
++                    false_negatives = torch.stack(false_negatives, dim=1).double()
++                    present = true_positives + false_positives + false_negatives > 0
++                    f1 = (
++                        2 * true_positives
++                        / (2 * true_positives + false_positives + false_negatives).clamp(min=1)
++                    ).sum(dim=1) / present.sum(dim=1)
++                    jaccard = (
++                        true_positives
++                        / (true_positives + false_positives + false_negatives).clamp(min=1)
++                    ).sum(dim=1) / present.sum(dim=1)
++                    valid_count = valid.sum(dim=(1, 2))
++                    accuracy = ((prediction == label) & valid).sum(dim=(1, 2)).double() / valid_count
++                    background_only = label.masked_fill(~valid, 0).sum(dim=(1, 2)) == 0
++                    out = torch.stack(
++                        (f1, accuracy, jaccard, valid_count.double(), background_only.double()),
++                        dim=1,
+                         )
+             else:
+-                out = []
+-                for c in range(output.shape[1]):
+-                    out.append(output[:, c].unsqueeze(-1))
+-                out = torch.cat(out, dim=-1)
++                out = output
+                 curr_loss = criterion(out, label)
+             loss += curr_loss
+ 
+             # Logging
+             if batch_id == 0:
+-                tot_loss.append([curr_loss.item()])
++                tot_loss.append([curr_loss.detach()])
+                 if comp_metrics:
+                     all_out.append(
+-                        [[o.detach().cpu() for o in out]]
+-                        if task_type == "segmentation"
+-                        else [out.detach().cpu()]
++                        [out.detach().cpu()] if task_type == "segmentation" else [out.detach()]
+                     )
+             else:
+-                tot_loss[i].append(curr_loss.item())
++                tot_loss[i].append(curr_loss.detach())
+                 if comp_metrics:
+                     all_out[i].append(
+-                        [o.detach().cpu() for o in out]
+-                        if task_type == "segmentation"
+-                        else out.detach().cpu()
++                        out.detach().cpu() if task_type == "segmentation" else out.detach()
+                     )
+         # Logging
+         if comp_metrics:
+-            if task_type == "segmentation":
+-                all_label.extend([l.cpu() for l in label])
+-            else:
+-                all_label.append(label.cpu())
++            if task_type != "segmentation":
++                all_label.append(label)
+ 
+         if run_type == "train":
+             # Compute gradients
+@@ -668,22 +839,10 @@ def train_eval(
+         if task_type == "segmentation":
+             metrics = []
+             for i in range(len(all_out)):
+-                all_out[i] = [
+-                    F.softmax(item, dim=1) for batch in all_out[i] for item in batch
+-                ]
+-                all_metrics = [
+-                    compute_metrics(o, None, l, True, compute_ci=False)
+-                    for o, l in zip(all_out[i], all_label)
+-                    if len(l) > 0
+-                ]
+-                weights = np.array([len(l) for l in all_label if len(l) > 0]).astype(
+-                    np.float32
+-                )
+-
+-                # Finding background-only masks
+-                bg_only = np.array(
+-                    [l.sum().item() == 0 for l in all_label if len(l) > 0]
+-                )
++                values = torch.cat(all_out[i]).numpy()
++                values = values[values[:, 3] > 0]
++                weights = values[:, 3].astype(np.float32)
++                bg_only = values[:, 4].astype(bool)
+                 freq_bg_only = bg_only.sum().item() / len(bg_only)
+                 no_bg_only_weight = max(
+                     1.0, freq_bg_only * cfg.task.no_bg_only_weight_test
+@@ -692,14 +851,15 @@ def train_eval(
+ 
+                 # Averaging per-image performance and computing confidence intervals
+                 all_metrics_out = {}
+-                for key in all_metrics[0]:
+-                    metric_vals = [d[key]["metric_score"] for d in all_metrics]
++                for metric_index, key in enumerate(("f1", "accuracy", "jaccard")):
++                    metric_vals = values[:, metric_index].tolist()
+                     all_metrics_out[key] = compute_metric(
+                         weights.tolist(),
+                         metric_vals,
+                         lambda weights, metric_vals: np.average(
+                             metric_vals, weights=weights
+                         ),
++                        compute_ci=False,
+                     )
+                     all_metrics_out[f"per_sample_{key}"] = metric_vals
+                 metrics.append(all_metrics_out)
+@@ -709,18 +869,34 @@ def train_eval(
+             metrics = []
+             for i in range(len(all_out)):
+                 all_out[i] = torch.cat(all_out[i])
+-                all_out[i] = F.softmax(all_out[i], dim=1)
+-                classification_metrics = compute_metrics(
+-                    all_out[i], None, all_label, compute_ci=(not hyperparam_search)
+-                )
+-                conformal_metrics = compute_calibration_metrics(
+-                    all_out[i], all_label, compute_ci=(not hyperparam_search)
++                if hyperparam_search:
++                    pred = all_out[i].argmax(dim=1)
++                    f1_per_class = []
++                    for class_id in range(all_out[i].shape[1]):
++                        true_positive = ((pred == class_id) & (all_label == class_id)).sum().float()
++                        false_positive = ((pred == class_id) & (all_label != class_id)).sum().float()
++                        false_negative = ((pred != class_id) & (all_label == class_id)).sum().float()
++                        if true_positive + false_positive + false_negative > 0:
++                            f1_per_class.append(
++                                2 * true_positive
++                                / (2 * true_positive + false_positive + false_negative).clamp(min=1)
++                            )
++                    metrics.append({
++                        "f1": {
++                            "metric_score": torch.stack(f1_per_class).mean().item(),
++                            "ci_low": None,
++                            "ci_high": None,
++                        }
++                    })
++                else:
++                    probabilities = F.softmax(all_out[i], dim=1).cpu()
++                    labels_cpu = all_label.cpu()
++                    metrics.append(
++                        compute_metrics(probabilities, None, labels_cpu, compute_ci=False)
++                        | compute_calibration_metrics(probabilities, labels_cpu, compute_ci=False)
+                 )
+-                curr_metrics = (
+-                    classification_metrics | conformal_metrics
+-                )  # merging dictionaries
+-                metrics.append(curr_metrics)
+     else:
+         metrics = None
+ 
++    tot_loss = [[value.item() for value in torch.stack(head).cpu()] for head in tot_loss]
+     return tot_loss, metrics, task_specific_model, optimizer, viz_pred, viz_gt, viz_im
+diff --git a/src/thunder/utils/data.py b/src/thunder/utils/data.py
+index 693c7a1..9a3dd8e 100644
+--- a/src/thunder/utils/data.py
++++ b/src/thunder/utils/data.py
+@@ -48,6 +48,11 @@ def h5_to_np(h5_array: h5py._hl.files.File) -> np.array:
+     :param h5_array: array stored with h5 format.
+     :return numpy array.
+     """
++    if "data" in h5_array:
++        data = np.array(h5_array["data"])
++        if "scales" in h5_array:
++            data = data.astype(np.float32) * np.array(h5_array["scales"], dtype=np.float32)
++        return data
+     return np.concatenate(
+         [np.array(h5_array[str(i)])[None] for i in range(len(h5_array.keys()))]
+     )
+@@ -63,10 +68,12 @@ def load_embeddings(embeddings_folder: str, splits: list):
+     embs = {}
+     labels = {}
+     for split in splits:
+-        h5_embs = h5py.File(os.path.join(embeddings_folder, split, "embeddings.h5"))
+-        h5_labels = h5py.File(os.path.join(embeddings_folder, split, "labels.h5"))
+-        embs[split] = h5_to_np(h5_embs)
+-        labels[split] = h5_to_np(h5_labels)
++        with (
++            h5py.File(os.path.join(embeddings_folder, split, "embeddings.h5")) as h5_embs,
++            h5py.File(os.path.join(embeddings_folder, split, "labels.h5")) as h5_labels,
++        ):
++            embs[split] = h5_to_np(h5_embs)
++            labels[split] = h5_to_np(h5_labels)
+     return embs, labels
+ 
+ 
+@@ -110,7 +117,7 @@ class PatchDataset(Dataset):
+         self.div_patches = div_patches
+         self.h5_format = h5_format
+ 
+-        if (self.h5_format and not embedding_pre_loading) or dataset_name == "pannuke":
++        if not embedding_pre_loading and (self.h5_format or dataset_name == "pannuke"):
+             if self.base_data_folder is not None:
+                 images_path = os.path.join(
+                     self.base_data_folder, self.dataset_name, self.images
+@@ -142,13 +149,11 @@ class PatchDataset(Dataset):
+ 
+                 # Adapted from https://github.com/TIO-IKIM/CellViT/blob/main/cell_segmentation/datasets/prepare_pannuke.py#L61-L64
+                 self.labels = np.zeros((masks.shape[0], 256, 256)).astype(np.int32)
+-                for i in range(masks.shape[0]):
+-                    for j in range(5):
+-                        layer_res = ((j + 1) * np.clip(masks[i, :, :, j], 0, 1)).astype(
+-                            np.int32
+-                        )
+-                        self.labels[i] = np.where(
+-                            layer_res != 0, layer_res, self.labels[i]
++                for class_id in range(1, 6):
++                    np.copyto(
++                        self.labels,
++                        class_id,
++                        where=masks[:, :, :, class_id - 1] > 0,
+                         )
+                 self.labels = torch.Tensor(self.labels).to(torch.int64)
+ 
+@@ -162,7 +167,7 @@ class PatchDataset(Dataset):
+             self.labels_path = os.path.join(embeddings_folder, "labels.h5")
+ 
+             with h5py.File(self.labels_path, "r") as lab_h5:
+-                self._len = len(lab_h5)
++                self._len = lab_h5["data"].shape[0] if "data" in lab_h5 else len(lab_h5)
+ 
+             if self.task_type == "linear_probing":
+                 # Pre-loading embeddings and labels for linear probing as faster
+@@ -192,13 +197,18 @@ class PatchDataset(Dataset):
+ 
+         if self.embedding_pre_loading:
+             if not self.task_type == "linear_probing":
+-                key = str(index)
+-                with (
+-                    h5py.File(self.embeddings_path, "r") as emb_h5,
+-                    h5py.File(self.labels_path, "r") as lab_h5,
+-                ):
+-                    emb = emb_h5[key][()]
+-                    label = lab_h5[key][()]
++                if getattr(self, "_emb_h5", None) is None:
++                    self._emb_h5 = h5py.File(self.embeddings_path, "r")
++                    self._lab_h5 = h5py.File(self.labels_path, "r")
++                if "data" in self._emb_h5:
++                    emb = self._emb_h5["data"][index]
++                    if "scales" in self._emb_h5:
++                        emb = emb.astype(np.float32) * self._emb_h5["scales"][index].astype(np.float32)
++                    label = self._lab_h5["data"][index]
++                else:
++                    key = str(index)
++                    emb = self._emb_h5[key][()]
++                    label = self._lab_h5[key][()]
+             else:
+                 emb = self.embeddings[index]
+                 label = self.labels[index]
+@@ -225,10 +235,11 @@ class PatchDataset(Dataset):
+                 label_path = os.path.join(
+                     self.base_data_folder, self.dataset_name, label_path
+                 )
+-            label = Image.open(label_path)
+-            # Sampling patch in WSI
+-            label = F.pil_to_tensor(label)
+-            label = label[
++            if getattr(self, "_cached_label_path", None) != label_path:
++                with Image.open(label_path) as label_image:
++                    self._cached_label = F.pil_to_tensor(label_image)
++                self._cached_label_path = label_path
++            label = self._cached_label[
+                 0,
+                 label_patch_i_min:label_patch_i_max,
+                 label_patch_j_min:label_patch_j_max,
+@@ -248,17 +259,12 @@ class PatchDataset(Dataset):
+         else:
+             image, viz_image = self.images[index]
+ 
++        sample = {"image": image, "label": label}
+         if viz_image is not None:
+-            return {
+-                "image": image,
+-                "label": label,
+-                "viz_image": viz_image,
+-            }
+-        else:
+-            return {
+-                "image": image,
+-                "label": label,
+-            }
++            sample["viz_image"] = viz_image
++        if self.task_type == "segmentation":
++            sample["index"] = index
++        return sample
+ 
+     def image_loading(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+         """
+@@ -289,12 +295,19 @@ class PatchDataset(Dataset):
+                 image_path = os.path.join(
+                     self.base_data_folder, self.dataset_name, image_path
+                 )
+-            image = Image.open(image_path).convert("RGB")
++            if self.task_type == "segmentation":
++                if getattr(self, "_cached_image_path", None) != image_path:
++                    with Image.open(image_path) as image_file:
++                        self._cached_image = F.pil_to_tensor(image_file.convert("RGB"))
++                    self._cached_image_path = image_path
++                image = self._cached_image
++            else:
++                with Image.open(image_path) as image_file:
++                    image = image_file.convert("RGB")
+ 
+         if self.task_type == "segmentation":
+             if self.dataset_name != "pannuke":
+                 # Sampling patch in WSI
+-                image = F.pil_to_tensor(image)
+                 image = image[
+                     :, im_patch_i_min:im_patch_i_max, im_patch_j_min:im_patch_j_max
+                 ]
+diff --git a/src/thunder/utils/results.py b/src/thunder/utils/results.py
+index 4297bd3..04c74be 100644
+--- a/src/thunder/utils/results.py
++++ b/src/thunder/utils/results.py
+@@ -241,13 +241,11 @@ def gather_results():
+                 metric_dict = base_dict.copy()
+                 metric_dict["metric"] = metric
+                 value_dict = result_dict[metric]
+-                write_line = True
++                write_line = value_dict["metric_score"] is not None
+                 for val_type in value_dict.keys():
+                     value = value_dict[val_type]
+                     if value is not None:
+                         value = round(100 * value, 1)
+-                    else:
+-                        write_line = False
+                     metric_dict[val_type] = value
+ 
+                 if write_line:

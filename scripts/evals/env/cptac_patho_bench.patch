@@ -1,0 +1,176 @@
+diff --git a/patho_bench/DatasetFactory.py b/patho_bench/DatasetFactory.py
+index 24dd276..ad32323 100644
+--- a/patho_bench/DatasetFactory.py
++++ b/patho_bench/DatasetFactory.py
+@@ -1,15 +1,8 @@
+ import os
+ import torch
+-from einops import rearrange
+-try:
+-    from einops._torch_specific import allow_ops_in_compiled_graph; allow_ops_in_compiled_graph()  # https://github.com/arogozhnikov/einops/wiki/Using-torch.compile-with-einops
+-finally:
+-    pass
+-from patho_bench.datasets.PatchEmbeddingsDataset import PatchEmbeddingsDataset
+ from patho_bench.datasets.SlideEmbeddingsDataset import SlideEmbeddingsDataset
+ from patho_bench.datasets.LabelDataset import LabelDataset
+ from patho_bench.datasets.CombinedDataset import CombinedDataset
+-from patho_bench.Pooler import Pooler
+ from patho_bench.helpers.GPUManager import GPUManager
+ 
+ """
+@@ -62,6 +55,7 @@ class DatasetFactory:
+         '''
+         
+         if patch_embeddings_dirs:
++            from patho_bench.Pooler import Pooler
+             # If patch_embeddings_dirs is provided, will prepare pooled features from patch features (this will skip over slides that have already been pooled)
+             print('\033[94m' + f'Pooling features to {pooled_embeddings_dir}, using {model_name}...' + '\033[0m')
+             pooler = Pooler(patch_embeddings_dataset = DatasetFactory._patch_embeddings_dataset(split, patch_embeddings_dirs, combine_slides_per_patient, bag_size = None),
+@@ -89,6 +83,7 @@ class DatasetFactory:
+         if isinstance(patch_embeddings_dirs, str):
+             patch_embeddings_dirs = [patch_embeddings_dirs]
+             
++        from patho_bench.datasets.PatchEmbeddingsDataset import PatchEmbeddingsDataset
+         return PatchEmbeddingsDataset(split,
+                                       load_from = list(set(patch_embeddings_dirs)),
+                                     #   preprocessor= {'features': lambda x: rearrange(x, "1 p f -> p f"),
+diff --git a/patho_bench/ExperimentFactory.py b/patho_bench/ExperimentFactory.py
+index 8ab3a9f..624eb63 100644
+--- a/patho_bench/ExperimentFactory.py
++++ b/patho_bench/ExperimentFactory.py
+@@ -7,13 +7,9 @@ from patho_bench.experiments.RetrievalExperiment import RetrievalExperiment
+ from patho_bench.experiments.CoxNetExperiment import CoxNetExperiment
+ from patho_bench.experiments.FinetuningExperiment import FinetuningExperiment
+ from patho_bench.experiments.GeneralizabilityExperimentWrapper import GeneralizabilityExperimentWrapper
+-from patho_bench.TrainableSlideEncoder import TrainableSlideEncoder
+ from patho_bench.SplitFactory import SplitFactory
+ from patho_bench.DatasetFactory import DatasetFactory
+-from patho_bench.helpers.GPUManager import GPUManager
+-from patho_bench.optim.NLLSurvLoss import NLLSurvLoss
+ from sklearn.utils.class_weight import compute_class_weight
+-from trident.slide_encoder_models.load import encoder_factory
+ 
+ """
+ This file contains the ExperimentFactory class which is responsible for instantiating the appropriate experiment object.
+@@ -307,6 +303,9 @@ class ExperimentFactory:
+         task_name = task_info['task_col']
+ 
+         ###### Get loss ################################################################
++        from patho_bench.TrainableSlideEncoder import TrainableSlideEncoder
++        from patho_bench.helpers.GPUManager import GPUManager
++        from patho_bench.optim.NLLSurvLoss import NLLSurvLoss
+         if task_info['task_type'] == 'survival':
+             loss = NLLSurvLoss(alpha=0.0, eps=1e-7, reduction='mean')
+         elif balanced:
+@@ -317,6 +316,7 @@ class ExperimentFactory:
+             loss = nn.CrossEntropyLoss()
+         
+         ###### Configure model ################################################################
++        from trident.slide_encoder_models.load import encoder_factory
+         model_name_clean = model_name.replace("-randominit", "")
+         slide_encoder = encoder_factory(model_name_clean, pretrained = False if 'randominit' in model_name or model_name.startswith('abmil') else True, freeze=False, **model_kwargs)
+ 
+diff --git a/patho_bench/SplitFactory.py b/patho_bench/SplitFactory.py
+index 4f67bdb..a1d246b 100644
+--- a/patho_bench/SplitFactory.py
++++ b/patho_bench/SplitFactory.py
+@@ -1,7 +1,6 @@
+ import os
+ import shutil
+ import yaml
+-import datasets
+ from patho_bench.datasets.DataSplit import DataSplit
+ 
+ 
+@@ -46,6 +45,7 @@ class SplitFactory:
+         path_to_split = os.path.join(saveto, source, task, f'k=all.tsv')
+         path_to_config = os.path.join(saveto, source, task, 'config.yaml')
+         if not os.path.exists(path_to_split):
++            import datasets
+             # Download split from HuggingFace
+             try:
+                 print(f"Downloading split for task {task} from {source}...")
+diff --git a/patho_bench/datasets/BaseDataset.py b/patho_bench/datasets/BaseDataset.py
+index fc0518d..99b91ec 100644
+--- a/patho_bench/datasets/BaseDataset.py
++++ b/patho_bench/datasets/BaseDataset.py
+@@ -246,5 +246,5 @@ class BaseDataset(torch.utils.data.Dataset, ConfigMixin):
+         return torch.utils.data.DataLoader(subset_dataset,
+                                             batch_size = len(subset_dataset) if batch_size is None else batch_size,
+                                             sampler = subset_dataset.get_datasampler('random'),
+-                                            num_workers = 4,
+-                                            collate_fn = subset_dataset.collate_fn)
+\ No newline at end of file
++                                            num_workers = 0,
++                                            collate_fn = subset_dataset.collate_fn)
+diff --git a/patho_bench/datasets/DataSplit.py b/patho_bench/datasets/DataSplit.py
+index 33b6261..05db431 100644
+--- a/patho_bench/datasets/DataSplit.py
++++ b/patho_bench/datasets/DataSplit.py
+@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
+ from sklearn.model_selection import train_test_split as compute_split
+ from sklearn.model_selection import StratifiedKFold
+ from patho_bench.config.ConfigMixin import ConfigMixin
+-from IPython.display import display
+ from patho_bench.config.JSONSaver import JSONsaver
+ 
+ """
+@@ -175,10 +174,10 @@ class DataSplit(ConfigMixin):
+             # Make dict of label values
+             label_to_int = {label: i for i, label in enumerate(sorted(unique_labels))}
+             print('Generated int-to-label mapping:')
+-            display({str(v): k for k, v in label_to_int.items()})
++            print({str(v): k for k, v in label_to_int.items()})
+         else:
+             print('Using provided int-to-label mapping:')
+-            display(int_to_label)
++            print(int_to_label)
+             label_to_int = {v: int(k) for k, v in int_to_label.items()}
+ 
+         # Convert labels to integers
+diff --git a/patho_bench/experiments/CoxNetExperiment.py b/patho_bench/experiments/CoxNetExperiment.py
+index 9294c0d..bf3cb61 100644
+--- a/patho_bench/experiments/CoxNetExperiment.py
++++ b/patho_bench/experiments/CoxNetExperiment.py
+@@ -52,6 +52,7 @@ class CoxNetExperiment(BaseExperiment):
+         
+         print(f'Running CoxNet experiment on task {self.task_name} with alpha={self.alpha}...')
+         self.models = {}
++        self.train_error = None
+         
+         loop = tqdm(range(self.dataset.num_folds), desc='Training')
+         for self.current_iter in loop:   # Loop through folds
+@@ -74,6 +75,7 @@ class CoxNetExperiment(BaseExperiment):
+                 model.fit(all_train_samples['slide']['features'], train_y)
+                 self.models[self.current_iter] = model
+             except Exception as e:
++                self.train_error = str(e)
+                 print(f"\033[91mWARNING: {e}\033[0m")
+                 return
+             
+@@ -172,4 +174,4 @@ class CoxNetExperiment(BaseExperiment):
+         structured_array = np.empty(len(events), dtype=[('Event Indicator', 'bool'), ('Time', 'float')])
+         structured_array['Event Indicator'] = events.numpy().astype(bool)
+         structured_array['Time'] = times.numpy()
+-        return structured_array
+\ No newline at end of file
++        return structured_array
+diff --git a/patho_bench/experiments/LinearProbeExperiment.py b/patho_bench/experiments/LinearProbeExperiment.py
+index b0f5c97..0a8acae 100644
+--- a/patho_bench/experiments/LinearProbeExperiment.py
++++ b/patho_bench/experiments/LinearProbeExperiment.py
+@@ -71,7 +71,6 @@ class LinearProbeExperiment(ClassificationMixin, BaseExperiment):
+             model = LogisticRegression(
+                 C = (embedding_dim * self.num_classes / 100) if self.cost == 'adaptive' else self.cost,
+                 max_iter=self.max_iter,
+-                n_jobs=-1,
+                 verbose=0,
+                 random_state=0,
+                 class_weight="balanced" if self.balanced_class_weights else None
+@@ -158,4 +157,4 @@ class LinearProbeExperiment(ClassificationMixin, BaseExperiment):
+             summary = self.get_mean_se(all_scores_across_folds)
+ 
+         with open(os.path.join(self.results_dir, f'{split}_metrics_summary.json'), 'w') as f:
+-            json.dump(summary, f, indent=4)
+\ No newline at end of file
++            json.dump(summary, f, indent=4)

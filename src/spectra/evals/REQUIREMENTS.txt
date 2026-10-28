@@ -1,0 +1,15 @@
+# spectra.evals runtime deps (benchmark venvs); spectra.evals itself imports with the stdlib only.
+# Verified import: python 3.11 + 3.13, torch 2.8-2.11, timm 1.0.20-1.0.30.
+torch
+torchvision
+timm>=1.0.19
+safetensors
+numpy
+huggingface_hub
+pyyaml
+pillow
+# LoRA run checkpoints (imported lazily; the base backbone loads without it):
+peft==0.20.0
+# only for transformers-architecture backbones (owkin/phikon-v2, kaiko-ai/midnight); imported
+# lazily. timm backbones (H-optimus-0, UNI2-h, Virchow/Virchow2, OpenMidnight) never import it:
+# transformers

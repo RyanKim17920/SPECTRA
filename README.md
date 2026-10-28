@@ -17,6 +17,30 @@ after the fact. This repo is the method and its evaluation harness: 7 backbones 
 (robustness index, the primary metric, never seen in training), HEST, THUNDER, CPTAC and
 held-out PLISM retrieval.
 
+## SPECTRA v2
+
+A simplified post-paper recipe (code: `src/spectra/sweep`, `src/spectra/evals`, `scripts/sweep`,
+`scripts/evals`). The paper trained 500 steps and selected the checkpoint with the ε = 0.007
+tolerance rule on the PathoROB RI curve. v2 instead uses:
+
+- one CLS head (no GeM head); two temperatures τ {0.1, 0.6}, weights 0.5 / 0.5
+- same-core negatives kept as ordinary negatives (no +3 bias)
+- queue adversary: linear stain and scanner heads, gradient reversal, 8192-feature memory bank
+- slope-rule stopping on held-out PLISM selection runs (no benchmark data read)
+
+```bash
+python scripts/sweep/submit.py configs/v2/q8_selection.yaml --sweep q8_selection --seeds 0,1,2 -o backbone.name=uni2
+python scripts/sweep/select.py --sweep q8_selection        # slope-rule pick per run
+python scripts/sweep/make_final.py --backbone uni2 --picks <p0,p1,p2> --out configs/v2/q8_final_uni2.yaml
+python scripts/sweep/submit.py configs/v2/q8_final_uni2.yaml --sweep q8_final --seeds 0,1,2
+bash scripts/evals/run_hest.sbatch --backbone uni2 --ckpt $SPECTRA_RUNS_DIR/q8_final/<run> --step <pick>
+```
+
+Set `SPECTRA_PLISM_DIR`, `SPECTRA_RUNS_DIR`, `SPECTRA_CACHE_DIR` and `SPECTRA_SBATCH_ARGS`
+first. The other benchmarks use `run_pathorob.sbatch`, `run_thunder.sbatch`, `run_cptac.sbatch`.
+
+Results: pending.
+
 ## Results
 
 Fine-tuned values are the mean over 3 seeds, each at its own tolerance-rule-selected

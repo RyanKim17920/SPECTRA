@@ -1,0 +1,137 @@
+diff --git a/src/hest/bench/benchmark.py b/src/hest/bench/benchmark.py
+index f7179ac..3f18bcf 100644
+--- a/src/hest/bench/benchmark.py
++++ b/src/hest/bench/benchmark.py
+@@ -11,6 +11,7 @@ from argparse import Namespace
+ 
+ import numpy as np
+ import pandas as pd
++import h5py
+ import torch
+ import torch.multiprocessing
+ from torch.utils.data import DataLoader
+@@ -24,12 +25,9 @@ from trident.patch_encoder_models import CustomInferenceEncoder, encoder_factory
+ 
+ torch.multiprocessing.set_sharing_strategy('file_system')
+ 
+-from huggingface_hub import snapshot_download
+-
+ from hest.bench.st_dataset import H5PatchDataset, load_adata
+ from hest.bench.trainer import train_test_reg
+-from hest.bench.utils.file_utils import (read_assets_from_h5, save_hdf5,
+-                                         save_pkl)
++from hest.bench.utils.file_utils import read_assets_from_h5, save_pkl
+ from hest.bench.utils.utils import merge_dict, get_current_time
+ 
+ # Generic training settings - note that defaults are set in BenchmarkConfig
+@@ -173,8 +171,7 @@ def _to_numpy(value):
+     else:
+         arr = np.asarray(value)
+     if arr.dtype.kind == "U":
+-        max_len = max((len(x) for x in arr.flatten()), default=1)
+-        arr = arr.astype(f"S{max_len}")
++        arr = arr.astype(object)
+     return arr
+ 
+ 
+@@ -202,19 +199,30 @@ def embed_tiles(
+ ):
+     """Extract embeddings from patch tiles and save to HDF5."""
+     model.eval()
+-    for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
+-        imgs = batch['imgs'].to(device).float()
+-        with torch.inference_mode(), torch.amp.autocast('cuda', dtype=precision):
+-            embeddings = model(imgs)
+-        if batch_idx == 0:
+-            mode = 'w'
+-        else:
+-            mode = 'a'
+-        asset_dict = {'embeddings': embeddings.cpu().numpy()}
+-        asset_dict.update({key: _to_numpy(val) for key, val in batch.items() if key != 'imgs'})
+-        save_hdf5(embedding_save_path,
+-                  asset_dict=asset_dict,
+-                  mode=mode)
++    with h5py.File(embedding_save_path, "w") as output:
++        offset = 0
++        for batch in tqdm(dataloader):
++            imgs = batch['imgs'].to(device, non_blocking=True).float()
++            with torch.inference_mode(), torch.amp.autocast(
++                'cuda', dtype=precision, enabled=precision != torch.float32
++            ):
++                embeddings = model(imgs)
++            assets = {'embeddings': embeddings.cpu().numpy()}
++            assets.update({key: _to_numpy(val) for key, val in batch.items() if key != 'imgs'})
++            batch_size = len(embeddings)
++            for key, values in assets.items():
++                if values.ndim == 1:
++                    values = values[:, None]
++                assert len(values) == batch_size
++                if key not in output:
++                    dtype = h5py.string_dtype(encoding="utf-8") if values.dtype == object else values.dtype
++                    output.create_dataset(
++                        key, shape=(0, *values.shape[1:]), maxshape=(None, *values.shape[1:]),
++                        chunks=True, dtype=dtype,
++                    )
++                output[key].resize(offset + batch_size, axis=0)
++                output[key][offset:offset + batch_size] = values
++            offset += batch_size
+     return embedding_save_path
+ 
+ 
+@@ -236,7 +244,6 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name,
+     logger.info(f"Embedding tiles for {dataset_name} using {model_name} encoder")
+     if model_name == 'custom_encoder':
+         encoder = custom_encoder
+-        args.overwrite = True # always overwrite custom encoders
+     else:
+         encoder = encoder_factory(model_name)
+     precision = encoder.precision
+@@ -257,7 +264,10 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name,
+                     tile_dataloader = torch.utils.data.DataLoader(tile_dataset, 
+                                                             batch_size=args.batch_size, 
+                                                             shuffle=False,
+-                                                            num_workers=args.num_workers)
++                                                            num_workers=args.num_workers,
++                                                            pin_memory=True,
++                                                            persistent_workers=args.num_workers > 0,
++                                                            prefetch_factor=4 if args.num_workers > 0 else None)
+                     
+                     _ = embed_tiles(tile_dataloader, encoder, embed_path, device, precision)
+                 else:
+@@ -436,8 +446,8 @@ def benchmark(
+         
+     set_seed(args.seed)
+ 
+-    logger.info(f'Fetch the bench data...')
+-    snapshot_download(repo_id="MahmoodLab/hest-bench", repo_type='dataset', local_dir=args.bench_data_root, ignore_patterns=['fm_v1/*'])
++    for dataset in args.datasets:
++        assert os.path.isdir(os.path.join(args.bench_data_root, dataset)), dataset
+     
+     
+     logger.info(f'Benchmarking on the following datasets {args.datasets}')
+diff --git a/src/hest/bench/st_dataset.py b/src/hest/bench/st_dataset.py
+index 5765596..a80c05d 100644
+--- a/src/hest/bench/st_dataset.py
++++ b/src/hest/bench/st_dataset.py
+@@ -25,13 +25,14 @@ class H5PatchDataset(Dataset):
+         return self.length
+ 
+     def __getitem__(self, idx):
+-        with h5py.File(self.h5_path, "r") as f:
+-            img = f[self.img_key][idx]
+-            coords = f[self.coords_key][idx]
+-            if self.barcodes_key is not None:
+-                barcode = f[self.barcodes_key][idx]
+-            else:
+-                barcode = b""
++        if getattr(self, "_h5", None) is None:
++            self._h5 = h5py.File(self.h5_path, "r")
++        img = self._h5[self.img_key][idx]
++        coords = self._h5[self.coords_key][idx]
++        if self.barcodes_key is not None:
++            barcode = self._h5[self.barcodes_key][idx]
++        else:
++            barcode = b""
+ 
+         if isinstance(barcode, np.ndarray) and barcode.shape:
+             barcode = barcode[0]

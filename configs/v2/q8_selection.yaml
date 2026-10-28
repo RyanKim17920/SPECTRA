@@ -1,0 +1,59 @@
+# Q8 held-out SELECTION run (one per backbone x seed). Trains on 72 of 91 PLISM conditions
+# (scanner GT450 and stain MY held out) and on all tissue cores except 7 held-out ones; the
+# in-run PLISM eval scores the held-out cores under every condition every 25 steps, and the
+# slope rule (scripts/sweep/select.py) picks the stop step from that series.
+#
+#   python scripts/sweep/submit.py configs/v2/q8_selection.yaml --sweep q8_selection \
+#       --seeds 0,1,2 -o backbone.name=uni2       # and -o backbone.name=hoptimus
+backbone:
+  name: uni2
+  grad_checkpointing: true
+adapt:
+  mode: lora
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.0
+  lora_targets: both
+head:                     # single CLS head
+  proj_dim: 512
+  proj_hidden: 1024
+  proj_bn: true
+objective:                # multi-temperature grid InfoNCE, same-core negatives kept
+  taus: [0.1, 0.6]
+  tau_weights: [0.5, 0.5]
+adv:                      # queue adversary (linear heads, DANN-ramped GRL)
+  targets: [stain, scanner]
+  lambda: 0.1
+  weight: 1.0
+  lr: 1.0e-3
+  weight_decay: 0.0
+  queue: 8192
+batch:
+  n_cond: 2
+  n_tiles: 256
+  heldout_scanners: [GT450]
+  heldout_stains: [MY]
+  heldout_cores: [5, 12, 13, 35, 36, 38, 45]
+  workers: 8
+optim:
+  lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_steps: 200
+  steps: 400              # cosine horizon
+  stop_step: 250          # selection runs stop here; the slope rule picks within 75..250
+  grad_clip: 1.0
+ckpt:
+  every: 25
+  resume_every: 25
+  keep_last: 0
+  dtype: bfloat16
+eval:
+  every: 25
+  at_start: true
+  locations_per_core: 64
+  bootstrap: 200
+  exclude_conditions: [HRH_S60]
+  readouts: [cls, clsmean]
+  guard: auto
+run:
+  seed: 0

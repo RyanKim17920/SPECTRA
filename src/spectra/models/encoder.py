@@ -61,7 +61,10 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel
+try:
+    from transformers import AutoModel
+except ImportError:  # timm-only inference venvs (spectra.evals); only transformers backbones need it
+    AutoModel = None
 
 from spectra.models import backbones as _bb
 from spectra.models.pooling import POOL_HEAD_NAMES, build_pool_head
@@ -760,6 +763,8 @@ class SpectraEncoder(nn.Module):
             #: itself, so we read it rather than assuming.
             self.num_prefix_tokens = int(getattr(backbone, "num_prefix_tokens", 1))
         else:
+            if AutoModel is None:
+                raise ModuleNotFoundError(f"{cfg.backbone} is a transformers backbone: install transformers")
             backbone = AutoModel.from_pretrained(cfg.backbone)
             # Everything geometric is READ OFF THE LOADED CONFIG. Nothing here may be a
             # literal: phikon-v2 is 1024/24/patch16, midnight is 1536/40/patch14.

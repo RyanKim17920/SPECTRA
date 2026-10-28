@@ -1,0 +1,18 @@
+--- a/src/thunder/tasks/pre_computing_patch_embeddings.py
++++ b/src/thunder/tasks/pre_computing_patch_embeddings.py
+@@ -143,7 +143,14 @@
+     """
+     final_folder = embeddings_folder
+     if task_type == "linear_probing":
+-        embeddings_folder = os.path.join("/tmp/thunder_emb", final_folder.lstrip("/"))
++        # SPECTRA local fix (scripts/evals/env/thunder_local.patch): user- and job-scoped
++        # node-local staging. Upstream /tmp/thunder_emb is owned by whichever user creates it
++        # first on a shared node (PermissionError for everyone else) and is shared by two
++        # concurrent jobs of the same user. Staging path only; numerically a no-op.
++        embeddings_folder = os.path.join(
++            f"/tmp/{os.environ.get('USER', 'nouser')}/thunder_emb_{os.environ.get('SLURM_JOB_ID', 'local')}",
++            final_folder.lstrip("/"),
++        )
+         if os.path.exists(embeddings_folder):
+             shutil.rmtree(embeddings_folder)
+     os.makedirs(embeddings_folder, exist_ok=True)

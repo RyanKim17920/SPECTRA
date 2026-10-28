@@ -1,0 +1,10 @@
+# PathoROB eval pins
+extraction_venv: python 3.12.11 -> pathorob_extract_venv_freeze.txt
+metrics_venv:    python 3.12.11 -> pathorob_metrics_venv_freeze.txt
+PathoROB tree:   third_party/PathoROB  rev 6583cf0b0d902c8cc032308262fa3a3befdc0687  (upstream bifold-pathomics/PathoROB 6583cf0)
+PathoROB patch:  scripts/evals/env/pathorob_bootstrap_ri.patch  sha256 88b4de13e9f39d2df11a7a04431098734e55492d43414dd431705d3ebc93b3b9  (applied; RI value itself untouched, adds robustness_index-mean/std)
+croma tree:      third_party/croma  rev 873612e1bfc8090bd95de8ffbc6b69cd387f0c95
+croma adapter:   scripts/evals/pathorob_croma_adapter.py
+PathoROB metadata: third_party/PathoROB/data/metadata
+HF parquets:     HF_HUB_OFFLINE=1 with bifold-pathomics/PathoROB-{camelyon,tcga,tolkach_esca} in HF_HOME
+model code:      spectra.evals via PYTHONPATH=$SPECTRA_REPO/src
