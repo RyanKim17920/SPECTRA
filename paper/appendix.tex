@@ -1,0 +1,341 @@
+% Appendix for neurips_2026.tex. Split out for clarity; \input from the main file
+% immediately after the bibliography. Do not add \documentclass or \begin{document}
+% here -- this file is included, not compiled on its own.
+\appendix
+
+\section{Method details}
+\label{app:pseudo}
+
+\paragraph{GeM view.} With $P$ patch tokens $u_1,\dots,u_P$ and learned exponent
+$\rho\in[1,8]$, the \textsc{gem} view is
+\begin{equation}
+v^{\textsc{gem}}_{c,i}
+=\Big(\frac{1}{P}\sum_{p=1}^{P}\operatorname{softplus}(u_p)^{\rho}\Big)^{1/\rho},
+\label{eq:gem}
+\end{equation}
+softplus and both powers in~\eqref{eq:gem} acting elementwise.
+
+\paragraph{Reweighting.} Each location $i$ carries a fixed pseudo-group $q_i$, meant to represent
+the same tissue type. The softmax weight of candidate $j$ against query $i$ for head $h$ is
+\begin{equation}
+w^h_{ij}=\begin{cases}
+\omega_h,&q_i=q_j\ \text{and}\ i\neq j,\\
+1,&\text{otherwise,}
+\end{cases}
+\label{eq:w}
+\end{equation}
+with $\omega_{\textsc{cls}}=e^{3}\approx20$ and $\omega_{\textsc{gem}}=0$. The positive has
+$w^h_{ii}=1$ and is never reweighted; $\omega_h=1$ in~\eqref{eq:w} recovers standard InfoNCE. This up-weights same-pseudo-group negatives in the CLS loss and excludes them from the GeM loss.
+
+\paragraph{Map construction.} We construct the same pseudo-groups for all models before training. First, the row and column stored in every tile
+key are placed on a binary occupancy lattice. 
+Directionally connected components along all eight directions are merged to create contiguous spatial regions. 
+A component smaller than one quarter of the
+median component size is assigned to the nearest larger component by centroid distance. This
+geometry-only stage results in 49 groupings, which is 3 more than the 46 tissue types.
+
+We then embed every tile from one reference condition (GMH stain, S60 scanner) with frozen
+Virchow2, concatenating its CLS and mean-patch embeddings. Embeddings are averaged and
+$\ell_2$-normalized within each spatial component, and cosine distances are computed between
+the 49 component means. Average-linkage hierarchical clustering is cut at 46 groups, using
+PLISM's documented category count as the intended grouping and thereby forcing three
+merges. This does not guarantee that the recovered components correspond one-to-one
+with the 46 categories. Every coordinate inherits its component's cluster.
+
+\section{Checkpoint selection}
+\label{app:selection}
+
+Let $R_t$ be PathoROB average RI at checkpoint index $t$ (evaluated every 50 optimizer steps) and $B_t=\max_{s\le t}R_s$. Per seed,
+\begin{align}
+t_{\mathrm{stop}} &= \min\{\,t\ge 2 : R_t-B_{t-1}\le\epsilon\,\}, \\
+t^\star &= \min\{\,t\le t_{\mathrm{stop}} : R_t\ge B_{t_{\mathrm{stop}}}-\epsilon\,\},
+\end{align}
+with $\epsilon=0.007$, the largest average-RI difference in a two-run pilot. Every selected step
+lies in $100$--$200$ (Figure~\ref{fig:ristep}, Table~\ref{tab:selected}), inside the 200-step
+warmup and under one pass over the training grid.
+
+\begin{table}[htbp]
+\caption{Selected checkpoint step per backbone and adapter seed under the rule above.
+Columns are seed identifiers: Midnight-12k, Virchow2 and H-optimus-0 use seeds 0, 1, 3, the
+others 0, 1, 2.}
+\label{tab:selected}
+\centering
+\begin{tabular}{lccc}
+\toprule
+Backbone & Seed 0 & Seed 1 & Seed 2\,/\,3 \\
+\midrule
+Phikon-v2 & 200 & 200 & 200 \\
+Midnight-12k & 150 & 100 & 100 \\
+Virchow2 & 100 & 150 & 100 \\
+H-optimus-0 & 100 & 100 & 100 \\
+UNI2-h & 100 & 150 & 100 \\
+Virchow & 150 & 150 & 150 \\
+OpenMidnight & 150 & 150 & 150 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figures/ri_vs_step.pdf}
+\caption{PathoROB RI against step for all 21 runs (three seeds per backbone). Circles mark
+the selected checkpoint, the band is steps $100$--$200$, and the dashed line is the base
+model. Each panel has its own $y$-range.}
+\label{fig:ristep}
+\end{figure}
+
+\section{Evaluation protocol details}
+\label{app:evaluation}
+
+\paragraph{PathoROB.}
+We run the benchmark's own harness unchanged at a pinned revision, so RI follows its published
+definition~\citep{koemen2026pathorob} (\S\ref{sec:experiments}): for every query tile the $k$ nearest neighbours are found
+by cosine similarity over $\ell_2$-normalized embeddings. Embeddings are the CLS token concatenated with the mean patch token
+for every backbone, the pooling of the benchmark's reference rows, without projection heads.
+$k=61$, $11$, $46$ for TCGA $2\times2$, Camelyon, Tolkach-ESCA, the harness's per-dataset defaults. \texttt{prediction\_performance}
+is the fraction of $k$ nearest neighbours sharing the biological class, pooled over same- and
+other-centre neighbours. The submetrics tabulated in Appendix Table~\ref{tab:pathorob-sub}
+follow the same harness: balanced accuracy is $k$-NN balanced accuracy at $k_{\mathrm{opt}}$,
+and ID, OOD and pooled purity are the fractions of same-centre, other-centre and all $k$
+nearest neighbours that share the biological class. All five are higher-is-better. Our base RI reproduces the published rows to $0.004$ or better except
+H-optimus-0 (TCGA $0.803$ vs $0.812$, Camelyon $0.679$ vs $0.705$); both H-optimus-0 columns are
+our own measurement. Midnight-12k and OpenMidnight are absent from the published field, so they
+are ranked by insertion rather than substitution, making that field 24 models rather than 23.
+
+\paragraph{Held-out PLISM retrieval.}
+Every condition is sampled at the same 256 coordinates. The embedding concatenates the CLS token and the mean patch token, with no projection head. A pair is two acquisition conditions that differ in scanner alone or in stain alone, and both conditions are held out from training. One supplies the 256 query tiles, the other the 256 candidates at the same coordinates. We rank candidates by cosine similarity after $\ell_2$ normalisation and score top-1 accuracy per pair, then average over pairs. PLISM-wsi spans seven scanners (AT2, GT450, P, S210, S360, S60, SQ) and 13 staining protocols (GIV, GIVH, GM, GMH, GV, GVH, HR, HRH, KR, KRH, LM, LMH, MY, in PLISM's codes). The 41 held-out conditions (\S\ref{sec:data}) comprise 20 with an unseen scanner, 15 with an unseen stain, and six with both. This gives 73 cross-scanner pairs and 171 cross-stain pairs. These aggregates test held-out acquisition conditions; the varied scanner or stain is not necessarily unseen.
+
+\paragraph{HEST.}
+We use the official train/test splits and 50-gene list per task. Standardization and
+256-dimensional PCA are fit on training embeddings only. Ridge is applied with HEST defaults. We report Pearson $r$ per
+gene, averaged over genes within a task, then over nine tasks. Pooling is CLS for Phikon-v2,
+Midnight-12k, H-optimus-0, UNI2-h, OpenMidnight, and concatenated CLS and mean-patch for
+Virchow2 and Virchow, identical for base and fine-tuned. Base averages reproduce published rows
+to $0.0010$.
+
+\paragraph{CPTAC.}
+We test models across 38 Patho-Bench \citep{pathobench} CPTAC classification tasks, on the benchmark's published splits: nine on
+COAD, five on LUAD, four each on CCRCC and LSCC, three each on BRCA, GBM, HNSC and UCEC, two on
+PDA, and one each on LUNG (subtype) and OV. Targets are gene-mutation status, MSI-H, histologic
+grade, immune class and subtype. Tile embeddings are mean-pooled to a slide vector and, for
+case-level tasks, slides are mean-pooled to a case vector; the probe is the benchmark's
+class-balanced logistic regression ($C=0.5$, 100 bootstraps), and the metric is macro
+one-vs-rest AUC, averaged without weighting over the 38 tasks (Table~\ref{tab:hestcptac}; per
+task in Table~\ref{tab:cptac-per-task}). Pooling is CLS for Phikon-v2, H-optimus-0, UNI2-h, OpenMidnight, and concatenated CLS and mean-patch for
+Virchow2 and Virchow, Midnight-12k, identical for base and fine-tuned. The benchmark's four survival tasks are not scored.
+
+\paragraph{THUNDER.}
+Both terms of every base $\to$ fine-tuned pair are our own measurement under the benchmark's
+harness, and a rank is obtained by substituting that value for the backbone's published row in
+the 32-model field, so base and fine-tuned ranks are comparable to each other and to the
+published field. The segmentation probe is non-deterministic, so a segmentation spread folds in
+harness repeat variability as well as adapter-seed variability, and our measured base can differ
+slightly from the published one. ECE is the linear-probe expected calibration error, estimated
+from relatively few populated bins, which makes small changes sensitive to how predictions fall
+across bins. ECE and the adversarial macro-F1 drop are lower-is-better; every other THUNDER task
+is higher-is-better.
+
+\paragraph{Outliers and consistent effects.}
+Three patterns dominate the per-dataset panel. TCGA-uniform is the only dataset with a
+unanimous macro-F1 regression across two tasks: $k$-NN falls on all
+seven backbones ($-10.9$ to $-2.5$, mean $-6.2$, every cell beyond its own two SDs) and linear
+probing on all seven ($-6.6$ to $-0.9$, five beyond two SDs). Of the 21 cells spanned by $k$-NN,
+linear probing and few-shot, 19 decrease, and those 19 average $4.6$ points. Adversarial
+robustness, on the contrary, has the most consistent positive effect in the panel: the F1 drop shrinks
+on all seven backbones for 9 of the 16 datasets and worsens unanimously on none, with PCam the
+extreme ($-30.8$ to $-12.9$, mean $-19.9$, all seven beyond two SDs) followed by BACH ($-21.1$
+to $-7.3$, mean $-11.0$). The ECE degradation is concentrated on the two small breast datasets,
+which supply three of the four largest ECE increases exceeding two SDs (the other is Virchow2 on BreakHis, $+7.1$): BRACS worsens on six of seven backbones
+($+2.3$ to $+13.5$, three beyond two SDs, the exception being H-optimus-0), and BACH on UNI2-h
+moves $8.4\to23.4$, the largest in the panel, while its BACH linear-probe macro-F1 falls $1.8$. Excluding
+BRACS, the per-backbone mean $\Delta$ECE over the remaining 15 datasets is $-0.21$, $+0.81$,
+$-0.39$, $-0.42$, $+0.44$, $-0.84$, $-1.59$, so only Midnight-12k and UNI2-h still rise.
+Segmentation shows no systematic pattern on any of its four datasets. The volatile cells are the
+small ones: BACH has 132 test images over four classes with 23 in the smallest, and BRACS 570
+over seven, against $32{,}768$ for PCam and $56{,}275$ for TCGA-TILS. TCGA-uniform is large
+($56{,}200$) but 32-way, with 180 in its smallest class. Published THUNDER mean ECE spans
+$2.9$--$5.8$ across pathology encoders.
+
+
+
+\section{Full result tables}
+% Full-page benchmark tables: let a single table own a float page even when it fills less than half of it,
+% so the tables follow this section instead of being deferred past Appendix~\ref{app:implementation}.
+% Left in force for the rest of the appendix: the only later float is the ablations table.
+\renewcommand{\floatpagefraction}{0.5}
+
+We report full tables per benchmark, in the order of the main text: PathoROB (Table~\ref{tab:pathorob-sub}; RI rank sums and PLISM retrieval are in main-text Table~\ref{tab:pathorobranks}), HEST (Table~\ref{tab:hestranks}), CPTAC (Table~\ref{tab:cptac-per-task}), and THUNDER (Table~\ref{tab:ranks}, continued in Table~\ref{tab:ranks-b}; Figure~\ref{fig:thunderds}).
+Every fine-tuned value in the paper is a mean over three adapter seeds at each seed's selected checkpoint (Table~\ref{tab:selected}). Base values are single evaluations (deterministic except segmentation) and carry no spread. Per-seed summary blocks list the unaggregated values behind the aggregate rows: the base value and each adapter seed's value at its own selected checkpoint, seed columns labelled a--c and ordered by seed identifier within a backbone (0, 1, 2, or 0, 1, 3 for Midnight-12k, Virchow2 and H-optimus-0), so they do not pair the same seed across backbones. Ablations (Appendix~\ref{app:ablations}) are single seed and carry none.
+One highlighting rule holds throughout: in every value cell the fine-tuned number is
+\gain{bold} when the change from base is an improvement exceeding two sample SDs, \loss{red}
+when it is a regression exceeding two sample SDs, and plain when it lies within two SDs, with
+improvement read in the metric's own direction (a decrease is an improvement for ECE and for
+the adversarial drop). Rank cells have no spread, so a rank is \gain{bold} when it improves and
+\loss{red} when it worsens.
+
+On HEST (\S\ref{sec:results}), the largest resolved regression is H-optimus-0 on COAD ($-0.022$ against $\pm0.004$). On THUNDER, the fraction of per-dataset cells whose change exceeds two SDs is $72/112$ for $k$-NN, $59/112$ for linear probing, $94/112$ for few-shot, $8/28$ for segmentation, $55/112$ for ECE and $89/112$ for adversarial drop. Of the six BRACS ECE increases, three (Midnight-12k, Virchow2, Virchow) exceed two SDs and three (Phikon-v2, UNI2-h, OpenMidnight) lie within it.
+
+\begin{table}[p]
+\caption{PathoROB. Top: submetrics per dataset, base $\to$ fine-tuned mean $\pm$ two sample
+SDs; all five are higher-is-better and are defined in Appendix~\ref{app:evaluation}.
+Bottom: per-seed mean RI, base and three adapter seeds.}
+\label{tab:pathorob-sub}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\textwidth}{!}{%
+\input{tables/pathorob_submetrics}}
+\par\medskip
+{\footnotesize\emph{Per-seed mean RI}}\par\smallskip
+\input{tables/perseed_pathorob}
+\end{table}
+
+\begin{table}[p]
+\caption{HEST. Top: per task, base $\to$ fine-tuned mean Pearson $r$ $\pm$ two sample SDs on
+the upper line and that value's rank in the 26-model published field below it; the Mean $r$ and
+$\Sigma$rank columns repeat Table~\ref{tab:hestcptac}.
+Bottom: per-seed mean $r$ over the nine tasks.}
+\label{tab:hestranks}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\resizebox{\textwidth}{!}{%
+\input{tables/hest_per_task}}
+\par\medskip
+{\footnotesize\emph{Per-seed mean $r$}}\par\smallskip
+\input{tables/perseed_hest}
+\end{table}
+
+\begin{table}[p]
+\caption{CPTAC. Top: per task, base $\to$ fine-tuned macro one-vs-rest AUC. Highlighting is
+gated on the two-SD spread, which this table does not print; the per-seed block below carries
+the values behind it. The Mean row matches Table~\ref{tab:hestcptac}.
+Bottom: per-seed macro-OvR AUC.}
+\label{tab:cptac-per-task}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\textwidth}{!}{%
+\input{tables/cptac_per_task}}
+\par\medskip
+{\footnotesize\emph{Per-seed macro-OvR AUC}}\par\smallskip
+\input{tables/perseed_cptac}
+\end{table}
+
+\begin{table}[p]
+\caption{THUNDER, part one of two. Top: task means, base $\to$ fine-tuned mean $\pm$ two
+sample SDs, each value's rank in the 32-model field in parentheses, then the rank sum and its
+implied position; ECE and the adversarial drop are lower-is-better.
+Bottom: per-dataset macro-F1 for $k$-NN, linear probing and 16-shot, same spread.
+Continued in Table~\ref{tab:ranks-b}.}
+\label{tab:ranks}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\textwidth}{!}{%
+\input{tables/thunder_ranks_full}}
+\par\medskip
+{\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{0.95}
+\resizebox{\textwidth}{!}{%
+\input{tables/thunder_per_ds_cls}}}
+\end{table}
+
+\begin{table}[p]
+\caption{THUNDER, part two of two (continued from Table~\ref{tab:ranks}). Top: per dataset,
+segmentation F1, linear-probe ECE and adversarial macro-F1 drop (percentage points, the latter
+two lower-is-better; fp32-attack cells), base $\to$ fine-tuned mean $\pm$ two sample SDs; the
+segmentation spread also folds in harness repeat variability (Appendix~\ref{app:evaluation}).
+Bottom: per-seed task means, percentage points.}
+\label{tab:ranks-b}
+\centering
+{\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{0.95}
+\resizebox{\textwidth}{!}{%
+\input{tables/thunder_per_ds_other}}}
+\par\medskip
+{\footnotesize\emph{Per-seed task means}}\par\smallskip
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\textwidth}{!}{%
+\input{tables/perseed_thunder}}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/thunder_per_ds.pdf}
+\caption{THUNDER. Per-dataset change, fine-tuned $-$ base; bold exceeds two SDs on that
+dataset, faint lies within. In the ECE and adversarial panels (lower is better) the colour
+scale is reversed, so blue always improves; the adversarial scale is wider. Bottom row of each
+panel: mean across backbones. Right-hand columns: row means, the last two dropping
+tcga\_uniform and BRACS.}
+\label{fig:thunderds}
+\end{figure}
+
+\section{Ablation details}
+\label{app:ablations}
+
+\paragraph{Pseudo-tissue reweighting.}
+Variants: asymmetric $(+3,-\infty)$, symmetric $(+3,+3)$, none $(0,0)$. Symmetric has lower RI
+than asymmetric in all 16 step-matched comparisons. At the asymmetric arm's seed-0 selected
+checkpoint, asymmetric minus none RI and HEST are in Table~\ref{tab:ablations}(a). THUNDER $k$-NN, linear probing, and few-shot are lower with
+asymmetric reweighting for every backbone except Phikon-v2 $k$-NN ($+0.1$). Only Phikon-v2
+clears the RI tolerance $\epsilon$, and on HEST only Phikon-v2 and H-optimus-0
+exceed the tuned across-seed spread, which is why the recipe does not claim reweighting as a
+general mechanism.
+
+\paragraph{Batch composition.}
+Phikon-v2, one seed, a diagnostic sweep (RI compared at step 750; fixed-$C$ changes also at steps 1000 and 1250) at a fixed 3,600-image budget with $CT$ held
+constant. Table~\ref{tab:ablations}(b) reports RI at step 750 as the number of conditions per
+batch $C$ decreases, and, for the two $C$ with a second $T$ run, the change in RI from
+increasing the number of locations $T$ at fixed $C$, at three steps. Because $C$ and $T$ covary
+at fixed $CT$, the first block is an allocation comparison rather than an isolated effect of
+$C$; the recipe uses $C=2$.
+
+\paragraph{Adapter rank.}
+Mean RI over checkpoints at the stated steps, at fixed $\alpha/r=2$
+(Table~\ref{tab:ablations}(c)). No monotone trend is present on Phikon-v2; on Virchow2 rank 128
+is clearly worse, and the recipe uses rank 32. This sweep and the batch-composition sweep both
+average over steps beyond the $100$--$200$ range where the recipe's checkpoints are selected
+(\S\ref{sec:selection}) and are one-seed diagnostics, so they bound these effects rather than
+settle the settings.
+
+\begin{table}[htbp]
+\caption{Ablations, one seed each: (a) pseudo-tissue reweighting, (b) batch composition,
+(c) adapter rank. Differences are read against the paper's
+RI tolerance $\epsilon=0.007$ and, on HEST, against the tuned across-seed $2$\,SD of the same
+backbone in the rightmost column of block (a); $^\dagger$ marks $|\Delta\mathrm{RI}|<\epsilon$,
+and \textbf{bold} marks the recipe's setting.}
+\label{tab:ablations}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\input{tables/ablations}
+\end{table}
+
+\clearpage
+\section{Implementation details}
+\label{app:implementation}
+
+\paragraph{Adapters and heads.}
+LoRA rank 32, $\alpha=64$, dropout 0, on every attention projection and MLP layer. Projection
+heads are two-layer MLPs. GeM exponent initialized to 3, constrained to $[1,8]$. $\tau=0.07$.
+Trainable parameters are $2.7$--$4.4\%$ of the backbone parameters for the LoRA adapters
+alone, i.e.\ the parameters actually merged into the released backbone (Phikon-v2 $4.41$,
+Midnight-12k $3.01$, Virchow2 and Virchow $3.20$, H-optimus-0 and OpenMidnight $2.69$,
+UNI2-h $2.68$), and $3.0$--$5.4\%$ for the adapters plus the two projection heads
+(Phikon-v2 $5.40$, Midnight-12k $3.37$, Virchow2 $3.76$, H-optimus-0 $3.05$, UNI2-h $3.28$,
+Virchow $3.76$, OpenMidnight $3.05$); the projection heads are discarded before merging.
+
+\paragraph{Optimization and preprocessing.}
+Native $224\times224$ tiles, no resizing, cropping, colour, or geometric augmentation; each
+backbone's published channel normalization. AdamW, learning rate $10^{-4}$, weight decay $0.05$,
+200 linear warmup steps, cosine decay over 500 steps, gradient clipping at $1.0$. bfloat16, gradient checkpointing,
+activation offloading. Checkpoints every 50 steps. Three seeds per backbone controlling
+initialization and sampling.
+
+\paragraph{Compute.}
+Two H100 80GB per job: one trains, one runs concurrent RI evaluation. 500-step runs take
+$1.0$--$7.8$ hours per backbone. Evaluation dominates total compute.

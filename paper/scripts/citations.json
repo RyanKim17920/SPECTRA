@@ -1,0 +1,22 @@
+[
+{"key":"pathorob","author":"Kömen","year":"2026","title":"Towards robust foundation models for digital pathology","venue":"Nature Communications","volume":"17","doi":"10.1038/s41467-026-73923-2"},
+{"key":"plism","author":"Ochi","year":"2024","title":"Registered multi-device/staining histology image dataset for domain-agnostic machine learning models","venue":"Scientific Data","volume":"11","doi":"10.1038/s41597-024-03122-5"},
+{"key":"virchow2","author":"Zimmermann","year":"2024","title":"Virchow2: Scaling self-supervised mixed magnification models in pathology","arxiv":"2408.00738"},
+{"key":"virchow","author":"Vorontsov","year":"2024","title":"A foundation model for clinical-grade computational pathology and rare cancers detection","venue":"Nature Medicine","volume":"30","pages":"2924-2935","doi":"10.1038/s41591-024-03141-0"},
+{"key":"openmidnight","author":"Kaplan","year":"2025","title":"OpenMidnight","url":"https://www.sophontai.com/blog/openmidnight"},
+{"key":"lora","author":"Hu","year":"2022","title":"LoRA: Low-Rank Adaptation of Large Language Models","arxiv":"2106.09685"},
+{"key":"hest","author":"Jaume","year":"2024","title":"HEST-1k: A Dataset for Spatial Transcriptomics and Histology Image Analysis","venue":"Advances in Neural Information Processing Systems 37","pages":"53798-53833","doi":"10.52202/079017-1704"},
+{"key":"thunder","author":"Marza","year":"2025","title":"THUNDER: Tile-level Histopathology image UNDERstanding benchmark","arxiv":"2507.07860"},
+{"key":"randstain","author":"Shen","year":"2022","title":"RandStainNA: Learning Stain-Agnostic Features from Histology Slides by Bridging Stain Augmentation and Normalization","venue":"Lecture Notes in Computer Science","pages":"212-221","doi":"10.1007/978-3-031-16434-7_21"},
+{"key":"dann","author":"Ganin","year":"2016","title":"Domain-adversarial training of neural networks","venue":"Journal of Machine Learning Research","volume":"17","pages":"1-35","url":"https://www.jmlr.org/papers/v17/15-239.html"},
+{"key":"filiot2026robustifying","author":"Filiot","year":"2026","title":"Robustifying pathology foundation models via fine-tuning","arxiv":"2607.22861"},
+{"key":"plismtiles","author":"Filiot","year":"2025","title":"Distilling foundation models for robust and efficient models in digital pathology","venue":"Lecture Notes in Computer Science","pages":"162-172","doi":"10.1007/978-3-032-04981-0_16","url":"https://huggingface.co/datasets/owkin/plism-dataset-tiles"},
+{"key":"gem","author":"Radenovic","year":"2019","title":"Fine-tuning CNN image retrieval with no human annotation","venue":"IEEE Transactions on Pattern Analysis and Machine Intelligence","volume":"41","pages":"1655-1668","doi":"10.1109/TPAMI.2018.2846566"},
+{"key":"infonce","author":"van den Oord","year":"2018","title":"Representation learning with contrastive predictive coding","arxiv":"1807.03748"},
+{"key":"adamw","author":"Loshchilov","year":"2019","title":"Decoupled weight decay regularization","arxiv":"1711.05101"},
+{"key":"phikonv2","author":"Filiot","year":"2024","title":"Phikon-v2, A large and public feature extractor for biomarker prediction","arxiv":"2409.09173"},
+{"key":"midnight","author":"Karasikov","year":"2025","title":"Training state-of-the-art pathology foundation models with orders of magnitude less data","venue":"Lecture Notes in Computer Science","pages":"573-583","doi":"10.1007/978-3-032-04984-1_55"},
+{"key":"hoptimus0","author":"Saillard","year":"2024","title":"H-optimus-0","url":"https://github.com/bioptimus/releases/tree/main/models/h-optimus/v0"},
+{"key":"uni2h","author":"Mahmood Lab","year":"2025","title":"UNI2-h model repository and model card","url":"https://huggingface.co/MahmoodLab/UNI2-h"},
+{"key":"uni","author":"Chen","year":"2024","title":"Towards a general-purpose foundation model for computational pathology","venue":"Nature Medicine","volume":"30","pages":"850-862","doi":"10.1038/s41591-024-02857-3"}
+]

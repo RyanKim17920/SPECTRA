@@ -1,0 +1,323 @@
+\documentclass{article}
+
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{numbers,compress}{natbib}
+\usepackage[sglblindworkshop]{neurips_2026}
+\workshoptitle{AI at Scale for Clinical Impact (ASCI): Cancer Pathology Foundation Models}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{courier}
+\usepackage{hyperref}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.7}
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{totalnumber}{4}
+\hypersetup{hidelinks}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{flafter}
+\usepackage{float}
+
+% Table highlighting: improvements bold, regressions in a muted red. Both survive greyscale
+% printing (weight differs), so the mark is not carried by colour alone.
+\definecolor{worse}{HTML}{B91C1C}
+\newcommand{\gain}[1]{\textbf{#1}}
+\newcommand{\loss}[1]{\textcolor{worse}{#1}}
+
+\title{Contrastive fine-tuning against stain and scanner bias improves robustness and downstream performance across pathology foundation models}
+
+\author{%
+  \textbf{Ryan Kim}$^{1,3}$ \quad \textbf{Hassan Muhammad}$^{1,2}$ \quad \textbf{Anish Dulal}$^{1,4}$ \\
+  \textbf{Paul S. Scotti}$^{1,2}$ \quad \textbf{Tanishq Mathew Abraham}$^{1,2}$ \\[3pt]
+  $^1$MedARC \quad $^2$Sophont \\
+  $^3$University of Illinois at Urbana-Champaign \quad $^4$University of Oregon \\
+  \texttt{ryankim4@illinois.edu}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Histopathology foundation models achieve strong performance across diverse downstream tasks, yet their representations have been shown to encode scanner- and site-specific biases, creating generalization gaps and potentially limiting real-world utility. We introduce \textsc{Spectra} (Scanner and Pathology Embedding Contrastive Tuning for Robust Alignment), a model-agnostic contrastive learning framework which explicitly encourages scanner-robust representations, to optimize performance and generalization on downstream applications. Using parameter-efficient LoRA adapters trained on matched multi-scanner and multi-stain whole-slide images sourced from the PLISM dataset, our method aligns representations of same-location, different-scanner regions while repelling different-location, same-scanner regions. \textsc{Spectra} improved PathoROB robustness index, gene-expression prediction on HEST, slide-level classification AUC on CPTAC, and PLISM retrieval across held-out scanners and stains for every model.  Overall tile-level classification on THUNDER also improved, with exceptions for segmentation and calibration tasks.  We open-source our  training and evaluation codebases and release open model weights for the fine-tuned versions of OpenMidnight and H-optimus-0.
+\end{abstract}
+
+\section{Introduction}
+
+A digital pathology-based cancer diagnosis, biomarker prediction, or prognostic assessment should not depend on the laboratory which prepares the reference tissue specimen or the scanner which digitizes it. Pathology foundation models promise to support diverse clinical tasks, yet strong benchmark performance alone does not establish reliability across real-world applications and their related deployment environments \citep{chen2024uni, huang2025flex}. Most leading models are pretrained on proprietary samples drawn from a single institution or a small number of health systems. Although these collections can be large, their limited institutional diversity may expose models to a narrow range of patient populations, laboratory protocols, stains, and scanner hardware. Even The Cancer Genome Atlas (TCGA), one of the largest public digital-pathology repositories, does not eliminate this risk: despite aggregating specimens across more than 140 geographically distributed institutions within a centralized digitization program, each tissue-source-site code denotes a specific institution--cancer-type pair, creating a perfect association between that code and the corresponding disease cohort, making models susceptible to recovering acquisition site from image features \citep{gdc_tss_codes,dehkharghanian2023biased}. Consequently, learned representations can entangle disease morphology with institution-specific acquisition signatures, allowing downstream adaptors to exploit spurious correlations that fail when transferred to cohorts external to training data \citep{huang2025flex}.
+
+Evidence of this vulnerability is increasingly widespread. PathoROB \citep{koemen2026pathorob}, which evaluates 20 foundation models across 34 medical centres, demonstrates persistent sensitivity to quantifiable non-biological variation. Conventional discrimination metrics can also conceal clinically relevant instability. For example, a controlled study of identical slides digitized on different devices found scanner-dependent calibration shifts even when AUC remained largely stable, with robustness not reliably predicted by model size or pretraining scale \citep{thiringer2026scanner}. In real-world practice, these shifts may move patients across diagnostic, prognostic, or biomarker-triage thresholds despite not having relevant tissue biology driving those associations. These findings motivate representation-learning methods which explicitly preserve disease-relevant information, while suppressing technical and non-biological variation, making performance and calibration across clinical environments primary objectives rather than incidental consequences of scale.
+
+Motivated by this domain-wide problem, we introduce \textsc{Spectra}, a low-resource, model-agnostic fine-tuning framework that improves the robustness of pathology foundation-model representations to scanner and staining variation using parameter-efficient LoRA adapters and a label-free contrastive objective over spatially matched multi-scanner, multi-stain tiles. The objective, batch construction, and checkpoint-selection rule are described in \S\ref{sec:methods}.
+
+We fully open-source \textsc{Spectra}, including the complete training and evaluation pipeline, and release fine-tuned H-optimus-0 and OpenMidnight checkpoints intended for direct substitution into existing pipelines.
+
+\section{Related Work}
+\label{sec:related_work}
+
+\paragraph{Robustness interventions in computational pathology.}
+Existing approaches to addressing model robustness operate at several stages of the computational pathology pipeline. Image preprocessing and augmentation methods reduce colour variation through stain normalization \citep{reinhard2001,macenko2009,vahadane2016structure} or expose models to broader appearance distributions through stain and colour augmentation \citep{tellez2019quantifying,shen2022randstainna}. Although effective against some staining shifts, these methods do not explicitly address scanner-dependent differences in optics, resolution, compression, or image-processing software, and may suppress diagnostically relevant colour information. Training-time approaches use domain-adversarial objectives \citep{ganin2016dann} or information-bottleneck formulations \citep{huang2025flex} to discourage prediction of acquisition domains, but generally require site labels and are optimized for a particular downstream task. Post-hoc methods instead harmonize frozen embeddings through feature alignment or batch correction \citep{nguyen2026fmmap,koemen2026pathorob}; these methods can improve robustness without modifying the encoder but may depend on target-domain statistics and may require adaptation to a new deployment setting. Knowledge distillation offers another route to transferring invariant representations \citep{filiot2025distill}, although it requires a teacher and an additional distillation stage and introduces additional computational cost. Collectively, these approaches mitigate particular forms of domain shift but do not provide a reproducible, task-agnostic mechanism for directly adapting an existing foundation-model encoder to suppress both scanner and staining variation.
+
+\paragraph{Contrastive adaptation using matched scanners.}
+To our knowledge, Carloni et al.\ \citep{carloni2025scangen} were the first to introduce contrastive fine-tuning for scanner generalization in pathology-foundation-model pipelines. Their ScanGen objective uses matched specimens digitized on different scanners as positive pairs and different specimens acquired on the same scanner as negative pairs. ScanGen trains a projection network placed between a frozen foundation-model encoder and a multiple-instance learning model, jointly optimizing scanner invariance and supervised EGFR-mutation prediction. The study provided an important proof of concept across five foundation models and a proprietary cohort of 323 lung-cancer specimens digitized on six scanners. However, its evaluation was confined to a single cancer type and biomarker, and robustness was assessed primarily through scanner-dependent variation in EGFR predictions. It did not evaluate whether the adapted representations retain general utility across standardized foundation-model benchmarks, unrelated disease contexts, or a broad range of downstream tasks. Moreover, because adaptation occurs in a task-specific projection network while the encoder remains frozen, the resulting model is not a reusable robust foundation-model backbone. \textsc{Spectra} moves this contrastive adaptation into parameter-efficient LoRA modules within the encoder, incorporates both scanner and staining variation, requires no downstream labels, and evaluates robustness and representation retention across PathoROB, HEST, THUNDER, and a 38-task CPTAC panel.
+
+\paragraph{Task-agnostic foundation-model robustification.}
+Recent work by Filiot et al.\ \citep{filiot2026robustifying} reports a model-agnostic fine-tuning procedure applied to ten pathology foundation models. The study evaluates the resulting encoders with PathoROB, HEST, THUNDER, and Patho-Bench and reports improvements in both robustness and aggregate downstream performance. It released two adapted checkpoints: Phaet, derived from Phikon-v2, and Mascaret, derived from Midnight-12k. However, the current preprint does not include a method section or specify the optimization objective, robustness-training data, construction of training pairs, trainable parameters, or optimization hyperparameters. At the time of writing, no training implementation has been released. Consequently, the reported procedure cannot be independently reproduced, audited, or applied to the other eight evaluated backbones. Furthermore, only two adapted checkpoints are available, one of which is Phikon-v2, an already underused model within the larger ecosystem.
+
+\textsc{Spectra} addresses this reproducibility and accessibility gap by providing a fully specified, label-free InfoNCE objective, parameter-efficient LoRA adaptation, and an open training pipeline based on the public PLISM matched-acquisition dataset \citep{ochi2024plism}.
+
+\section{Methods}
+\label{sec:methods}
+
+\subsection{Overview}
+
+\textsc{Spectra} is a model-agnostic, parameter-efficient fine-tuning framework which utilizes registered views of the same tissue acquired under different scanner and staining conditions to improve the robustness of a base pathology foundation model. For each model, we freeze the original backbone and train LoRA adapters on the PLISM dataset (\S\ref{sec:data}--\ref{sec:objective}). Standard pathology benchmarking datasets are used exclusively for downstream evaluation and do not influence training; PathoROB alone is used to select the checkpoint (\S\ref{sec:selection}).
+
+\subsection{Training Data}
+\label{sec:data}
+
+We use the publicly available PLISM dataset \citep{ochi2024plism}, although \textsc{Spectra} is not specific to this dataset and requires only spatially matched tissue images acquired under different conditions. PLISM was designed to isolate acquisition-related variation using serial sections of a tissue microarray containing 46 human tissue types, stained under 13 distinct H\&E protocols and imaged using seven whole-slide scanners and six smartphone cameras \citep{ochi2024plism}. It comprises two spatially registered subsets: PLISM-wsi, containing 91 whole-slide images representing every combination of the 13 stains and seven scanners, and PLISM-sm, containing corresponding fields of view acquired using both scanners and smartphones. We use only PLISM-wsi in this study.
+
+We define each scanner--stain pair as an acquisition condition
+$c=(\text{scanner},\text{stain})$. Rather than extracting tiles directly from the original whole-slide images, we use Owkin's re-registered tile release derived from PLISM-wsi \citep{filiot2025distill}. In this release, each of the 91 whole-slide images is represented by the same ordered set of $N=16{,}278$ spatial locations, extracted as $224\times224$-pixel tiles. We denote the tile from location $i$ under condition $c$ by $x_{c,i}$; consequently, $x_{c,i}$ and $x_{c',i}$ depict corresponding tissue regions under different acquisition conditions. Across scanners at a fixed stain, corresponding tiles originate from the same physical tissue section. Across stains, they originate from adjacent serial sections, which preserve tissue identity and local architecture but do not contain exactly the same cells \citep{ochi2024plism}.
+
+To evaluate generalization beyond the acquisition conditions observed during training, we hold out two scanners (GT450, S210) and three stains (HRH, KR, MY). The remaining five scanners and ten stains define 50 training conditions, while the other 41 conditions contain at least one held-out scanner or stain; the split is fixed across seeds, and tissue locations are shared between training and held-out acquisition conditions (Appendix~\ref{app:evaluation}).
+
+\subsection{Base Models}
+We apply \textsc{Spectra} to a diverse set of pathology foundation models to assess the consistency of its improvements across ViT backbones and pretraining histories and to compare robustness and downstream performance before and after fine-tuning. We evaluate Phikon-v2 \citep{phikonv2}, Midnight-12k \citep{midnight}, Virchow2 \citep{virchow2}, H-optimus-0 \citep{hoptimus0}, UNI2-h \citep{uni2h,chen2024uni}, Virchow \citep{virchow}, and OpenMidnight \citep{openmidnight}.
+
+\subsection{Grid-batch construction}
+\label{sec:grid}
+
+At each optimizer step we sample $C$ training conditions and $T$ locations, both without replacement, giving a batch of $CT$ images. For an ordered pair $(c_a,c_b)$, $a\neq b$, and location $i$
+(Figure~\ref{fig:grid}), the query is $x_{c_a,i}$, the candidate set is the row of $c_b$ alone; the
+positive is $x_{c_b,i}$, and the $T-1$ other tiles in that row are negatives. 
+
+Both orderings are included. All candidates in a softmax share one acquisition condition, so acquisition identity alone cannot identify the matching tissue location. The recipe uses $C=2$,
+$T=900$, so for each step we have 1,800 images and 899 negatives per query
+(alternative allocations of $C$ and $T$ are ablated in \S\ref{sec:ablations}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/grid_batch.pdf}
+\caption{Left: grid batch on PLISM tiles; columns are registered locations, rows are conditions. Right: for the query, the registered tile of another condition is pulled in and the other $T-1$ tiles of that condition are pushed away.}
+\label{fig:grid}
+\end{figure}
+
+
+\subsection{CLS and patch-token contrastive objectives}
+\label{sec:objective}
+Rank-32 LoRA \citep{lora} adapters on the attention and MLP blocks train under $5\%$ of the backbone parameters ($2.7$--$4.4\%$, adapters only). The LoRA-adapted backbone maps a tile $x_{c,i}$ to a CLS token and $P$ patch tokens
+$u_1,\dots,u_P$ (register tokens discarded). This gives the two views: $v^{\textsc{cls}}_{c,i}$
+is the CLS token, and $v^{\textsc{gem}}_{c,i}$ is a softplus generalized mean \citep{gem} of the
+patch tokens with learned exponent $\rho$ (Appendix~\ref{app:pseudo}, Eq.~\eqref{eq:gem}). Each view passes through
+its own two-layer MLP head and is $\ell_2$-normalized, giving unit vectors $z^h_{c,i}$.
+
+For an ordered pair of conditions $(c_a,c_b)$, $a\neq b$, query $i$ and candidate $j$, let
+$\ell^h_{abij}=\langle z^h_{c_a,i},z^h_{c_b,j}\rangle/\tau$ be their temperature-scaled cosine similarity. Each view $h$ is trained with the same reweighted InfoNCE loss
+\citep{infonce},
+\begin{equation}
+\mathcal{L}_h=-\frac{1}{C(C-1)T}
+\sum_{a\neq b}\sum_{i=1}^{T}
+\log\frac{\exp(\ell^h_{abii})}{\sum_{j=1}^{T}w^h_{ij}\exp(\ell^h_{abij})},
+\end{equation}
+where the weights $w^h_{ij}$ apply pseudo-tissue reweighting~\eqref{eq:w}. Each location $i$ carries a fixed
+pseudo-group $q_i$: locations are grouped into the eight-connected spatial components of the tile
+lattice (putative tissue-microarray cores), which are then merged to 46 groups by clustering
+frozen Virchow2 embeddings of one reference condition, so that a pseudo-group approximates one
+tissue type (Appendix~\ref{app:pseudo}). A candidate sharing the query's pseudo-group ($q_j=q_i$,
+$j\neq i$) is dropped from the GeM softmax and up-weighted by $e^{3}$ in the CLS softmax, while
+all other candidates and the positive keep weight $1$ (ablations in \S\ref{sec:ablations}). The two views are weighted equally,
+\begin{equation}
+\mathcal{L}=0.5\,\mathcal{L}_{\textsc{cls}}+0.5\,\mathcal{L}_{\textsc{gem}}.
+\end{equation}
+
+
+\subsection{Fine-tuning and checkpoint selection}
+
+Only the adapters, the projection heads, and the GeM exponent are trained; the backbone is
+otherwise frozen. The heads and GeM exponent are discarded after training. Evaluation uses the
+backbone's original embedding and each benchmark's pooling rule. Training runs 500 steps with
+AdamW \citep{adamw} (Appendix~\ref{app:implementation}). Adapters are merged into the base
+weights.
+
+\paragraph{Checkpoint selection.}\label{sec:selection}
+We perform three independent adapter fine-tuning runs per backbone and select one checkpoint per seed by PathoROB RI
+(defined in \S\ref{sec:experiments}) with a tolerance rule ($\epsilon=0.007$, Appendix~\ref{app:selection}). All 21 selected checkpoints fall at steps $100$--$200$, within the 200-step linear warmup.
+
+
+\section{Experiments}
+\label{sec:experiments}
+
+We test whether adaptation against scanner and staining variation improves the usefulness of pathology foundation-model representations across downstream tasks. Our evaluation spans robustness to site and acquisition shifts (PathoROB), cross-condition tissue retrieval (PLISM), and downstream benchmarks, including spatial transcriptomics prediction (HEST), CPTAC classification, and general performance (THUNDER). Full evaluation details are provided in Appendix~\ref{app:evaluation}.
+
+\paragraph{PathoROB.}
+We evaluate centre-level robustness using PathoROB across TCGA $2\times2$, Camelyon, and Tolkach-ESCA, and report the robustness index (RI) averaged across the three benchmarks. Let $SO$ denote the number of same-class, other-centre $k$-NN pairs and $OS$ the number of other-class, same-centre pairs, pooled across queries. We compute
+\begin{equation}
+\mathrm{RI} = \frac{SO}{SO+OS}.
+\end{equation}
+Higher RI indicates representations that preserve class similarity over centre-specific similarity.
+
+\paragraph{Held-out PLISM retrieval.}
+We test cross-acquisition alignment on held-out PLISM data. For each query tile, we perform top-1 retrieval of its registered counterpart among 256 candidates. Scanner-pair evaluations vary the scanner while holding stain fixed; stain-pair evaluations vary the stain.
+
+\paragraph{HEST.}
+We follow the HEST evaluation protocol \citep{hest}. We fit PCA--Ridge probes for 50 genes across nine tasks and report mean Pearson correlation $r$ across tasks.
+
+\paragraph{CPTAC.}
+We evaluate the CPTAC subset of Patho-Bench \citep{pathobench}, reporting macro one-vs-rest AUC across 38 classification tasks.
+
+\paragraph{THUNDER.}
+We use the full THUNDER evaluation suite \citep{thunder} across 16 classification and four segmentation datasets. We report $k$-NN and linear-probe macro-F1 performance, few-shot classification, segmentation, calibration via expected calibration error (ECE), and adversarial robustness.
+
+\paragraph{Evaluation protocol.}
+For every benchmark, we compare each base model against its fine-tuned counterpart using the same evaluation harness and the PathoROB-selected checkpoint for each adapter seed. Fine-tuned results are reported as mean $\pm$ two sample standard deviations across three adapter seeds, while base-model results are a single evaluation (deterministic except segmentation, Appendix~\ref{app:evaluation}). Per-task HEST and per-dataset THUNDER seed spreads are tabulated in Appendix Tables~\ref{tab:hestranks}, \ref{tab:ranks} and~\ref{tab:ranks-b}.
+
+
+\section{Results}
+\label{sec:results}
+
+Across benchmarks, fine-tuning consistently improves robustness while largely preserving, and in most settings improving, downstream task performance. The clearest effects are on PathoROB and CPTAC, where improvements occur across all backbones. HEST likewise improves on average for every backbone, although sub-tasks have more mixed results. THUNDER's classification and few-shot performance are generally improved, while calibration shows small regressions for several models and segmentation differences are largely within evaluation variability. Figure~\ref{fig:b2t} summarizes these base-to-fine-tuned changes, while Table~\ref{tab:overall} places them in the context of each benchmark's published model field.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/base_to_tuned.pdf}
+\caption{Base $\to$ fine-tuned per backbone, ordered by base PathoROB RI. Hollow: base. Filled: fine-tuned mean over three seeds at the selected checkpoint, bar $\pm2$ SD. Numbers are $\Delta$ vs base. Blue improved, red worse, grey within $2$ SD.}
+\label{fig:b2t}
+\end{figure}
+
+\begin{table}[htbp]
+\caption{Leaderboard position, base $\to$ fine-tuned, in each benchmark's published field:
+PathoROB by mean RI, HEST by mean Pearson $r$, THUNDER by rank sum over six tasks, including the
+adversarial-drop task reported only in the appendix (Appendix Table~\ref{tab:ranks}). Ties share a
+position. Fields hold 23, 26 and 32 models. $^\dagger$: absent from the published field and
+inserted into it (24 models) rather than substituted (Appendix~\ref{app:evaluation}).}
+\label{tab:overall}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{0.95}
+\input{tables/overall_ranks}
+\end{table}
+
+\subsection{Cross-centre robustness: PathoROB}
+
+\begin{table}[htbp]
+\caption{PathoROB mean RI, RI rank sum and dense-rank position in the 23-model published field,
+base $\to$ fine-tuned ($\pm$ two SDs over three seeds).
+$^\dagger$: rank estimated by insertion (Appendix~\ref{app:evaluation}).
+Last column: held-out PLISM top-1 retrieval (256 candidates, scanner\,/\,stain; two SDs $\leq0.036$); its held-out axis is acquisition, not tissue.}
+\label{tab:pathorobranks}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{0.95}
+\input{tables/pathorob_ranks}
+\end{table}
+
+Fine-tuning improves cross-centre robustness for every backbone. Mean RI increases in all cases, by $+0.048$ to $+0.366$, each exceeding the fine-tuned $\pm2$\,SD spread (Figure~\ref{fig:b2t}, Table~\ref{tab:pathorobranks}), with the largest per-dataset gains occurring on Camelyon (Appendix Table~\ref{tab:pathorob-sub}). Across models, fine-tuned RI values also tend to converge toward approximately $0.9$, suggesting diminishing gains among backbones that already begin with relatively strong centre-robust representations.
+
+These improvements in RI do not correspond to a substantial loss in predictive structure. PathoROB's prediction-performance submetric, pooled $k$-NN class purity, decreases on TCGA for every backbone by $0.010$--$0.030$, while $k$-NN balanced accuracy averaged over the three datasets changes by only $-0.005$ to $+0.005$ (on TCGA alone, $-0.014$ to $+0.009$; Appendix Table~\ref{tab:pathorob-sub}). Thus, the large changes in robustness are accompanied by comparatively small changes in local class-discriminative performance.
+
+\subsection{Held-out PLISM retrieval}
+
+Top-1 retrieval of the registered counterpart improves for every backbone on both axes
+(Table~\ref{tab:pathorobranks}): $0.703$--$0.978$ to $0.948$--$0.997$ across scanners, and
+$0.486$--$0.830$ to $0.782$--$0.931$ across stains. Stain remains the harder axis both before
+and after (\S\ref{sec:data}).
+
+
+\subsection{HEST and CPTAC}
+
+\begin{table}[htbp]
+\caption{HEST/CPTAC performance: base $\to$ fine-tuned. HEST is mean Pearson $r$ over nine tasks with the
+rank sum over those tasks and the positional rank in the 26-model published field; CPTAC is
+macro-OvR AUC over 38 Patho-Bench classification tasks. Per-task results are in
+Appendix Tables~\ref{tab:hestranks}, \ref{tab:cptac-per-task} respectively to HEST and CPTAC.}
+\label{tab:hestcptac}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{0.95}
+\input{tables/hest_cptac}
+\end{table}
+
+The robustness gain is accompanied by gains on both downstream benchmarks. Mean HEST Pearson $r$ increases for every backbone, by $+0.002$ to $+0.017$, while CPTAC macro-OvR AUC increases for every backbone, by $+0.009$ to $+0.038$ (Figure~\ref{fig:b2t}, Appendix Table~\ref{tab:hestranks}, Appendix Table~\ref{tab:cptac-per-task}).
+
+The HEST improvements are not uniform across individual gene-prediction tasks: some backbone-task pairs improve while others regress. The mean change nonetheless exceeds the fine-tuned $\pm2$\,SD spread on six of the seven; on Virchow ($+0.002$ against $\pm0.004$) it lies within seed spread. Fine-tuning therefore does not degrade, and on most backbones modestly improves, mean transcriptomic prediction. Against the per-task seed spread (Appendix Table~\ref{tab:hestranks}), 33 of the 43 per-task improvements and 8 of the 20 regressions exceed $\pm2$\,SD. All seven CPTAC gains exceed the fine-tuned $\pm2$\,SD spread; the smallest is Virchow2 ($+0.009$ against $\pm0.002$) and the widest spread is UNI2-h ($+0.023$ against $\pm0.006$).
+
+\subsection{THUNDER}
+
+THUNDER provides a broader and less uniformly positive picture than PathoROB, HEST, or CPTAC; aggregate task means and ranks are in Appendix Table~\ref{tab:ranks}, per-dataset changes in Appendix Figure~\ref{fig:thunderds}. $k$-NN macro-F1 improves on six of seven backbones ($-0.3$ to $+3.5$ points) and linear-probe macro-F1 on all seven ($+0.1$ to $+1.7$). Few-shot performance varies the most, from $-1.0$ to $+22.3$ points: the $+22.3$ is OpenMidnight, whose base few-shot score of $43.6$ ranks 30th in the 32-model field, and the only decrease, UNI2-h ($-1.0$), equals its $\pm1.0$ seed spread (per-dataset spreads in Appendix Table~\ref{tab:ranks}). The rank sum improves for every backbone except UNI2-h, whose sum worsens from 17 to 23 while it keeps first position. Segmentation differences are comparatively small and lie within the repeat variability of the THUNDER harness (Appendix~\ref{app:evaluation}); because segmentation evaluation is non-deterministic, our measured base values can themselves differ slightly from those reported by THUNDER.
+
+Calibration is the main metric that trends negatively. Mean ECE increases for four of seven backbones, beyond the $\pm2$\,SD seed spread on Midnight-12k, Virchow2 and UNI2-h; the degradation is concentrated on BRACS, which worsens on six of seven and beyond $\pm2$\,SD on Midnight-12k, Virchow2 and Virchow (Appendix Figure~\ref{fig:thunderds}, Appendix Table~\ref{tab:ranks-b}; Calibration paragraph of Appendix~\ref{app:evaluation}). ECE in this evaluation is estimated from relatively few populated calibration bins, making small changes sensitive to the distribution of predictions across bins.
+
+The most consistent classification regression occurs on TCGA-uniform, which decreases in 19 of the 21 cells formed by the seven backbones and the $k$-NN, linear-probe, and few-shot tasks, by $4.6$ points on average over those 19 cells. Together with the TCGA purity decrease in PathoROB, this is consistent with the objective doing what it is designed to do (\S\ref{sec:discussion}).
+
+
+\section{Ablations}
+\label{sec:ablations}
+
+We ablate the three recipe components---pseudo-tissue reweighting, batch composition, and adapter
+rank---with one seed per arm: reweighting on Phikon-v2, Midnight-12k, Virchow2, H-optimus-0, and
+UNI2-h, the other two on Phikon-v2 (rank also on Virchow2); values are in
+Appendix~\ref{app:ablations}, Appendix Table~\ref{tab:ablations}. Reweighting
+(Appendix~\ref{app:pseudo}) versus none, at the reweighted arm's selected checkpoint, moves RI by
+$+0.009$ on Phikon-v2 and by less than the $\epsilon=0.007$ selection tolerance on the other four,
+so we do not claim it as a general mechanism; it stays in the recipe because it helps the weakest
+base and is RI-neutral elsewhere. Batch composition
+(\S\ref{sec:grid}; $CT=3600$, compared at step 750) favours few conditions and many locations: RI at step 750
+rises monotonically from $0.802$ to $0.824$ as $C$ falls from 24 to 2. Adapter rank
+(\S\ref{sec:objective}) shows no consistent monotone trend over $r\in\{8,\ldots,128\}$; $r=128$ is lowest on
+Virchow2. No sweep moves RI by more than $0.03$, well below the recipe's own
+$0.048$--$0.366$ gain, consistent with \S\ref{sec:discussion}: the gain comes from a small, early
+adapter update rather than from any one component.
+
+\section{Discussion}
+\label{sec:discussion}
+
+Taken together, the benchmarks give a consistent picture: cross-centre robustness and held-out
+cross-acquisition retrieval improve on every backbone, both downstream benchmarks move with them,
+and THUNDER, the only mixed benchmark, mixes by task rather than by backbone.
+
+Two properties of the procedure are worth noting. First, every selected checkpoint lands at steps
+$100$--$200$ (\S\ref{sec:selection}). The robustness gain therefore comes from a small, early
+update to the adapters, made while the learning rate is still ramping to its peak; running the
+full 500-step schedule is not what produces it. Second, because PathoROB is the selection criterion, its improvement is not an independent
+finding, whereas HEST, CPTAC, and THUNDER are an unbiased readout of
+what the RI-selected checkpoints do to downstream utility.
+
+The regressions on TCGA-derived tasks (\S\ref{sec:results}) are likely since TCGA tissue-source-site codes are perfectly associated with cancer type, so a representation that stops encoding acquisition site also loses a shortcut that those tasks reward. Whether that trade is acceptable depends on the deployment setting, and it is one reason we report the per-task tables rather than only the aggregate ranks.
+
+\section{Limitations}
+
+\textsc{Spectra} is trained using a single tissue-microarray dataset acquired at one institution. Although PLISM provides unusually well-controlled scanner and staining variation, its specific contribution to \textsc{Spectra}'s performance remains undetermined because we do not compare training on alternative matched-acquisition datasets. Consequently, we cannot establish whether PLISM is optimal or whether larger, more biologically diverse, or multi-institutional datasets would produce greater robustness and downstream transfer. The observed improvements may also depend on PLISM-specific tissue composition, staining protocols, and scanner coverage.
+
+Registration across stains introduces an additional limitation: stain-matched pairs are drawn from adjacent serial sections (\S\ref{sec:data}), which may exhibit genuine local biological differences. Treating these regions as positive pairs therefore introduces correspondence noise and may encourage the model to suppress biologically meaningful variation. More precise cross-section registration, explicit uncertainty modeling, or objectives that distinguish exact from approximate correspondences could reduce this risk.
+
+Three further caveats apply to the evidence, all of which measure representation consistency across centres and probe performance, not diagnostic accuracy. All ablations are single seed (\S\ref{sec:ablations}), and several of the reported differences are smaller than the selection tolerance $\epsilon$ (\S\ref{sec:selection}), so the pseudo-tissue reweighting, batch-composition, and adapter-rank trends should be read as indicative rather than established; LoRA versus full fine-tuning, one versus two views, temperature, and the number of training conditions are untested. PathoROB is used for checkpoint selection, so its reported gains are optimistically biased relative to the other benchmarks. Finally, the improvements are not uniform: $k$-NN class purity on TCGA, TCGA-uniform classification, and calibration on several backbones regress, and users should check the per-task tables for the tasks they care about before substituting a fine-tuned checkpoint.
+
+\section{Conclusion}
+
+Registered-view LoRA contrastive adaptation on PLISM raises PathoROB RI on seven pathology
+encoders, with HEST and CPTAC gains and task-dependent THUNDER changes at PathoROB-selected
+checkpoints. We release the training and evaluation pipeline and the fine-tuned H-optimus-0 and
+OpenMidnight weights so that the procedure can be reproduced, audited, and applied to other
+backbones.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\input{appendix}
+\clearpage
+\input{checklist.tex}
+
+\end{document}

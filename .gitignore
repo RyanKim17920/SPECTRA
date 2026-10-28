@@ -1,0 +1,71 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# never commit data or weights -- except the three transcribed public leaderboards
+/data/*
+!/data/pathorob_leaderboard.tsv
+!/data/hest_leaderboard_9task.tsv
+!/data/thunder_leaderboard_16ds.tsv
+!/data/*.json
+!/data/*.txt
+*.h5
+*.safetensors
+*.bin
+*.parquet
+*.npy
+*.pt
+*.ckpt
+checkpoints/
+features/
+outputs/
+wandb/
+slurm-*.out
+slurm-*.err
+.venv-*/
+
+# vendored third-party eval harnesses (cloned, not committed)
+third_party/
+runs/
+
+# scratch: throwaway sizing probes, never part of a run
+.scratch/
+scratch_seed_raw/
+
+# temporary scratch files from development
+_tmp_*
+*.bak
+*.bak.*
+*.bak2
+
+# large output dirs — jobs write here, never committed
+logs/
+core/
+results_backup/
+
+# symlinks to volatile /data (gitignore dir-patterns do not match symlinks)
+/runs
+/results_backup
+/core
+
+# timestamped scratch backups (encoder.py.bak-1788238556 etc.)
+*.bak-*
+
+# generated summaries (scripts write here)
+/results/
+
+# local tool state
+.claude/
+
+# machine-local path roots (see .env.example, tracked)
+.env
+
+# generated paper outputs (paper/make_all.sh); scripts and extracted inputs stay tracked
+/paper/figures/
+/paper/tables/
+
+# LaTeX build output (cd paper && latexmk -pdf -outdir=build neurips_2026.tex)
+/paper/build/
