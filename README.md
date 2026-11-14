@@ -1,5 +1,12 @@
 # SPECTRA
 
+[![arXiv](https://img.shields.io/badge/arXiv-2611.10093-b31b1b.svg)](https://arxiv.org/abs/2611.10093)
+
+**Paper:** [Contrastive fine-tuning against stain and scanner bias improves robustness and downstream performance across pathology foundation models](https://arxiv.org/abs/2611.10093)
+
+> An improved recipe that selects its training step without any test benchmark is on the
+> [`SPECTRA-v2`](https://github.com/RyanKim17920/SPECTRA/tree/SPECTRA-v2) branch. This branch is the code of the paper.
+
 **SPECTRA** takes a frozen public pathology foundation model and trains a LoRA adapter
 (rank 32, alpha 64, on every attention and MLP layer) with a contrastive InfoNCE loss over
 **registered PLISM tiles**. Each step samples C = 2 acquisition conditions (scanner, stain) and
@@ -11,11 +18,12 @@ the CLS token and a softplus generalized-mean (GeM) pool of the patch tokens. Ne
 share the query's pseudo-tissue group are dropped from the GeM loss and up-weighted by e^3 in
 the CLS loss.
 
-Training is 500 steps with a checkpoint every 50. The shipped checkpoint is chosen by a
-**tolerance rule (ε = 0.007)** on the PathoROB average-RI curve, not by taking the best number
-after the fact. This repo is the method and its evaluation harness: 7 backbones × 3 seeds on PathoROB
-(robustness index, the primary metric, never seen in training), HEST, THUNDER, CPTAC and
-held-out PLISM retrieval.
+Training is 500 steps with a checkpoint every 50. The reported checkpoint of each run is chosen
+by a **tolerance rule (ε = 0.007)** on its PathoROB average-RI curve rather than by taking the
+best value. PathoROB is never trained on, but because it selects the checkpoint, its reported
+gains are optimistically biased relative to the other benchmarks. This repo holds the method and
+its evaluation harness: 7 backbones × 3 seeds on PathoROB (robustness index, the primary
+metric), HEST, THUNDER, CPTAC and held-out PLISM retrieval.
 
 ## Results
 
@@ -33,6 +41,7 @@ checkpoint; ± is two sample SDs across seeds.
 | OpenMidnight   | 0.618 → **0.879** ± 0.007 | 0.3902 → **0.4048** | 0.6561 → **0.6844** | 0.486 → **0.782** |
 
 RI rises on 7/7 backbones, and HEST, CPTAC and PLISM retrieval rise on 7/7 alongside it.
+OpenMidnight here is the original `SophontAI/OpenMidnight` release.
 
 ## Released weights
 
@@ -47,7 +56,8 @@ Collection: [`medarc/openmidnight-and-spectra`](https://huggingface.co/collectio
 | [`medarc/Midnight-12k-SPECTRA`](https://huggingface.co/medarc/Midnight-12k-SPECTRA) | SPECTRA-adapted | `kaiko-ai/midnight` | MIT |
 
 Load with `timm.create_model("hf-hub:medarc/<repo>", pretrained=True)`; model cards give the exact
-preprocessing for each repo.
+preprocessing for each repo. `OpenMidnight-1.1-SPECTRA` is built on OpenMidnight-1.1, not on the
+original OpenMidnight evaluated in the results table above.
 
 ## Install
 
@@ -120,10 +130,10 @@ MIT, see `LICENSE`. Each released checkpoint carries the license of its base mod
 ## Citation
 
 ```bibtex
-@inproceedings{kim2026spectra,
-  title     = {Contrastive fine-tuning against stain and scanner bias improves robustness and downstream performance across pathology foundation models},
-  author    = {Kim, Ryan and Muhammad, Hassan and Dulal, Anish and Scotti, Paul S. and Abraham, Tanishq Mathew},
-  booktitle = {NeurIPS 2026 Workshop on AI at Scale for Clinical Impact (ASCI): Cancer Pathology Foundation Models},
-  year      = {2026}
+@article{kim2026contrastive,
+  title   = {Contrastive fine-tuning against stain and scanner bias improves robustness and downstream performance across pathology foundation models},
+  author  = {Kim, Ryan and Muhammad, Hassan and Dulal, Anish and Scotti, Paul S. and Abraham, Tanishq Mathew},
+  journal = {arXiv preprint arXiv:2611.10093},
+  year    = {2026}
 }
 ```
