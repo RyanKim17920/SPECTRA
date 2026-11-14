@@ -1,4 +1,4 @@
-"""scripts/sweep/make_final.py: the all-data final configs are generated, not hand-written."""
+"""scripts/sweep/make_final.py: the all-data release configs are generated, not hand-written."""
 
 from __future__ import annotations
 
@@ -21,34 +21,33 @@ def mf():
     return m
 
 
-@pytest.mark.parametrize("bb,picks,name", [("uni2", [125], "q8_final_uni2"), ("hoptimus", [100], "q8_final_hopt")])
-def test_committed_finals_are_make_final_output(mf, bb, picks, name):
-    out = V2 / f"{name}.yaml"
-    assert mf.render(bb, picks, out) == out.read_text()
-
-
-def test_ckpt_steps_cover_every_pick(mf):
-    assert mf.ckpt_steps([125]) == list(range(25, 201, 25))            # cap 200
-    assert mf.ckpt_steps([125, 100, 200]) == list(range(25, 226, 25))  # max pick + 25
+def test_release_steps(mf):
+    assert mf.RELEASE_STEPS == {"virchow2": 100, "uni2": 175, "hoptimus": 100, "virchow": 225, "phikon": 225,
+                                "midnight": 225, "om11": 225}
+    assert mf.release_step("MahmoodLab/UNI2-h") == 175 and mf.release_step("om11") == 225
+    with pytest.raises(KeyError):
+        mf.release_step("some/other-model")
     with pytest.raises(ValueError):
-        mf.ckpt_steps([190])
+        mf.final_overrides("uni2", 190)
 
 
-def test_rendered_final_loads_and_is_all_data(mf, tmp_path):
+def test_rendered_final_is_the_recipe_on_all_data(mf, tmp_path):
     from spectra.sweep import config as SC
 
-    text = mf.render("uni2", [175, 125], tmp_path / "f.yaml")
-    cfg = mf.load_rendered(text)
-    assert cfg.optim.stop_step == 200 and cfg.ckpt.schedule[-1] == 200 and cfg.ckpt.keep_last == 1
-    assert cfg.batch.heldout_cores == [] and cfg.run.name == "q8-final-uni2"
-    sel = SC.load_config(V2 / "q8_selection.yaml")
-    assert cfg.objective == sel.objective and cfg.adv == sel.adv and cfg.adapt == sel.adapt
+    cfg = mf.load_rendered(mf.render("uni2", 175, tmp_path / "f.yaml"))
+    assert cfg.optim.stop_step == 175 and cfg.ckpt.every == 25
+    assert cfg.batch.heldout_cores == [] and cfg.batch.heldout_scanners == [] and cfg.batch.heldout_stains == []
+    assert cfg.run.name == "v2-final-uni2" and not cfg.eval.at_start
+    sel = SC.load_config(V2 / "spectra_v2.yaml")
+    assert cfg.objective == sel.objective and cfg.heads == sel.heads and cfg.adapt == sel.adapt
+    assert {k: v for k, v in SC.to_dict(cfg)["optim"].items() if k != "stop_step"} == \
+           {k: v for k, v in SC.to_dict(sel)["optim"].items() if k != "stop_step"}   # same lr schedule
 
 
 def test_main_writes_loadable_file(mf, tmp_path):
     from spectra.sweep import config as SC
 
-    out = tmp_path / "q8_final_x.yaml"
-    assert mf.main(["--backbone", "hoptimus", "--picks", "100", "--out", str(out),
-                    "--selection", str(V2 / "q8_selection.yaml")]) == 0
-    assert SC.load_config(out).backbone.name == "hoptimus"
+    out = tmp_path / "hopt.yaml"
+    assert mf.main(["--backbone", "hoptimus", "--out", str(out), "--selection", str(V2 / "spectra_v2.yaml")]) == 0
+    cfg = SC.load_config(out)
+    assert cfg.backbone.name == "hoptimus" and cfg.optim.stop_step == 100

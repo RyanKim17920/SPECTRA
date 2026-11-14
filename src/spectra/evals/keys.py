@@ -37,6 +37,7 @@ SHORT = {
     "paige-ai/Virchow": "virchow1",
     "kaiko-ai/midnight": "midnight",
     "SophontAI/OpenMidnight": "omid",
+    "medarc/OpenMidnight-1.1": "om11",
 }
 
 #: every spelling a user / run name may use for a backbone -> repo id
@@ -51,6 +52,8 @@ ALIASES = {
     "midnight": "kaiko-ai/midnight",
     "openmidnight": "SophontAI/OpenMidnight", "omid": "SophontAI/OpenMidnight",
     "OpenMidnight": "SophontAI/OpenMidnight",
+    "om11": "medarc/OpenMidnight-1.1", "openmidnight11": "medarc/OpenMidnight-1.1",
+    "OpenMidnight-1.1": "medarc/OpenMidnight-1.1",
 }
 
 # tokens stripped from legacy run names (the alias prefix already says it); longest first

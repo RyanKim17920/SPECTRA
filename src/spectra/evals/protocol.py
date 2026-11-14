@@ -15,6 +15,7 @@ from .keys import resolve_repo
 HEST_POOLING = {
     "owkin/phikon-v2": "cls",
     "SophontAI/OpenMidnight": "cls",
+    "medarc/OpenMidnight-1.1": "cls",
     "kaiko-ai/midnight": "cls",
     "paige-ai/Virchow": "clsmean",
     "paige-ai/Virchow2": "clsmean",
@@ -30,6 +31,7 @@ THUNDER_POOLING = {
     "MahmoodLab/UNI2-h": "cls",
     # not rows of the leaderboard's table: OpenMidnight uses the class token, Virchow v1 clsmean
     "SophontAI/OpenMidnight": "cls",
+    "medarc/OpenMidnight-1.1": "cls",
     "paige-ai/Virchow": "clsmean",
 }
 
@@ -39,6 +41,7 @@ CPTAC_POOLING = {
     "bioptimus/H-optimus-0": "cls",
     "MahmoodLab/UNI2-h": "cls",
     "SophontAI/OpenMidnight": "cls",
+    "medarc/OpenMidnight-1.1": "cls",
     "owkin/phikon-v2": "cls",
     "kaiko-ai/midnight": "clsmean",
     "paige-ai/Virchow2": "clsmean",

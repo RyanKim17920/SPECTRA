@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Score saved checkpoints of a run post hoc with the SAME in-run eval (primary + GTEx guard),
-e.g. to fill an in-run eval that a preempted job skipped before running the slope rule.
+e.g. to fill an in-run eval that a preempted job skipped before applying the R1 stop rule.
 
     python scripts/sweep/posthoc_eval.py <run_dir> [<run_dir> ...] [--steps 125,150]
 

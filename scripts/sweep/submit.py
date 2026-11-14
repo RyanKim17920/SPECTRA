@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Resolve a config (x seeds), write each run dir, sbatch it, record the ledger.
 
-    python scripts/sweep/submit.py configs/v2/q8_selection.yaml --sweep q8_selection \
-        --seeds 0,1,2 -o backbone.name=hoptimus [--dry-run]
+    python scripts/sweep/submit.py configs/v2/spectra_v2.yaml --sweep selection \
+        --seeds 1 -o backbone.name=hoptimus [--dry-run]
     python scripts/sweep/submit.py --resubmit-dir <runs root>/<sweep>/<run>
 
 Run dirs: ``$SPECTRA_RUNS_DIR/<sweep>/<run name>`` (default ``<repo>/runs/sweeps``).
@@ -49,7 +49,7 @@ def read_ledger(path: Path) -> list[dict]:
 
 
 def sbatch_cmd(run_dir: Path, extra: list[str], time_limit: str | None) -> list[str]:
-    cmd = ["sbatch", "--parsable", f"--job-name=q8-{run_dir.name[:30]}",
+    cmd = ["sbatch", "--parsable", f"--job-name=v2-{run_dir.name[:30]}",
            f"--output={run_dir}/slurm-%j.out", "--open-mode=append",
            f"--export=ALL,SWEEP_RUN_DIR={run_dir},SPECTRA_REPO={REPO}"]
     if time_limit:
@@ -93,7 +93,7 @@ def submit_run(cfg: SweepConfig, sweep: str, extra: list[str], time_limit: str |
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("config", nargs="?", help="config YAML (e.g. configs/v2/q8_selection.yaml)")
+    ap.add_argument("config", nargs="?", help="config YAML (e.g. configs/v2/spectra_v2.yaml)")
     ap.add_argument("-o", "--override", action="append", default=[], help="key.sub=value (repeatable)")
     ap.add_argument("--seeds", default=None, help="comma list of run.seed values (default: the config's)")
     ap.add_argument("--sweep", default="dev", help="sub-directory of the runs root")

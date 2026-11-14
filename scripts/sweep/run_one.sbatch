@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=q8
+#SBATCH --job-name=spectra-v2
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=12
@@ -8,7 +8,7 @@
 #SBATCH --requeue
 #SBATCH --signal=B:USR1@180
 #
-# One Q8 run on ONE GPU. Submitted by scripts/sweep/submit.py, which writes the resolved
+# One v2 run on ONE GPU. Submitted by scripts/sweep/submit.py, which writes the resolved
 # config to $SWEEP_RUN_DIR/config.json and passes --output into the run dir. Cluster options
 # (--account / --partition / --qos) go on the sbatch command line (submit.py --sbatch-args or
 # $SPECTRA_SBATCH_ARGS).

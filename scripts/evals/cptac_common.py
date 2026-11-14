@@ -47,6 +47,7 @@ CPTAC_READOUT = {
     "bioptimus/H-optimus-0": "cls",
     "MahmoodLab/UNI2-h": "cls",
     "SophontAI/OpenMidnight": "cls",
+    "medarc/OpenMidnight-1.1": "cls",
     "owkin/phikon-v2": "cls",
     "kaiko-ai/midnight": "clsmean",
     "paige-ai/Virchow2": "clsmean",

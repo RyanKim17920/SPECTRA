@@ -1,8 +1,8 @@
-"""The v2 (Q8) trainer config: ONE nested config fully determines a run.
+"""The SPECTRA v2 trainer config: ONE nested config fully determines a run.
 
 Loading order (later wins):
 
-1. dataclass defaults below (= the Q8 recipe, held-out selection split),
+1. dataclass defaults below (= the v2 recipe, held-out selection split),
 2. ``--config file.yaml|json`` (may contain ``base: other.yaml`` to inherit, recursively),
 3. ``key.sub=value`` overrides (values parsed as YAML, so ``1e-4``, ``[a, b]``, ``null``).
 
@@ -44,6 +44,8 @@ BACKBONE_ALIASES: dict[str, str] = {
     "virchow": "paige-ai/Virchow",
     "midnight": "kaiko-ai/midnight",
     "openmidnight": "SophontAI/OpenMidnight",
+    #: OpenMidnight-1.1 (the v2 results use this; "openmidnight" is the original release)
+    "om11": "medarc/OpenMidnight-1.1",
 }
 BACKBONE_SHORT = {v: k for k, v in BACKBONE_ALIASES.items()}
 
@@ -93,43 +95,33 @@ class AdaptCfg:
     lora_targets: str = "both"
 
 
+#: pooled features a loss head can read: the CLS token, or a softplus generalized mean (GeM,
+#: learnable exponent p, init 3) over the patch tokens (register / prefix tokens excluded)
+HEAD_POOLS = ("cls", "gem")
+
+
 @dataclass
 class HeadCfg:
-    """The single loss head: CLS token -> Linear -> [BN] -> GELU -> Linear projector."""
+    """One loss head: pooled feature -> Linear -> [BN] -> GELU -> Linear projector. The total
+    loss is sum_i heads[i].weight x InfoNCE(head i)."""
+    pool: str = "cls"
+    weight: float = 0.5
     proj_dim: int = 512
     proj_hidden: int = 1024
     proj_bn: bool = True
 
 
+def default_heads() -> list:
+    """The v2 heads: CLS 0.5 + GeM 0.5."""
+    return [HeadCfg(pool="cls", weight=0.5), HeadCfg(pool="gem", weight=0.5)]
+
+
 @dataclass
 class ObjectiveCfg:
-    """Grid InfoNCE (for every ordered condition pair (a, b), a != b: query (a, t), candidates
-    = the T locations of condition b, target (b, t); same-core negatives kept) at several
-    temperatures over the SAME similarity matrix: loss = sum_k tau_weights[k] x InfoNCE(sim /
-    taus[k]). ``tau_weights`` empty = equal weights 1 / len(taus)."""
-    taus: list = field(default_factory=lambda: [0.1, 0.6])
-    tau_weights: list = field(default_factory=lambda: [0.5, 0.5])
-
-
-@dataclass
-class AdvCfg:
-    """Queue adversary on the pooled CLS feature (before the projector).
-
-    One linear head per nuisance target (stain / scanner), each with a FIFO memory bank of the
-    last ``queue`` DETACHED features and their labels. Each step every head is trained on
-    queue + current batch (a real multi-class classifier -- a batch alone shows only C
-    conditions), while the reversed gradient (GRL, strength lambda_p = ``lam`` x DANN ramp
-    2 / (1 + exp(-10 p)) - 1, p = step / optim.steps) flows ONLY through the current batch's
-    features, against the head with its weights frozen for that term. Heads are their own AdamW
-    group at the CONSTANT lr ``lr`` (no warmup / decay, weight decay ``weight_decay``) and are
-    grad-clipped separately from the model. The total loss adds ``weight`` x (head CE + reversed
-    CE) per target. ``lam`` (YAML key ``lambda`` accepted)."""
-    targets: list = field(default_factory=lambda: ["stain", "scanner"])
-    lam: float = 0.1
-    weight: float = 1.0
-    lr: float = 1e-3
-    weight_decay: float = 0.0
-    queue: int = 8192
+    """Symmetric grid InfoNCE: for every ordered condition pair (a, b), a != b: query (a, t),
+    candidates = the T locations of condition b, target (b, t). Other locations of the same
+    tissue core stay ordinary negatives (no bias, no masking)."""
+    temperature: float = 0.1
 
 
 @dataclass
@@ -159,7 +151,7 @@ class OptimCfg:
     warmup_steps: int = 200
     steps: int = 400
     #: stop (final eval + ckpt) at this step while the lr schedule keeps its ``steps`` horizon;
-    #: 0 = steps. Selection runs: 250 (the stopping rule's last candidate).
+    #: 0 = steps. Selection runs: 250 (the last R1 candidate). Finals: the R1 pick.
     stop_step: int = 250
     grad_clip: float = 1.0
 
@@ -169,7 +161,7 @@ class CkptCfg:
     every: int = 25
     #: explicit checkpoint steps (non-empty overrides ``every``; never pruned by keep_last)
     schedule: list = field(default_factory=list)
-    #: rewrite resume.pt (optimizer + rng + trainable params + adversary queue) every N steps
+    #: rewrite resume.pt (optimizer + rng + trainable params) every N steps
     resume_every: int = 25
     #: keep only the last N step checkpoints (0 = keep all)
     keep_last: int = 0
@@ -184,7 +176,7 @@ class EvalCfg:
     #: steps at which to evaluate (non-empty overrides ``every``; the final step always is)
     schedule: list = field(default_factory=list)
     #: eval cores: [] = batch.heldout_cores, or SELECTION_HELDOUT_CORES when those are empty
-    #: (a final run; then flagged cores_in_train = true and refused by the stopping rule)
+    #: (a final run; then flagged cores_in_train = true and refused by the stop rule)
     cores: list = field(default_factory=list)
     #: locations per eval core (deterministic, eval.seed); 7 x 64 x 90 = 40,320 tiles
     locations_per_core: int = 64
@@ -224,9 +216,8 @@ class RunCfg:
 class SweepConfig:
     backbone: BackboneCfg = field(default_factory=BackboneCfg)
     adapt: AdaptCfg = field(default_factory=AdaptCfg)
-    head: HeadCfg = field(default_factory=HeadCfg)
+    heads: list = field(default_factory=default_heads)
     objective: ObjectiveCfg = field(default_factory=ObjectiveCfg)
-    adv: AdvCfg = field(default_factory=AdvCfg)
     batch: BatchCfg = field(default_factory=BatchCfg)
     optim: OptimCfg = field(default_factory=OptimCfg)
     ckpt: CkptCfg = field(default_factory=CkptCfg)
@@ -255,8 +246,6 @@ MODEL_SECTIONS = ("backbone", "adapt")
 
 def _build(cls, data: dict | None, path: str = "", dropped: list | None = None):
     data = dict(data or {})
-    if cls is AdvCfg and "lambda" in data:          # `lambda` is a python keyword; it wins over lam
-        data["lam"] = data.pop("lambda")
     kwargs = {}
     known = {f.name: f for f in fields(cls)}
     unknown = set(data) - set(known)
@@ -279,6 +268,11 @@ def _build(cls, data: dict | None, path: str = "", dropped: list | None = None):
         default = f.default_factory() if f.default_factory is not dataclasses.MISSING else f.default
         if is_dataclass(default):
             kwargs[name] = _build(type(default), v, sub, dropped)
+        elif cls is SweepConfig and name == "heads":
+            if not isinstance(v, list):
+                raise ValueError(f"heads: expected a list of head configs, got {v!r}")
+            kwargs[name] = [h if isinstance(h, HeadCfg) else _build(HeadCfg, h, f"heads[{i}]", dropped)
+                            for i, h in enumerate(v)]
         else:
             kwargs[name] = _coerce(v, default, sub)
     return cls(**kwargs)
@@ -377,7 +371,6 @@ def apply_smoke(cfg: SweepConfig) -> SweepConfig:
     cfg.optim.stop_step = min(cfg.optim.stop_step, 20)
     cfg.optim.warmup_steps = min(cfg.optim.warmup_steps, 5)
     cfg.batch.n_tiles = min(cfg.batch.n_tiles, 64)
-    cfg.adv.queue = min(cfg.adv.queue, 512)
     cfg.eval.every = 10
     cfg.eval.schedule = []
     cfg.eval.locations_per_core = min(cfg.eval.locations_per_core, 12)
@@ -395,7 +388,6 @@ def apply_smoke(cfg: SweepConfig) -> SweepConfig:
 # ======================================================================================
 
 READOUTS = ("cls", "mean", "clsmean")
-ADV_TARGETS = ("stain", "scanner", "condition")
 
 
 def _need(cond, msg):
@@ -414,17 +406,12 @@ def validate(cfg: SweepConfig) -> None:
     need = _need
 
     validate_model(cfg)
-    need(cfg.head.proj_dim > 0 and cfg.head.proj_hidden > 0, "head.proj_dim / proj_hidden > 0")
-    obj = cfg.objective
-    need(bool(obj.taus) and all(float(t) > 0 for t in obj.taus), "objective.taus: non-empty, > 0")
-    need(not obj.tau_weights or (len(obj.tau_weights) == len(obj.taus)
-                                 and all(float(w) > 0 for w in obj.tau_weights)),
-         "objective.tau_weights: one positive weight per tau (or empty = equal weights)")
-    av = cfg.adv
-    need(bool(av.targets) and set(av.targets) <= set(ADV_TARGETS)
-         and len(set(av.targets)) == len(av.targets), f"adv.targets {av.targets}")
-    need(av.lam >= 0 and av.weight > 0 and av.lr > 0 and av.weight_decay >= 0, "adv lam / weight / lr / wd")
-    need(int(av.queue) > 0, "adv.queue > 0")
+    need(bool(cfg.heads), "heads: at least one loss head")
+    for i, h in enumerate(cfg.heads):
+        need(h.pool in HEAD_POOLS, f"heads[{i}].pool {h.pool!r} not in {HEAD_POOLS}")
+        need(float(h.weight) > 0, f"heads[{i}].weight > 0")
+        need(h.proj_dim > 0 and h.proj_hidden > 0, f"heads[{i}].proj_dim / proj_hidden > 0")
+    need(float(cfg.objective.temperature) > 0, "objective.temperature > 0")
     b = cfg.batch
     need(b.n_cond >= 2, "batch.n_cond >= 2")
     need(b.n_tiles >= 2, "batch.n_tiles >= 2")
@@ -477,7 +464,7 @@ def resolve_backbone(name: str) -> str:
 def auto_prefix(cfg: SweepConfig) -> str:
     rid = resolve_backbone(cfg.backbone.name)
     bb = BACKBONE_SHORT.get(rid, re.sub(r"[^a-z0-9]", "", rid.split("/")[-1].lower())[:10])
-    p = f"{bb}-q8-c{cfg.batch.n_cond}t{cfg.batch.n_tiles}"
+    p = f"{bb}-v2-c{cfg.batch.n_cond}t{cfg.batch.n_tiles}"
     return "smoke-" + p if cfg.run.smoke else p
 
 

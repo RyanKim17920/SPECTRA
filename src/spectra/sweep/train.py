@@ -1,22 +1,21 @@
-"""The Q8 trainer: one config -> one run directory.
+"""The v2 trainer: one config -> one run directory.
 
-    python -m spectra.sweep.train --config configs/v2/q8_selection.yaml [key.sub=value ...]
-    python -m spectra.sweep.train --config configs/v2/q8_selection.yaml --dry-run
+    python -m spectra.sweep.train --config configs/v2/spectra_v2.yaml [key.sub=value ...]
+    python -m spectra.sweep.train --config configs/v2/spectra_v2.yaml --dry-run
     python -m spectra.sweep.train --run-dir <runs root>/<sweep>/<run>
         (re-run / resume from the config.json already stored there -- what sbatch does)
 
-One step: C conditions x T shared locations -> CLS -> projector -> multi-temperature grid
-InfoNCE, plus the queue adversary (stain / scanner) on the CLS feature through a gradient
-reversal layer. The in-run PLISM selection eval (``spectra.sweep.evaluate``) runs on
-``eval.every`` / ``eval.schedule`` and at the last step; checkpoints hold the trainable
-tensors only (LoRA, projector, adversary heads).
+One step: C conditions x T shared locations -> one backbone pass -> per head (CLS, GeM) a
+projector -> grid InfoNCE; loss = sum_i heads[i].weight x InfoNCE_i. The in-run PLISM
+selection eval (``spectra.sweep.evaluate``) runs on ``eval.every`` / ``eval.schedule`` and at
+the last step; checkpoints hold the trainable tensors only (LoRA, GeM exponent, projectors).
 
 Run directory layout::
 
     config.json        resolved config (+ _meta.hash / run_name)
     metrics.jsonl      {"kind": "train"|"eval"|"info", "step": ...} one JSON per line
     state.json         {"status": running|done|failed|preempted, "step", "job_id", ...}
-    resume.pt          latest resumable state (trainable params, optimizer, RNG, adversary queue)
+    resume.pt          latest resumable state (trainable params, optimizer, RNG)
     ckpt/step_XXXXXXX.safetensors   trainable params only
     base_retention_emb.pt           frozen-base retention embeddings (step-0 cache)
     DONE               written on successful completion
@@ -44,7 +43,7 @@ from . import losses as L
 from .config import (SweepConfig, config_hash, dump, load_config, load_dumped, run_name, runs_root)
 from .data import (build_train_loader, eval_locations, eval_tile_set, heldout_location_mask,
                    load_group_labels, pick_eval_conditions, pick_eval_cores, resolve_conditions,
-                   scanner_stain_labels, to_float01, train_location_pool)
+                   to_float01, train_location_pool)
 from .evaluate import Evaluator, GuardEval, guard_eval_path
 from .model import SweepModel
 
@@ -112,16 +111,13 @@ def lr_factor(step: int, cfg: SweepConfig) -> float:
 
 
 def param_groups(model: SweepModel, cfg: SweepConfig) -> list[dict]:
-    """Model params (no weight decay on biases / 1-d tensors) + the adversary heads' own group at
-    a CONSTANT lr."""
+    """Trainable params, no weight decay on biases / 1-d tensors (incl. the GeM exponent)."""
     o = cfg.optim
-    decay, no_decay, adv = [], [], []
+    decay, no_decay = [], []
     for name, p in model.named_parameters():
         if not p.requires_grad:
             continue
-        if name.startswith("adv_heads."):
-            adv.append(p)
-        elif p.ndim <= 1 or name.endswith(".bias"):
+        if p.ndim <= 1 or name.endswith(".bias"):
             no_decay.append(p)
         else:
             decay.append(p)
@@ -129,26 +125,12 @@ def param_groups(model: SweepModel, cfg: SweepConfig) -> list[dict]:
     groups = [{"params": decay, "weight_decay": o.weight_decay, "lr": o.lr},
               {"params": no_decay, "weight_decay": 0.0, "lr": o.lr}]
     first = {id(p): i for i, (_, p) in enumerate(model.named_parameters())}
-    groups = sorted((g for g in groups if g["params"]), key=lambda g: first[id(g["params"][0])])
-    groups.append({"params": adv, "weight_decay": cfg.adv.weight_decay, "lr": cfg.adv.lr,
-                   "lr_fixed": cfg.adv.lr, "adv": True})
-    return groups
+    return sorted((g for g in groups if g["params"]), key=lambda g: first[id(g["params"][0])])
 
 
 def set_lrs(opt, cfg: SweepConfig, f: float) -> None:
-    """Scheduled lr for every group, except the fixed-lr adversary group."""
     for g in opt.param_groups:
-        g["lr"] = g["lr_fixed"] if "lr_fixed" in g else cfg.optim.lr * f
-
-
-def clip_groups(opt, max_norm: float) -> tuple[float, float]:
-    """Clip model params and adversary params SEPARATELY (a fresh adversary's large CE gradient
-    must not shrink the model's update). Returns (model grad norm, adversary grad norm)."""
-    main = [p for g in opt.param_groups if not g.get("adv") for p in g["params"]]
-    adv = [p for g in opt.param_groups if g.get("adv") for p in g["params"]]
-    gn = float(torch.nn.utils.clip_grad_norm_(main, max_norm))
-    gna = float(torch.nn.utils.clip_grad_norm_(adv, max_norm))
-    return gn, gna
+        g["lr"] = cfg.optim.lr * f
 
 
 def trainable_state(model: SweepModel) -> dict[str, torch.Tensor]:
@@ -199,123 +181,29 @@ def restore_rng(st: dict) -> None:
 # ======================================================================================
 
 
-def adv_lambda(cfg: SweepConfig, step: int) -> float:
-    """GRL strength: adv.lam x DANN ramp over optim.steps."""
-    return float(cfg.adv.lam) * L.dann_ramp(step, cfg.optim.steps)
-
-
-class AdvQueue:
-    """FIFO memory bank (ring buffer) of the last ``size`` detached adversary features and their
-    nuisance labels (one label vector per target; -100 = unlabelled). Lives on the features'
-    device, allocated on the first push; entries [0, n) are valid. Saved in resume.pt."""
-
-    def __init__(self, size: int, targets):
-        self.size, self.targets = int(size), list(targets)
-        self.f, self.y, self.ptr, self.n = None, None, 0, 0
-
-    def push(self, f: torch.Tensor, ys: dict) -> None:
-        f = f.detach().float()
-        if f.shape[0] > self.size:
-            f, ys = f[-self.size:], {t: y[-self.size:] for t, y in ys.items()}
-        if self.f is None:
-            self.f = torch.zeros(self.size, f.shape[1], device=f.device)
-            self.y = {t: torch.full((self.size,), -100, dtype=torch.long, device=f.device) for t in self.targets}
-        idx = (self.ptr + torch.arange(f.shape[0], device=f.device)) % self.size
-        self.f[idx] = f
-        for t in self.targets:
-            self.y[t][idx] = ys[t].to(self.f.device).long()
-        self.ptr = int((self.ptr + f.shape[0]) % self.size)
-        self.n = min(self.n + f.shape[0], self.size)
-
-    def get(self, t: str):
-        if self.n == 0:
-            return None, None
-        return self.f[:self.n], self.y[t][:self.n]
-
-    def state_dict(self) -> dict:
-        return {"size": self.size, "targets": self.targets, "ptr": self.ptr, "n": self.n,
-                "f": None if self.f is None else self.f.cpu(),
-                "y": None if self.y is None else {t: v.cpu() for t, v in self.y.items()}}
-
-    def load_state_dict(self, d: dict, device) -> None:
-        assert d["size"] == self.size and list(d["targets"]) == self.targets, "adv queue shape mismatch"
-        self.ptr, self.n = int(d["ptr"]), int(d["n"])
-        self.f = None if d["f"] is None else d["f"].to(device)
-        self.y = None if d["y"] is None else {t: v.to(device) for t, v in d["y"].items()}
-
-
-def _frozen_call(head: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
-    """head(x) with its parameters detached: gradient reaches x only."""
-    return torch.func.functional_call(head, {n: p.detach() for n, p in head.named_parameters()}, (x,))
-
-
-def adv_loss(model, cfg: SweepConfig, f: torch.Tensor, targets: dict, step: int,
-             queue: AdvQueue) -> tuple[torch.Tensor, dict]:
-    """Queue adversary on the pooled feature ``f`` (rows labelled by ``targets[t]``). Per target:
-
-      head term     CE(head_t([queue_f ; f.detach()]), [queue_y ; y])  -> head params only
-      reversed term CE(frozen head_t(GRL(f, lambda_p)), y)             -> backbone only (batch rows)
-
-    so the head is a multi-class classifier over many conditions while the backbone's reversed
-    gradient has the batch-only magnitude. Metrics: ``acc`` = head accuracy on the current batch
-    BEFORE it enters the queue, ``qacc`` = accuracy on the queue entries, ``qmaj`` = majority-class
-    share of the queue (chance), ``qcls`` = classes present. The batch is enqueued after the loss
-    is built."""
-    av = cfg.adv
-    lam = adv_lambda(cfg, step)
-    f = f.float()
-    x = L.grad_reverse(f, lam)
-    total, mets = None, {"adv/lambda": lam}
-    for t in av.targets:
-        y = targets[t]
-        head = model.adv_heads[t]
-        qf, qy = queue.get(t)
-        hx = f.detach() if qf is None else torch.cat([qf, f.detach()])
-        hy = y if qy is None else torch.cat([qy.to(y.device), y])
-        logits = head(hx)
-        lh, mh = L.adversarial_ce(logits, hy)
-        lr_, mr = L.adversarial_ce(_frozen_call(head, x), y)
-        la = lh + lr_
-        mets[f"adv/{t}_loss"], mets[f"adv/{t}_rev_loss"] = mh["adv_loss"], mr["adv_loss"]
-        mets[f"adv/{t}_acc"] = mr["adv_acc"]
-        if qf is not None:
-            with torch.no_grad():
-                ql, keep = logits[:qf.shape[0]], qy != -100
-                if bool(keep.any()):
-                    yy = qy[keep]
-                    mets[f"adv/{t}_qacc"] = float((ql[keep].argmax(1) == yy).float().mean())
-                    cnt = torch.bincount(yy)
-                    mets[f"adv/{t}_qmaj"] = float(cnt.max()) / float(yy.numel())
-                    mets[f"adv/{t}_qcls"] = int((cnt > 0).sum())
-        total = av.weight * la if total is None else total + av.weight * la
-    queue.push(f.detach(), {t: targets[t] for t in av.targets})
-    mets["adv/queue_n"] = queue.n
-    return total, mets
-
-
 class Objective:
-    """multi-tau grid InfoNCE on the projected CLS + the queue adversary on the raw CLS."""
+    """sum_i heads[i].weight x grid InfoNCE on head i's projection of its pooled feature."""
 
     def __init__(self, cfg: SweepConfig, model: SweepModel, device):
         self.cfg, self.model, self.device = cfg, model, device
-        self.adv_queue = AdvQueue(cfg.adv.queue, cfg.adv.targets)
 
     def autocast(self):
         return torch.autocast(self.device.type, dtype=torch.bfloat16)
 
-    def __call__(self, cls: torch.Tensor, meta: dict) -> tuple[torch.Tensor, dict]:
-        obj = self.cfg.objective
+    def __call__(self, feats: dict, meta: dict) -> tuple[torch.Tensor, dict]:
         C, T = meta["n_cond"], meta["n_tiles"]
-        with self.autocast():
-            z = self.model.projector(cls)
-        with torch.autocast(self.device.type, enabled=False):
-            loss, m = L.multi_tau(lambda t_: L.infonce_grid(z, C, T, t_), obj.taus, obj.tau_weights)
-            mets = {f"h0_cls/{k}": v for k, v in m.items()}
-            mets["loss_primary"] = float(loss.detach())
-            la, ma = adv_loss(self.model, self.cfg, cls, meta["adv_targets"], meta["step"], self.adv_queue)
-            total = loss + la
-            mets.update(ma)
+        tau = float(self.cfg.objective.temperature)
+        total, mets = None, {}
+        for i, h in enumerate(self.cfg.heads):
+            with self.autocast():
+                z = self.model.projectors[i](feats[h.pool])
+            with torch.autocast(self.device.type, enabled=False):
+                l, m = L.infonce_grid(z, C, T, tau)
+            total = h.weight * l if total is None else total + h.weight * l
+            mets.update({f"h{i}_{h.pool}/{k}": v for k, v in m.items()})
         mets["loss"] = float(total.detach())
+        if "gem" in self.model.pools:
+            mets["gem_p"] = float(self.model.pools["gem"].p.detach())
         return total, mets
 
 
@@ -400,11 +288,9 @@ def train(cfg: SweepConfig, run_dir: Path) -> int:
         load_trainable(model, blob["trainable"])
         opt.load_state_dict(blob["optimizer"])
         restore_rng(blob["rng"])
-        objective.adv_queue.load_state_dict(blob["adv_queue"], device)
         step = int(blob["step"])
         log.truncate_after(step)
-        print(f"[train] RESUMED at step {step} from {resume} "
-              f"(adv queue {objective.adv_queue.n}/{objective.adv_queue.size})", flush=True)
+        print(f"[train] RESUMED at step {step} from {resume}", flush=True)
 
     END = cfg.optim.stop_step or cfg.optim.steps
     if step >= END:
@@ -433,7 +319,6 @@ def train(cfg: SweepConfig, run_dir: Path) -> int:
         print("[train] WARNING: no cached base retention embeddings; retention metrics off", flush=True)
 
     loader = build_train_loader(cfg, train_conds, sp["loc_pool"], start_step=step)
-    lab_table = scanner_stain_labels(train_conds)
     allowed = set(range(len(train_conds)))
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
@@ -451,16 +336,15 @@ def train(cfg: SweepConfig, run_dir: Path) -> int:
         f = lr_factor(step, cfg)
         set_lrs(opt, cfg, f)
         x = model.prep(to_float01(batch["image"].to(device, non_blocking=True)))
-        cond_flat = batch["cond_idx"].reshape(-1).numpy()
-        meta = {"n_cond": C, "n_tiles": T, "step": step,
-                "adv_targets": {t: torch.as_tensor(lab_table[t][cond_flat], device=device)
-                                for t in cfg.adv.targets}}
+        meta = {"n_cond": C, "n_tiles": T, "step": step}
         with objective.autocast():
-            cls = model.cls(x)
-        loss, mets = objective(cls, meta)
+            feats = model.head_features(x)
+        loss, mets = objective(feats, meta)
         loss.backward()
-        gn, gn_adv = clip_groups(opt, cfg.optim.grad_clip) if cfg.optim.grad_clip else (None, None)
-        mets["adv/grad_norm"] = gn_adv
+        gn = None
+        if cfg.optim.grad_clip:
+            gn = float(torch.nn.utils.clip_grad_norm_(
+                [p for g in opt.param_groups for p in g["params"]], cfg.optim.grad_clip))
         opt.step()
         opt.zero_grad(set_to_none=True)
         step += 1
@@ -478,7 +362,7 @@ def train(cfg: SweepConfig, run_dir: Path) -> int:
                 rec["mem_alloc_gib"] = torch.cuda.max_memory_allocated(device) / 2**30
             log.write(rec)
             win_t, win_n = now, 0
-            print(f"[train] step {step} loss {mets['loss']:.4f} top1 {mets['h0_cls/top1']:.3f} "
+            print(f"[train] step {step} loss {mets['loss']:.4f} top1 {mets[f'h0_{cfg.heads[0].pool}/top1']:.3f} "
                   f"lr {cfg.optim.lr * f:.2e} {dt:.2f}s/step", flush=True)
 
         sched = cfg.ckpt.schedule
@@ -491,7 +375,7 @@ def train(cfg: SweepConfig, run_dir: Path) -> int:
             log.write(rec)
             print(f"[eval] step {step} {_short(rec)}", flush=True)
         if step % cfg.ckpt.resume_every == 0 or final or _STOP["flag"]:
-            save_resume(model, opt, run_dir, step, cfg, objective.adv_queue)
+            save_resume(model, opt, run_dir, step, cfg)
             write_state(run_dir, status="running", step=step, steps=cfg.optim.steps)
         if _STOP["flag"] and not final:
             write_state(run_dir, status="preempted", step=step, signal=_STOP["sig"])
@@ -522,8 +406,8 @@ def save_ckpt(model, run_dir: Path, step: int, cfg: SweepConfig) -> None:
             p.unlink(missing_ok=True)
 
 
-def save_resume(model, opt, run_dir: Path, step: int, cfg: SweepConfig, adv_queue: AdvQueue) -> None:
-    blob = {"step": step, "hash": config_hash(cfg), "adv_queue": adv_queue.state_dict(),
+def save_resume(model, opt, run_dir: Path, step: int, cfg: SweepConfig) -> None:
+    blob = {"step": step, "hash": config_hash(cfg),
             "trainable": {k: v.cpu() for k, v in trainable_state(model).items()},
             "optimizer": opt.state_dict(), "rng": capture_rng()}
     tmp = run_dir / "resume.pt.tmp"

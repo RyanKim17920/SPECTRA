@@ -1,11 +1,11 @@
-"""Backbone + LoRA + the Q8 heads (one CLS projector, the queue-adversary heads).
+"""Backbone + LoRA + the v2 loss heads (CLS and GeM, each with its own projector).
 
 Backbone LOADING is delegated to ``spectra.models.encoder`` (registry normalisation, the
 gated local-directory binding via ``SPECTRA_BACKBONE_LOCAL_DIRS``, strict timm loads,
 register-token counts).
 
-Construction order fixes the RNG draws: backbone build -> LoRA injection -> projector ->
-adversary heads.
+Construction order fixes the RNG draws: backbone build -> LoRA injection -> learned pools
+(GeM) -> projectors in head order.
 
 ``.data`` (which pulls h5py through ``spectra.data.grid``) and ``transformers`` are imported
 lazily, so inference-only environments can load a trained checkpoint with torch + timm + peft.
@@ -18,15 +18,12 @@ import re
 import torch
 import torch.nn as nn
 
-from spectra.data.conditions import SCANNERS, STAINS
 from spectra.models import encoder as E
+from spectra.models.pooling import GeMPool
 
 from .config import SweepConfig, resolve_backbone
 
 _ATTN_RE = re.compile(r"(?:^|\.)(?:attn|attention|self_attn)(?:\.|$)")
-
-#: classes of each adversary target (PLISM axes)
-N_CLASSES = {"scanner": len(SCANNERS), "stain": len(STAINS), "condition": len(STAINS) * len(SCANNERS)}
 
 
 def load_backbone(repo: str) -> tuple[nn.Module, dict]:
@@ -131,9 +128,10 @@ class SweepModel(nn.Module):
         self.prefix = info["prefix"]
         self.norm_mean, self.norm_std = info["norm_mean"], info["norm_std"]
         self.lora_targets: list[str] = info["lora_targets"]
-        h = cfg.head
-        self.projector = ProjHead(self.hidden, h.proj_hidden, h.proj_dim, h.proj_bn)
-        self.adv_heads = nn.ModuleDict({t: nn.Linear(self.hidden, N_CLASSES[t]) for t in cfg.adv.targets})
+        # learned pools first, then one projector per head (in head order)
+        self.pools = nn.ModuleDict({"gem": GeMPool()} if any(h.pool == "gem" for h in cfg.heads) else {})
+        self.projectors = nn.ModuleList([ProjHead(self.hidden, h.proj_hidden, h.proj_dim, h.proj_bn)
+                                         for h in cfg.heads])
 
     # ---------------------------------------------------------------------------------
 
@@ -148,21 +146,25 @@ class SweepModel(nn.Module):
         return self.backbone(pixel_values=x).last_hidden_state
 
     def pool_tokens(self, tok: torch.Tensor, names) -> dict[str, torch.Tensor]:
-        cls = tok[:, 0, :]
+        """{name: pooled feature} for name in cls | mean | clsmean | gem. Patch tokens exclude the
+        CLS and register tokens (``self.prefix``)."""
+        cls, patches = tok[:, 0, :], tok[:, self.prefix:, :]
         out: dict[str, torch.Tensor] = {}
         for n in names:
             if n == "cls":
                 out[n] = cls
             elif n in ("mean", "clsmean"):
-                mean = tok[:, self.prefix:, :].mean(dim=1)
+                mean = patches.mean(dim=1)
                 out[n] = mean if n == "mean" else torch.cat([cls, mean], dim=1)
+            elif n in self.pools:
+                out[n] = self.pools[n](patches)
             else:
                 raise ValueError(f"readout {n!r}")
         return out
 
-    def cls(self, x: torch.Tensor) -> torch.Tensor:
-        """The pooled CLS feature the loss head and the adversary see."""
-        return self.tokens(x)[:, 0, :]
+    def head_features(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+        """The pooled features the loss heads read (one backbone pass)."""
+        return self.pool_tokens(self.tokens(x), list(dict.fromkeys(h.pool for h in self.cfg.heads)))
 
     def base_features(self, x: torch.Tensor, names) -> dict[str, torch.Tensor]:
         """Readouts of the ORIGINAL pretrained backbone (LoRA disabled). Training mode and RNG

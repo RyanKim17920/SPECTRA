@@ -14,38 +14,37 @@ REPO = Path(__file__).resolve().parents[1]
 V2 = REPO / "configs" / "v2"
 
 
-def test_v2_configs_load_and_encode_q8():
-    sel = SC.load_config(V2 / "q8_selection.yaml")
-    assert sel == SC.load_config(None)                                 # the defaults ARE the Q8 selection run
+def test_recipe_config_is_the_defaults():
+    sel = SC.load_config(V2 / "spectra_v2.yaml")
+    assert sel == SC.load_config(None)                                 # the defaults ARE the v2 selection run
     assert sel.adapt.mode == "lora" and sel.adapt.lora_rank == 16 and sel.adapt.lora_alpha == 32
-    assert sel.head.proj_dim == 512
-    assert sel.objective.taus == [0.1, 0.6] and sel.objective.tau_weights == [0.5, 0.5]
-    assert (sel.adv.targets, sel.adv.lam, sel.adv.queue, sel.adv.lr) == (["stain", "scanner"], 0.1, 8192, 1e-3)
+    assert sel.adapt.lora_targets == "both"
+    assert [(h.pool, h.weight, h.proj_hidden, h.proj_dim, h.proj_bn) for h in sel.heads] == \
+        [("cls", 0.5, 1024, 512, True), ("gem", 0.5, 1024, 512, True)]
+    assert sel.objective.temperature == 0.1
     assert (sel.batch.n_cond, sel.batch.n_tiles) == (2, 256)
-    assert (sel.optim.lr, sel.optim.warmup_steps, sel.optim.steps, sel.optim.stop_step) == (1e-4, 200, 400, 250)
+    assert (sel.optim.lr, sel.optim.weight_decay, sel.optim.warmup_steps, sel.optim.steps, sel.optim.stop_step) \
+        == (1e-4, 0.05, 200, 400, 250)
     assert sel.batch.heldout_scanners == ["GT450"] and sel.batch.heldout_stains == ["MY"]
     assert sel.batch.heldout_cores == list(SC.SELECTION_HELDOUT_CORES)
     assert sel.eval.every == 25 and sel.eval.at_start and sel.ckpt.every == 25
-    for bb, name in (("uni2", "q8_final_uni2"), ("hoptimus", "q8_final_hopt")):
-        fin = SC.load_config(V2 / f"{name}.yaml")
-        assert fin.backbone.name == bb
-        assert fin.batch.heldout_scanners == [] and fin.batch.heldout_stains == [] and fin.batch.heldout_cores == []
-        assert fin.optim.stop_step == 200 and fin.ckpt.schedule == list(range(25, 201, 25))
-        assert not fin.eval.at_start
-        # identical recipe: only the split, the stop and the bookkeeping differ
-        a, b = SC.to_dict(fin), SC.to_dict(SC.load_config(V2 / "q8_selection.yaml", [f"backbone.name={bb}"]))
-        for k in ("adapt", "head", "objective", "adv"):
-            assert a[k] == b[k], k
-        assert {k: v for k, v in a["optim"].items() if k != "stop_step"} == \
-               {k: v for k, v in b["optim"].items() if k != "stop_step"}
 
 
 def test_seed_override_changes_only_seed():
-    f = V2 / "q8_final_uni2.yaml"
+    f = V2 / "spectra_v2.yaml"
     s0, s2 = SC.load_config(f), SC.load_config(f, ["run.seed=2"])
     d0, d2 = SC.to_dict(s0), SC.to_dict(s2)
     assert d2["run"].pop("seed") == 2 and d0["run"].pop("seed") == 0 and d0 == d2
     assert SC.run_name(s0) != SC.run_name(s2)
+
+
+def test_heads_override_and_om11_alias():
+    one = SC.load_config(None, ["heads=[{pool: cls, weight: 1.0}]"])
+    assert len(one.heads) == 1 and one.heads[0].weight == 1.0 and one.heads[0].proj_dim == 512
+    assert SC.config_hash(one) != SC.config_hash(SC.load_config(None))
+    assert SC.resolve_backbone("om11") == "medarc/OpenMidnight-1.1"
+    with pytest.raises(KeyError):
+        SC.load_config(None, ["heads=[{pool: cls, core_bias: 3.0}]"])
 
 
 def test_hash_name_and_overrides():
@@ -62,34 +61,33 @@ def test_hash_name_and_overrides():
         assert len(SC.run_name(cfg)) <= 40
     with pytest.raises(KeyError):
         SC.load_config(None, ["optim.lrr=1"])
-    assert SC.load_config(None, ["adv.lambda=0.3"]).adv.lam == 0.3
 
 
 @pytest.mark.parametrize("over", [
-    "adapt.mode=full", "objective.taus=[]", "objective.taus=[0.1,-1]", "objective.tau_weights=[1.0]",
-    "adv.queue=0", "adv.targets=[stain,stain]", "adv.targets=[tissue]", "batch.n_cond=1",
-    "optim.stop_step=500", "eval.readouts=[gem]", "adapt.lora_targets=qkv",
+    "adapt.mode=full", "objective.temperature=0", "heads=[]", "heads=[{pool: attn}]",
+    "heads=[{pool: cls, weight: 0}]", "batch.n_cond=1", "optim.stop_step=500", "eval.readouts=[gem]",
+    "adapt.lora_targets=qkv",
 ])
 def test_invalid_configs_rejected(over):
     with pytest.raises(ValueError):
         SC.load_config(None, [over])
 
 
-@pytest.mark.parametrize("key", ["objective.temperature=0.07", "objective.proto={weight: 1.0}",
-                                 "heads=[]", "aug={enabled: true}", "memory={mode: gradcache}"])
+@pytest.mark.parametrize("key", ["objective.taus=[0.1]", "objective.proto={weight: 1.0}", "adv={queue: 1}",
+                                 "head={proj_dim: 512}", "aug={enabled: true}", "memory={mode: gradcache}"])
 def test_stripped_features_are_unknown_keys(key):
     with pytest.raises(KeyError):
         SC.load_config(None, [key])
 
 
 def test_smoke_transform():
-    s = SC.load_config(V2 / "q8_selection.yaml", ["run.smoke=true"])
+    s = SC.load_config(V2 / "spectra_v2.yaml", ["run.smoke=true"])
     assert s.optim.steps == 20 and s.optim.stop_step == 20 and s.batch.n_tiles == 64
     assert SC.run_name(s).startswith("smoke-")
 
 
 def test_dump_roundtrip_and_tolerant_load(tmp_path):
-    cfg = SC.load_config(V2 / "q8_final_hopt.yaml", ["run.seed=1"])
+    cfg = SC.load_config(V2 / "spectra_v2.yaml", ["run.seed=1", "backbone.name=hoptimus"])
     p = tmp_path / "config.json"
     SC.dump(cfg, p)
     assert SC.load_dumped(p) == cfg
@@ -97,7 +95,7 @@ def test_dump_roundtrip_and_tolerant_load(tmp_path):
     assert d["_meta"]["backbone_repo"] == "bioptimus/H-optimus-0"
     # a config dumped by a richer trainer schema: extra knobs are dropped when tolerant
     d["objective"]["proto"] = {"weight": 0.0}
-    d["heads"] = [{"pool": "cls"}]
+    d["heads"][0]["core_bias"] = None
     d["adapt"].update(last_k=0, train_norm=False)
     p.write_text(json.dumps(d))
     with pytest.raises(KeyError):
@@ -129,7 +127,7 @@ def test_selection_split_and_heldout_cores():
     from spectra.sweep.data import (eval_locations, heldout_location_mask, is_heldout_condition,
                                     load_group_labels, pick_eval_cores, train_location_pool)
 
-    cfg = SC.load_config(V2 / "q8_selection.yaml")
+    cfg = SC.load_config(V2 / "spectra_v2.yaml")
     train = [c for c in all_conditions() if not is_heldout_condition(cfg, c)]
     assert len(train) == 72 and all(c.scanner != "GT450" and c.stain != "MY" for c in train)
     lab = load_group_labels(cfg.eval.labels)
@@ -143,6 +141,7 @@ def test_selection_split_and_heldout_cores():
     locs = eval_locations(lab, cores, 64, 1234)
     assert locs.size == 7 * 64 and np.isin(lab[locs], cores).all()
     assert np.array_equal(locs, eval_locations(lab, cores, 64, 1234))
-    fin = SC.load_config(V2 / "q8_final_uni2.yaml")
+    fin = SC.load_config(V2 / "spectra_v2.yaml", ["batch.heldout_scanners=[]", "batch.heldout_stains=[]",
+                                                  "batch.heldout_cores=[]"])
     assert train_location_pool(heldout_location_mask(fin, lab)) is None
     assert pick_eval_cores(fin) == (list(SC.SELECTION_HELDOUT_CORES), True)   # sanity eval, flagged

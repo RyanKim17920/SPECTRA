@@ -1,19 +1,17 @@
 #!/usr/bin/env python
-"""Write the ALL-DATA final config of a backbone from the selection config and its picks.
+"""Write the ALL-DATA release config of a backbone: the v2 recipe, stopped at the R1 step.
 
-A final run = the selection recipe with every held-out list cleared (all 91 PLISM conditions,
-all tissue cores), checkpoints every 25 steps up to ``max(max(picks) + 25, --cap)`` (the stop
-step; the lr schedule keeps its ``optim.steps`` horizon) and no periodic in-run eval (its eval
-cores are now trained on; the last step still runs one sanity eval, flagged
-``cores_in_train``). The benchmark evals then read the checkpoint at the step the slope rule
-picked on the matching selection run.
+A final run = the selection recipe (configs/v2/spectra_v2.yaml) with every held-out list
+cleared (all 91 PLISM conditions, all tissue cores) and ``optim.stop_step`` = the R1 pick of
+the backbone's selection run. The lr schedule keeps its warmup-200 + cosine-400 horizon and is
+truncated at the stop step. Checkpoints every 25 steps; no periodic in-run eval (its eval cores
+are now trained on; the last step still runs one sanity eval, flagged ``cores_in_train``).
 
-    python scripts/sweep/make_final.py --backbone uni2 --picks 125 --out configs/v2/q8_final_uni2.yaml
-    python scripts/sweep/make_final.py --backbone hoptimus --picks 100 --out configs/v2/q8_final_hopt.yaml
-    python scripts/sweep/make_final.py --backbone uni2 --picks 125 --dry-run   # print + resolve the split
+    python scripts/sweep/make_final.py --backbone uni2                 # the released R1 step (175)
+    python scripts/sweep/make_final.py --backbone uni2 --step 150      # your own selection run's pick
+    python scripts/sweep/make_final.py --backbone uni2 --dry-run       # print + resolve the split
 
-``--picks`` may list one pick per selection seed (e.g. 125,100,125); the checkpoints cover all
-of them. The written file is seed-free: pass ``--seeds`` (or ``-o run.seed=N``) to submit.py.
+The written file is seed-free: pass ``--seeds 0,1,2`` to submit.py.
 """
 from __future__ import annotations
 
@@ -30,47 +28,50 @@ sys.path.insert(0, str(REPO / "src"))
 
 from spectra.sweep.config import BACKBONE_SHORT, load_config, resolve_backbone, run_name  # noqa: E402
 
-SELECTION = REPO / "configs" / "v2" / "q8_selection.yaml"
+SELECTION = REPO / "configs" / "v2" / "spectra_v2.yaml"
 NEVER = 10 ** 9
 EVERY = 25
-CAP = 200
 SHORT = {"hoptimus": "hopt"}
+
+#: R1 picks of the released v2 models (selection runs: seed 1, held-out GT450 / MY / 7 cores)
+RELEASE_STEPS = {"virchow2": 100, "uni2": 175, "hoptimus": 100, "virchow": 225, "phikon": 225,
+                 "midnight": 225, "om11": 225}
 
 
 def short_name(backbone: str) -> str:
     return SHORT.get(backbone, BACKBONE_SHORT.get(resolve_backbone(backbone), backbone.split("/")[-1].lower()))
 
 
-def ckpt_steps(picks, cap: int = CAP, every: int = EVERY) -> list[int]:
-    stop = max(max(int(p) for p in picks) + every, cap)
-    if stop % every:
-        raise ValueError(f"stop step {stop} is not a multiple of {every}")
-    return list(range(every, stop + 1, every))
+def release_step(backbone: str) -> int:
+    rid = resolve_backbone(backbone)
+    for k, v in RELEASE_STEPS.items():
+        if resolve_backbone(k) == rid:
+            return v
+    raise KeyError(f"no released R1 step for {backbone!r}; pass --step (from scripts/sweep/select.py)")
 
 
-def final_overrides(backbone: str, picks, cap: int = CAP) -> dict:
+def final_overrides(backbone: str, step: int) -> dict:
     """The final config as overrides on top of the selection config (``base:``)."""
-    steps = ckpt_steps(picks, cap)
+    step = int(step)
+    if step < EVERY or step % EVERY:
+        raise ValueError(f"stop step {step} is not a positive multiple of {EVERY}")
     return {
         "backbone": {"name": backbone},
         "batch": {"heldout_scanners": [], "heldout_stains": [], "heldout_cores": []},
-        "optim": {"stop_step": steps[-1]},
-        "ckpt": {"every": NEVER, "schedule": steps, "keep_last": 1},
+        "optim": {"stop_step": step},
+        "ckpt": {"every": EVERY},
         "eval": {"every": NEVER, "at_start": False},
-        "run": {"name": f"q8-final-{short_name(backbone)}"},
+        "run": {"name": f"v2-final-{short_name(backbone)}"},
     }
 
 
-def render(backbone: str, picks, out: Path, selection: Path = SELECTION, cap: int = CAP) -> str:
+def render(backbone: str, step: int, out: Path, selection: Path = SELECTION) -> str:
     """YAML text of the final config (``base:`` relative to ``out``'s directory)."""
     base = Path(selection).resolve().relative_to(Path(out).resolve().parent, walk_up=True)
-    d = {"base": str(base), **final_overrides(backbone, picks, cap)}
-    picks_s = ",".join(str(int(p)) for p in picks)
-    head = (f"# Q8 ALL-DATA final ({backbone}): the selection recipe on all 91 conditions and all tissue\n"
-            f"# cores, checkpoints every {EVERY} steps to {d['optim']['stop_step']}. Evaluate the step the slope\n"
-            f"# rule picked on the matching selection run (picks: {picks_s}). Seed-free: submit with --seeds.\n"
-            f"# generated by: python scripts/sweep/make_final.py --backbone {backbone} --picks {picks_s}"
-            + (f" --cap {cap}" if cap != CAP else "") + "\n")
+    d = {"base": str(base), **final_overrides(backbone, step)}
+    head = (f"# SPECTRA v2 ALL-DATA final ({backbone}): the selection recipe on all 91 conditions and all\n"
+            f"# tissue cores, stopped at the R1 step {int(step)}. Seed-free: submit with --seeds 0,1,2.\n"
+            f"# generated by: python scripts/sweep/make_final.py --backbone {backbone} --step {int(step)}\n")
     return head + yaml.safe_dump(d, sort_keys=False, default_flow_style=None)
 
 
@@ -87,15 +88,15 @@ def load_rendered(text: str, selection: Path = SELECTION):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--backbone", required=True, help="alias (uni2, hoptimus, ...) or HF repo id")
-    ap.add_argument("--picks", required=True, help="slope-rule pick(s) of the selection run(s), e.g. 125 or 125,100")
+    ap.add_argument("--step", type=int, default=None,
+                    help="R1 pick of the selection run (default: the released step for this backbone)")
     ap.add_argument("--selection", type=Path, default=SELECTION)
-    ap.add_argument("--cap", type=int, default=CAP, help="minimum stop step (default %(default)s)")
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--dry-run", action="store_true", help="print the config and the resolved split; write nothing")
     a = ap.parse_args(argv)
-    picks = [int(x) for x in a.picks.split(",") if x]
-    out = a.out or REPO / "configs" / "v2" / f"q8_final_{short_name(a.backbone)}.yaml"
-    text = render(a.backbone, picks, out, a.selection, a.cap)
+    step = a.step if a.step is not None else release_step(a.backbone)
+    out = a.out or REPO / "configs" / "v2" / "final" / f"{short_name(a.backbone)}.yaml"
+    text = render(a.backbone, step, out, a.selection)
     cfg = load_rendered(text, a.selection)  # must load through the schema
     if a.dry_run:
         print(text)

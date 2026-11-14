@@ -1,4 +1,4 @@
-"""Data for the Q8 trainer: condition pools, the grid sampler, the held-out split and the
+"""Data for the v2 trainer: condition pools, the grid sampler, the held-out split and the
 fixed eval tile set.
 
 The grid batch is ``spectra.data.grid``'s: C distinct conditions x ONE shared list of T
@@ -246,11 +246,3 @@ def normalize(x01: torch.Tensor, mean, std) -> torch.Tensor:
     s = torch.tensor(std, device=x01.device, dtype=x01.dtype).view(1, 3, 1, 1)
     return (x01 - m) / s
 
-
-def scanner_stain_labels(conds: Sequence[Condition]) -> dict[str, np.ndarray]:
-    return {
-        "scanner": np.array([SCANNERS.index(c.scanner) for c in conds]),
-        "stain": np.array([STAINS.index(c.stain) for c in conds]),
-        "condition": np.array([STAINS.index(c.stain) * len(SCANNERS) + SCANNERS.index(c.scanner)
-                               for c in conds]),
-    }
