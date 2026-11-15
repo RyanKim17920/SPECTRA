@@ -7,6 +7,10 @@
 > An improved recipe that selects its training step without any test benchmark is on the
 > [`SPECTRA-v2`](https://github.com/RyanKim17920/SPECTRA/tree/SPECTRA-v2) branch. This branch is the code of the paper.
 
+<p align="center">
+<img width="640" height="490" alt="image" src="https://github.com/user-attachments/assets/618dda75-07b2-42a1-81dd-b39bf3025d63" />
+</p>
+
 **SPECTRA** takes a frozen public pathology foundation model and trains a LoRA adapter
 (rank 32, alpha 64, on every attention and MLP layer) with a contrastive InfoNCE loss over
 **registered PLISM tiles**. Each step samples C = 2 acquisition conditions (scanner, stain) and
